@@ -31,16 +31,18 @@
 #include "project/nimbuildconfigurationfactory.h"
 #include "project/nimcompilerbuildstepfactory.h"
 #include "project/nimcompilercleanstepfactory.h"
-#include "project/nimprojectmanager.h"
+#include "project/nimproject.h"
 #include "project/nimrunconfigurationfactory.h"
 #include "project/nimruncontrolfactory.h"
+#include "project/nimtoolchainfactory.h"
 #include "settings/nimcodestylepreferencesfactory.h"
 #include "settings/nimcodestylesettingspage.h"
 #include "settings/nimsettings.h"
 #include "settings/nimsnippetprovider.h"
 
 #include <coreplugin/fileiconprovider.h>
-#include <utils/mimetypes/mimedatabase.h>
+#include <projectexplorer/projectmanager.h>
+#include <projectexplorer/toolchainmanager.h>
 
 #include <QtPlugin>
 
@@ -65,12 +67,11 @@ bool NimPlugin::initialize(const QStringList &arguments, QString *errorMessage)
     Q_UNUSED(arguments)
     Q_UNUSED(errorMessage)
 
-    MimeDatabase::addMimeTypes(QLatin1String(":/Nim.mimetypes.xml"));
+    ProjectExplorer::ToolChainManager::registerLanguage(Constants::C_NIMLANGUAGE_ID, Constants::C_NIMLANGUAGE_NAME);
 
     addAutoReleasedObject(new NimSettings);
     addAutoReleasedObject(new NimSnippetProvider);
     addAutoReleasedObject(new NimEditorFactory);
-    addAutoReleasedObject(new NimProjectManager);
     addAutoReleasedObject(new NimBuildConfigurationFactory);
     addAutoReleasedObject(new NimRunConfigurationFactory);
     addAutoReleasedObject(new NimCompilerBuildStepFactory);
@@ -78,15 +79,21 @@ bool NimPlugin::initialize(const QStringList &arguments, QString *errorMessage)
     addAutoReleasedObject(new NimRunControlFactory);
     addAutoReleasedObject(new NimCodeStyleSettingsPage);
     addAutoReleasedObject(new NimCodeStylePreferencesFactory);
+    addAutoReleasedObject(new NimToolChainFactory);
 
+    ProjectExplorer::ProjectManager::registerProjectType<NimProject>(Constants::C_NIM_PROJECT_MIMETYPE);
+
+    return true;
+}
+
+void NimPlugin::extensionsInitialized()
+{
     // Add MIME overlay icons (these icons displayed at Project dock panel)
     const QIcon icon((QLatin1String(Constants::C_NIM_ICON_PATH)));
     if (!icon.isNull()) {
         Core::FileIconProvider::registerIconOverlayForMimeType(icon, Constants::C_NIM_MIMETYPE);
         Core::FileIconProvider::registerIconOverlayForMimeType(icon, Constants::C_NIM_SCRIPT_MIMETYPE);
     }
-
-    return true;
 }
 
 } // namespace Nim

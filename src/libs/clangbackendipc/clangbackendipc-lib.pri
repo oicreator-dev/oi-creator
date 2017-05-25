@@ -1,4 +1,4 @@
-contains(CONFIG, dll) {
+shared {
     DEFINES += CLANGBACKENDIPC_BUILD_LIB
 } else {
     DEFINES += CLANGBACKENDIPC_BUILD_STATIC_LIB
@@ -57,7 +57,27 @@ SOURCES += $$PWD/clangcodemodelserverinterface.cpp \
     $$PWD/sourcelocationcontainerv2.cpp \
     $$PWD/sourcelocationsforrenamingmessage.cpp \
     $$PWD/requestsourcelocationforrenamingmessage.cpp \
-    $$PWD/filepath.cpp
+    $$PWD/filepath.cpp \
+    $$PWD/sourcerangescontainer.cpp \
+    $$PWD/sourcefilepathcontainerbase.cpp \
+    $$PWD/sourcerangecontainerv2.cpp \
+    $$PWD/dynamicastmatcherdiagnosticcontainer.cpp \
+    $$PWD/dynamicastmatcherdiagnosticcontextcontainer.cpp \
+    $$PWD/dynamicastmatcherdiagnosticmessagecontainer.cpp \
+    $$PWD/requestsourcerangesanddiagnosticsforquerymessage.cpp \
+    $$PWD/sourcerangesanddiagnosticsforquerymessage.cpp \
+    $$PWD/sourcerangewithtextcontainer.cpp \
+    $$PWD/filecontainerv2.cpp \
+    $$PWD/cancelmessage.cpp \
+    $$PWD/pchmanagerclientinterface.cpp \
+    $$PWD/pchmanagerserverinterface.cpp \
+    $$PWD/projectpartcontainerv2.cpp \
+    $$PWD/updatepchprojectpartsmessage.cpp \
+    $$PWD/pchmanagerserverproxy.cpp \
+    $$PWD/pchmanagerclientproxy.cpp \
+    $$PWD/projectpartpch.cpp \
+    $$PWD/precompiledheadersupdatedmessage.cpp \
+    $$PWD/removepchprojectpartsmessage.cpp
 
 HEADERS += \
     $$PWD/clangcodemodelserverinterface.h \
@@ -110,6 +130,27 @@ HEADERS += \
     $$PWD/sourcelocationcontainerv2.h \
     $$PWD/sourcelocationsforrenamingmessage.h \
     $$PWD/requestsourcelocationforrenamingmessage.h \
-    $$PWD/filepath.h
+    $$PWD/filepath.h \
+    $$PWD/sourcerangescontainer.h \
+    $$PWD/sourcefilepathcontainerbase.h \
+    $$PWD/sourcerangecontainerv2.h \
+    $$PWD/dynamicmatcherdiagnostics.h \
+    $$PWD/dynamicastmatcherdiagnosticcontainer.h \
+    $$PWD/dynamicastmatcherdiagnosticcontextcontainer.h \
+    $$PWD/dynamicastmatcherdiagnosticmessagecontainer.h \
+    $$PWD/requestsourcerangesanddiagnosticsforquerymessage.h \
+    $$PWD/sourcerangesanddiagnosticsforquerymessage.h \
+    $$PWD/sourcerangewithtextcontainer.h \
+    $$PWD/filecontainerv2.h \
+    $$PWD/cancelmessage.h \
+    $$PWD/pchmanagerclientinterface.h \
+    $$PWD/pchmanagerserverinterface.h \
+    $$PWD/projectpartcontainerv2.h \
+    $$PWD/updatepchprojectpartsmessage.h \
+    $$PWD/pchmanagerserverproxy.h \
+    $$PWD/pchmanagerclientproxy.h \
+    $$PWD/projectpartpch.h \
+    $$PWD/precompiledheadersupdatedmessage.h \
+    $$PWD/removepchprojectpartsmessage.h
 
 contains(QT_CONFIG, reduce_exports):CONFIG += hide_symbols

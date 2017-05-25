@@ -110,7 +110,7 @@ QString GenericProjectWizardDialog::projectName() const
 
 GenericProjectWizard::GenericProjectWizard()
 {
-    setSupportedProjectTypes({ Constants::GENERICPROJECT_ID });
+    setSupportedProjectTypes({Constants::GENERICPROJECT_ID});
     // TODO do something about the ugliness of standard icons in sizes different than 16, 32, 64, 128
     {
         QPixmap icon(22, 22);
@@ -156,8 +156,7 @@ Core::GeneratedFiles GenericProjectWizard::generateFiles(const QWizard *w,
     const QString configFileName = QFileInfo(dir, projectName + QLatin1String(".config")).absoluteFilePath();
     const QStringList paths = Utils::transform(wizard->selectedPaths(), &Utils::FileName::toString);
 
-    Utils::MimeDatabase mdb;
-    Utils::MimeType headerTy = mdb.mimeTypeForName(QLatin1String("text/x-chdr"));
+    Utils::MimeType headerTy = Utils::mimeTypeForName(QLatin1String("text/x-chdr"));
 
     QStringList nameFilters = headerTy.globPatterns();
 

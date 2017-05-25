@@ -34,7 +34,6 @@
 #include "../runnables.h"
 
 #include <ssh/sshconnection.h>
-#include <utils/algorithm.h>
 #include <utils/icon.h>
 #include <utils/portlist.h>
 #include <utils/qtcassert.h>
@@ -179,7 +178,9 @@ IDevice::IDevice(Core::Id type, Origin origin, MachineType machineType, Core::Id
     d->sshParameters.hostKeyDatabase = DeviceManager::instance()->hostKeyDatabase();
 }
 
-IDevice::IDevice(const IDevice &other) : d(new Internal::IDevicePrivate)
+IDevice::IDevice(const IDevice &other)
+    : QEnableSharedFromThis<IDevice>(other)
+    , d(new Internal::IDevicePrivate)
 {
     *d = *other.d;
 }
@@ -380,16 +381,6 @@ QVariantMap IDevice::toMap() const
     return map;
 }
 
-IDevice::Ptr IDevice::sharedFromThis()
-{
-    return DeviceManager::instance()->fromRawPointer(this);
-}
-
-IDevice::ConstPtr IDevice::sharedFromThis() const
-{
-    return DeviceManager::instance()->fromRawPointer(this);
-}
-
 QString IDevice::deviceStateToString() const
 {
     const char context[] = "ProjectExplorer::IDevice";
@@ -400,18 +391,6 @@ QString IDevice::deviceStateToString() const
     case IDevice::DeviceStateUnknown: return QCoreApplication::translate(context, "Unknown");
     default: return QCoreApplication::translate(context, "Invalid");
     }
-}
-
-void IDevice::setDeviceIcon(const QList<Utils::Icon> &deviceIcon)
-{
-    d->deviceIcons = deviceIcon;
-}
-
-QIcon IDevice::deviceIcon() const
-{
-    const QList<QIcon> icons =
-            Utils::transform(d->deviceIcons, [](const Utils::Icon &icon){return icon.icon();});
-    return Utils::Icon::combinedIcon(icons);
 }
 
 QSsh::SshConnectionParameters IDevice::sshParameters() const

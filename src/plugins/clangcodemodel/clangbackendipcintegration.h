@@ -36,6 +36,8 @@
 #include <QSharedPointer>
 #include <QVector>
 
+#include <functional>
+
 namespace Core {
 class IEditor;
 class IDocument;
@@ -132,7 +134,7 @@ public:
                       quint32 column,
                       const QString &projectFilePath);
 
-    void registerProjectsParts(const QList<CppTools::ProjectPart::Ptr> projectParts);
+    void registerProjectsParts(const QVector<CppTools::ProjectPart::Ptr> projectParts);
 
     void updateTranslationUnitIfNotCurrentDocument(Core::IDocument *document);
     void updateTranslationUnit(Core::IDocument *document);

@@ -76,11 +76,6 @@ static const char warningMessageCapKeyC[] = "ProjectExplorer.CustomToolChain.War
 static const char warningChannelKeyC[] = "ProjectExplorer.CustomToolChain.WarningChannel";
 static const char warningExampleKeyC[] = "ProjectExplorer.CustomToolChain.WarningExample";
 
-// TODO Creator 4.1: remove (added in 3.7 for compatibility)
-static const char lineNumberCapKeyC[] = "ProjectExplorer.CustomToolChain.LineNumberCap";
-static const char fileNameCapKeyC[] = "ProjectExplorer.CustomToolChain.FileNameCap";
-static const char messageCapKeyC[] = "ProjectExplorer.CustomToolChain.MessageCap";
-
 // --------------------------------------------------------------------------
 // CustomToolChain
 // --------------------------------------------------------------------------
@@ -90,9 +85,9 @@ CustomToolChain::CustomToolChain(Detection d) :
     m_outputParser(Gcc)
 { }
 
-CustomToolChain::CustomToolChain(Language l, Detection d) : CustomToolChain(d)
+CustomToolChain::CustomToolChain(Core::Id language, Detection d) : CustomToolChain(d)
 {
-    setLanguage(l);
+    setLanguage(language);
 }
 
 
@@ -120,33 +115,43 @@ bool CustomToolChain::isValid() const
     return true;
 }
 
-QByteArray CustomToolChain::predefinedMacros(const QStringList &cxxflags) const
+ToolChain::PredefinedMacrosRunner CustomToolChain::createPredefinedMacrosRunner() const
 {
-    QByteArray result;
-    QStringList macros = m_predefinedMacros;
-    foreach (const QString &cxxFlag, cxxflags) {
-        if (cxxFlag.startsWith(QLatin1String("-D"))) {
-            macros << cxxFlag.mid(2).trimmed();
-        } else if (cxxFlag.startsWith(QLatin1String("-U"))) {
-            const QString &removedName = cxxFlag.mid(2).trimmed();
-            for (int i = macros.size() - 1; i >= 0; --i) {
-                const QString &m = macros.at(i);
-                if (m.left(m.indexOf(QLatin1Char('='))) == removedName)
-                    macros.removeAt(i);
+    const QStringList theMacros = m_predefinedMacros;
+
+    // This runner must be thread-safe!
+    return [theMacros](const QStringList &cxxflags){
+        QByteArray result;
+        QStringList macros = theMacros;
+        foreach (const QString &cxxFlag, cxxflags) {
+            if (cxxFlag.startsWith(QLatin1String("-D"))) {
+                macros << cxxFlag.mid(2).trimmed();
+            } else if (cxxFlag.startsWith(QLatin1String("-U"))) {
+                const QString &removedName = cxxFlag.mid(2).trimmed();
+                for (int i = macros.size() - 1; i >= 0; --i) {
+                    const QString &m = macros.at(i);
+                    if (m.left(m.indexOf(QLatin1Char('='))) == removedName)
+                        macros.removeAt(i);
+                }
             }
         }
-    }
-    foreach (const QString &str, macros) {
-        QByteArray ba = str.toUtf8();
-        int equals = ba.indexOf('=');
-        if (equals == -1) {
-            result += "#define " + ba.trimmed() + '\n';
-        } else {
-            result += "#define " + ba.left(equals).trimmed() + ' '
-                    + ba.mid(equals + 1).trimmed() + '\n';
+        foreach (const QString &str, macros) {
+            QByteArray ba = str.toUtf8();
+            int equals = ba.indexOf('=');
+            if (equals == -1) {
+                result += "#define " + ba.trimmed() + '\n';
+            } else {
+                result += "#define " + ba.left(equals).trimmed() + ' '
+                        + ba.mid(equals + 1).trimmed() + '\n';
+            }
         }
-    }
-    return result;
+        return result;
+    };
+}
+
+QByteArray CustomToolChain::predefinedMacros(const QStringList &cxxflags) const
+{
+    return createPredefinedMacrosRunner()(cxxflags);
 }
 
 ToolChain::CompilerFlags CustomToolChain::compilerFlags(const QStringList &cxxflags) const
@@ -176,15 +181,26 @@ void CustomToolChain::setPredefinedMacros(const QStringList &list)
     toolChainUpdated();
 }
 
-QList<HeaderPath> CustomToolChain::systemHeaderPaths(const QStringList &cxxFlags, const FileName &) const
+ToolChain::SystemHeaderPathsRunner CustomToolChain::createSystemHeaderPathsRunner() const
 {
-    QList<HeaderPath> flagHeaderPaths;
-    foreach (const QString &cxxFlag, cxxFlags) {
-        if (cxxFlag.startsWith(QLatin1String("-I")))
-            flagHeaderPaths << HeaderPath(cxxFlag.mid(2).trimmed(), HeaderPath::GlobalHeaderPath);
-    }
+    const QList<HeaderPath> systemHeaderPaths = m_systemHeaderPaths;
 
-    return m_systemHeaderPaths + flagHeaderPaths;
+    // This runner must be thread-safe!
+    return [systemHeaderPaths](const QStringList &cxxFlags, const QString &) {
+        QList<HeaderPath> flagHeaderPaths;
+        foreach (const QString &cxxFlag, cxxFlags) {
+            if (cxxFlag.startsWith(QLatin1String("-I")))
+                flagHeaderPaths << HeaderPath(cxxFlag.mid(2).trimmed(), HeaderPath::GlobalHeaderPath);
+        }
+
+        return systemHeaderPaths + flagHeaderPaths;
+    };
+}
+
+QList<HeaderPath> CustomToolChain::systemHeaderPaths(const QStringList &cxxFlags,
+                                                     const FileName &fileName) const
+{
+    return createSystemHeaderPathsRunner()(cxxFlags, fileName.toString());
 }
 
 void CustomToolChain::addToEnvironment(Environment &env) const
@@ -354,14 +370,6 @@ bool CustomToolChain::fromMap(const QVariantMap &data)
                 static_cast<CustomParserExpression::CustomParserChannel>(data.value(QLatin1String(warningChannelKeyC)).toInt()));
     m_customParserSettings.warning.setExample(data.value(QLatin1String(warningExampleKeyC)).toString());
 
-    // TODO Creator 4.1: remove (added in 3.7 for compatibility)
-    if (m_customParserSettings.error.fileNameCap() == 0)
-        m_customParserSettings.error.setFileNameCap(data.value(QLatin1String(fileNameCapKeyC)).toInt());
-    if (m_customParserSettings.error.lineNumberCap() == 0)
-        m_customParserSettings.error.setLineNumberCap(data.value(QLatin1String(lineNumberCapKeyC)).toInt());
-    if (m_customParserSettings.error.messageCap() == 0)
-        m_customParserSettings.error.setMessageCap(data.value(QLatin1String(messageCapKeyC)).toInt());
-
     QTC_ASSERT(m_outputParser >= Gcc && m_outputParser < OutputParserCount, return false);
 
     return true;
@@ -436,9 +444,9 @@ CustomToolChainFactory::CustomToolChainFactory()
     setDisplayName(tr("Custom"));
 }
 
-QSet<ToolChain::Language> CustomToolChainFactory::supportedLanguages() const
+QSet<Core::Id> CustomToolChainFactory::supportedLanguages() const
 {
-    return ToolChain::allLanguages();
+    return ToolChainManager::allLanguages();
 }
 
 bool CustomToolChainFactory::canCreate()
@@ -446,9 +454,9 @@ bool CustomToolChainFactory::canCreate()
     return true;
 }
 
-ToolChain *CustomToolChainFactory::create(ToolChain::Language l)
+ToolChain *CustomToolChainFactory::create(Core::Id language)
 {
-    return new CustomToolChain(l, ToolChain::ManualDetection);
+    return new CustomToolChain(language, ToolChain::ManualDetection);
 }
 
 // Used by the ToolChainManager to restore user-generated tool chains

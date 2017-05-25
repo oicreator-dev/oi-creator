@@ -26,7 +26,6 @@
 #include "taskwindow.h"
 
 #include "itaskhandler.h"
-#include "projectexplorerconstants.h"
 #include "projectexplorericons.h"
 #include "session.h"
 #include "task.h"
@@ -348,7 +347,7 @@ void TaskWindow::delayedInitialization()
 
 QList<QWidget*> TaskWindow::toolBarWidgets() const
 {
-    return { d->m_filterWarningsButton, d->m_categoriesButton };
+    return {d->m_filterWarningsButton, d->m_categoriesButton};
 }
 
 QWidget *TaskWindow::outputWidget(QWidget *)

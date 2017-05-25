@@ -62,6 +62,7 @@ public:
 
     void nodeReparented(const ModelNode &node, const NodeAbstractProperty &newPropertyParent, const NodeAbstractProperty &oldPropertyParent, AbstractView::PropertyChangeFlags propertyChange) override;
     void rootNodeTypeChanged(const QString &type, int majorVersion, int minorVersion) override;
+    void nodeTypeChanged(const ModelNode& node, const TypeName &type, int majorVersion, int minorVersion) override;
     void nodeIdChanged(const ModelNode& node, const QString& newId, const QString& oldId) override;
     void propertiesAboutToBeRemoved(const QList<AbstractProperty>& propertyList) override;
     void propertiesRemoved(const QList<AbstractProperty>& propertyList) override;
@@ -69,11 +70,11 @@ public:
     void selectedNodesChanged(const QList<ModelNode> &selectedNodeList ,
                                       const QList<ModelNode> &lastSelectedNodeList) override;
     void auxiliaryDataChanged(const ModelNode &node, const PropertyName &name, const QVariant &data) override;
-    void instanceErrorChange(const QVector<ModelNode> &errorNodeList) override;
+    void instanceErrorChanged(const QVector<ModelNode> &errorNodeList) override;
 
     void bindingPropertiesChanged(const QList<BindingProperty> &propertyList, PropertyChangeFlags) override;
 
-private slots:
+private:
     void changeSelection(const QItemSelection &selected, const QItemSelection &deselected);
     void updateItemSelection();
     void changeToComponent(const QModelIndex &index);

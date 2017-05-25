@@ -1,10 +1,13 @@
 !isEmpty(QTCREATOR_PRI_INCLUDED):error("qtcreator.pri already included")
 QTCREATOR_PRI_INCLUDED = 1
 
-QTCREATOR_VERSION = 4.2.2
-QTCREATOR_COMPAT_VERSION = 4.2.0
+QTCREATOR_VERSION = 4.3.0
+QTCREATOR_COMPAT_VERSION = 4.3.0
 VERSION = $$QTCREATOR_VERSION
-BINARY_ARTIFACTS_BRANCH = 4.2
+QTCREATOR_DISPLAY_VERSION = 4.3.0
+BINARY_ARTIFACTS_BRANCH = 4.3
+
+CONFIG += c++14
 
 defineReplace(qtLibraryTargetName) {
    unset(LIBRARY_NAME)
@@ -54,6 +57,12 @@ defineTest(minQtVersion) {
 # For use in custom compilers which just copy files
 defineReplace(stripSrcDir) {
     return($$relative_path($$absolute_path($$1, $$OUT_PWD), $$_PRO_FILE_PWD_))
+}
+
+macos:!minQtVersion(5, 7, 0) {
+    # Qt 5.6 still sets deployment target 10.7, which does not work
+    # with all C++11/14 features (e.g. std::future)
+    QMAKE_MACOSX_DEPLOYMENT_TARGET = 10.8
 }
 
 QTC_BUILD_TESTS = $$(QTC_BUILD_TESTS)
@@ -146,6 +155,15 @@ osx {
     INSTALL_BIN_PATH     = $$QTC_PREFIX/bin
     INSTALL_APP_PATH     = $$QTC_PREFIX/bin
 }
+
+RELATIVE_PLUGIN_PATH = $$relative_path($$IDE_PLUGIN_PATH, $$IDE_BIN_PATH)
+RELATIVE_LIBEXEC_PATH = $$relative_path($$IDE_LIBEXEC_PATH, $$IDE_BIN_PATH)
+RELATIVE_DATA_PATH = $$relative_path($$IDE_DATA_PATH, $$IDE_BIN_PATH)
+RELATIVE_DOC_PATH = $$relative_path($$IDE_DOC_PATH, $$IDE_BIN_PATH)
+DEFINES += $$shell_quote(RELATIVE_PLUGIN_PATH=\"$$RELATIVE_PLUGIN_PATH\")
+DEFINES += $$shell_quote(RELATIVE_LIBEXEC_PATH=\"$$RELATIVE_LIBEXEC_PATH\")
+DEFINES += $$shell_quote(RELATIVE_DATA_PATH=\"$$RELATIVE_DATA_PATH\")
+DEFINES += $$shell_quote(RELATIVE_DOC_PATH=\"$$RELATIVE_DOC_PATH\")
 
 INCLUDEPATH += \
     $$IDE_BUILD_TREE/src \ # for <app/app_version.h> in case of actual build directory

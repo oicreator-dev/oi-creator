@@ -36,6 +36,8 @@
 
 #include <ctype.h>
 
+#include <utils/processhandle.h>
+
 #define QTC_ASSERT_STRINGIFY_HELPER(x) #x
 #define QTC_ASSERT_STRINGIFY(x) QTC_ASSERT_STRINGIFY_HELPER(x)
 #define QTC_ASSERT_STRING(cond) qDebug("SOFT ASSERT: \"" cond"\" in file " __FILE__ ", line " QTC_ASSERT_STRINGIFY(__LINE__))
@@ -385,6 +387,11 @@ qulonglong GdbMi::toAddress() const
     return ba.toULongLong(0, 0);
 }
 
+Utils::ProcessHandle GdbMi::toProcessHandle() const
+{
+    return Utils::ProcessHandle(m_data.toULongLong());
+}
+
 //////////////////////////////////////////////////////////////////////////////////
 //
 // GdbResponse
@@ -646,11 +653,11 @@ QString decodeData(const QString &ba, const QString &encoding)
         case DebuggerEncoding::HexEncodedFloat: {
             const QByteArray s = QByteArray::fromHex(ba.toUtf8());
             if (enc.size == 4) {
-                union { char c[4]; float f; } u = { { s[3], s[2], s[1], s[0] } };
+                union { char c[4]; float f; } u = {{s[3], s[2], s[1], s[0]}};
                 return QString::number(u.f);
             }
             if (enc.size == 8) {
-                union { char c[8]; double d; } u = { { s[7], s[6], s[5], s[4], s[3], s[2], s[1], s[0] } };
+                union { char c[8]; double d; } u = {{s[7], s[6], s[5], s[4], s[3], s[2], s[1], s[0]}};
                 return QString::number(u.d);
             }
         }
@@ -756,9 +763,17 @@ void DebuggerCommand::arg(const char *name, const char *value)
 void DebuggerCommand::arg(const char *name, const QList<int> &list)
 {
     QJsonArray numbers;
-    foreach (int item, list)
+    for (int item : list)
         numbers.append(item);
     args = addToJsonObject(args, name, numbers);
+}
+
+void DebuggerCommand::arg(const char *name, const QStringList &list)
+{
+    QJsonArray arr;
+    for (const QString &item : list)
+        arr.append(toHex(item));
+    args = addToJsonObject(args, name, arr);
 }
 
 void DebuggerCommand::arg(const char *value)
@@ -882,7 +897,7 @@ QString DebuggerEncoding::toString() const
 
 QString fromHex(const QString &str)
 {
-    return QString::fromLatin1(QByteArray::fromHex(str.toUtf8()));
+    return QString::fromUtf8(QByteArray::fromHex(str.toUtf8()));
 }
 
 QString toHex(const QString &str)

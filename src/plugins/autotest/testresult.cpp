@@ -25,6 +25,7 @@
 
 #include "testresult.h"
 
+#include <utils/qtcassert.h>
 #include <utils/theme/theme.h>
 
 namespace Autotest {
@@ -91,38 +92,40 @@ Result::Type TestResult::toResultType(int rt)
 
 QString TestResult::resultToString(const Result::Type type)
 {
-    if (type >= Result::INTERNAL_MESSAGES_BEGIN && type <= Result::INTERNAL_MESSAGES_END)
-        return QString();
-
     switch (type) {
     case Result::Pass:
-        return QLatin1String("PASS");
+    case Result::MessageTestCaseSuccess:
+        return QString("PASS");
     case Result::Fail:
-        return QLatin1String("FAIL");
+    case Result::MessageTestCaseFail:
+        return QString("FAIL");
     case Result::ExpectedFail:
-        return QLatin1String("XFAIL");
+        return QString("XFAIL");
     case Result::UnexpectedPass:
-        return QLatin1String("XPASS");
+        return QString("XPASS");
     case Result::Skip:
-        return QLatin1String("SKIP");
+        return QString("SKIP");
     case Result::Benchmark:
-        return QLatin1String("BENCH");
+        return QString("BENCH");
     case Result::MessageDebug:
-        return QLatin1String("DEBUG");
+        return QString("DEBUG");
     case Result::MessageInfo:
-        return QLatin1String("INFO");
+        return QString("INFO");
     case Result::MessageWarn:
-        return QLatin1String("WARN");
+    case Result::MessageTestCaseWarn:
+        return QString("WARN");
     case Result::MessageFatal:
-        return QLatin1String("FATAL");
+        return QString("FATAL");
     case Result::MessageSystem:
-        return QLatin1String("SYSTEM");
+        return QString("SYSTEM");
     case Result::BlacklistedPass:
-        return QLatin1String("BPASS");
+        return QString("BPASS");
     case Result::BlacklistedFail:
-        return QLatin1String("BFAIL");
+        return QString("BFAIL");
     default:
-        return QLatin1String("UNKNOWN");
+        if (type >= Result::INTERNAL_MESSAGES_BEGIN && type <= Result::INTERNAL_MESSAGES_END)
+            return QString();
+        return QString("UNKNOWN");
     }
 }
 
@@ -156,6 +159,32 @@ QColor TestResult::colorForType(const Result::Type type)
     default:
         return creatorTheme->color(Utils::Theme::OutputPanes_StdOutTextColor);
     }
+}
+
+bool TestResult::isMessageCaseStart(const Result::Type type)
+{
+    return type == Result::MessageTestCaseStart || type == Result::MessageTestCaseSuccess
+            || type == Result::MessageTestCaseFail || type == Result::MessageTestCaseWarn
+            || type == Result::MessageIntermediate;
+}
+
+bool TestResult::isDirectParentOf(const TestResult *other, bool * /*needsIntermediate*/) const
+{
+    QTC_ASSERT(other, return false);
+    return m_name == other->m_name;
+}
+
+bool TestResult::isIntermediateFor(const TestResult *other) const
+{
+    QTC_ASSERT(other, return false);
+    return m_name == other->m_name;
+}
+
+TestResult *TestResult::createIntermediateResultFor(const TestResult *other)
+{
+    QTC_ASSERT(other, return nullptr);
+    TestResult *intermediate = new TestResult(other->m_name);
+    return intermediate;
 }
 
 } // namespace Internal

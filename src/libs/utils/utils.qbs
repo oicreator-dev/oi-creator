@@ -9,7 +9,7 @@ Project {
     QtcLibrary {
 
         cpp.defines: base.concat([
-            "QTCREATOR_UTILS_LIB",
+            "UTILS_LIBRARY",
             "QTC_REL_TOOLS_PATH=\"" + FileInfo.relativePath('/' + qtc.ide_bin_path,
                                                             '/' + qtc.ide_libexec_path) + "\""
         ])
@@ -38,6 +38,7 @@ Project {
 
         files: [
             "QtConcurrentTools",
+            "asconst.h",
             "algorithm.h",
             "annotateditemdelegate.cpp",
             "annotateditemdelegate.h",
@@ -145,6 +146,7 @@ Project {
             "outputformat.h",
             "outputformatter.cpp",
             "outputformatter.h",
+            "objectpool.h",
             "overridecursor.cpp",
             "overridecursor.h",
             "parameteraction.cpp",
@@ -159,6 +161,8 @@ Project {
             "port.h",
             "portlist.cpp",
             "portlist.h",
+            "processhandle.cpp",
+            "processhandle.h",
             "progressindicator.cpp",
             "progressindicator.h",
             "projectintropage.cpp",
@@ -211,6 +215,10 @@ Project {
             "synchronousprocess.h",
             "templateengine.cpp",
             "templateengine.h",
+            "temporarydirectory.cpp",
+            "temporarydirectory.h",
+            "temporaryfile.cpp",
+            "temporaryfile.h",
             "textfieldcheckbox.cpp",
             "textfieldcheckbox.h",
             "textfieldcombobox.cpp",

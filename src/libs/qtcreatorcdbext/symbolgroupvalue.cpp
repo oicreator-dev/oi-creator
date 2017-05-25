@@ -1255,8 +1255,22 @@ static KnownType knownClassTypeHelper(const std::string &type,
             case 8:
                 if (!type.compare(hPos, 8, "multimap"))
                     return KT_StdMultiMap;
+                if (!type.compare(hPos, 8, "multiset"))
+                    return KT_StdMultiSet;
                 if (!type.compare(hPos, 8, "valarray"))
                     return KT_StdValArray;
+                break;
+            case 13:
+                if (!type.compare(hPos, 13, "unordered_map"))
+                    return KT_StdUnorderedMap;
+                if (!type.compare(hPos, 13, "unordered_set"))
+                    return KT_StdUnorderedSet;
+                break;
+            case 18:
+                if (!type.compare(hPos, 18, "unordered_multimap"))
+                    return KT_StdUnorderedMultiMap;
+                if (!type.compare(hPos, 18, "unordered_multiset"))
+                    return KT_StdUnorderedMultiSet;
                 break;
             }
         }
@@ -3490,17 +3504,20 @@ static inline int assignStdStringI(SymbolGroupNode  *n, int type,
      * or an allocated array is used. */
 
     const SymbolGroupValue v(n, ctx);
-    SymbolGroupValue bx = v[unsigned(0)]["_Bx"];
-    SymbolGroupValue size;
-    int reserved = 0;
-    if (bx) { // MSVC2010
-        size = v[unsigned(0)]["_Mysize"];
-        reserved = v[unsigned(0)]["_Myres"].intValue();
-    } else { // MSVC2008
-        bx = v["_Bx"];
-        size = v["_Mysize"];
-        reserved = v["_Myres"].intValue();
+    SymbolGroupValue base = v;
+    SymbolGroupValue bx = base["_Bx"];
+    if (!bx) {
+        base = base[unsigned(0)];
+        bx = base["_Bx"];
     }
+    if (!bx) {
+        base = base[unsigned(0)][unsigned(1)];
+        bx = base["_Bx"];
+    }
+    if (!bx)
+        return 24;
+    SymbolGroupValue size = base["_Mysize"];
+    int reserved = base["_Myres"].intValue();
     if (reserved < 0 || !size || !bx)
         return 42;
     if (reserved <= (int)data.stringLength)
@@ -3538,17 +3555,17 @@ static inline bool assignStdString(SymbolGroupNode  *n,
     return true;
 }
 
-bool assignType(SymbolGroupNode  *n, int valueEncoding, const std::string &value,
+bool assignType(SymbolGroupNode *n, int knownType, int valueEncoding, const std::string &value,
                 const SymbolGroupValueContext &ctx, std::string *errorMessage)
 {
-    switch (n->dumperType()) {
+    switch (knownType) {
     case KT_QString:
         return assignQString(n, valueEncoding, value, ctx, errorMessage);
     case KT_QByteArray:
         return assignQByteArray(n, valueEncoding, value, ctx, errorMessage);
     case KT_StdString:
     case KT_StdWString:
-        return assignStdString(n, n->dumperType(), valueEncoding, value, ctx, errorMessage);
+        return assignStdString(n, knownType, valueEncoding, value, ctx, errorMessage);
     default:
         break;
     }

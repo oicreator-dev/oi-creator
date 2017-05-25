@@ -35,7 +35,7 @@
 #include <variantproperty.h>
 #include <bindingproperty.h>
 
-#include <theming.h>
+#include <theme.h>
 
 #include <coreplugin/icore.h>
 #include <qmljs/qmljssimplereader.h>
@@ -46,6 +46,9 @@
 #include <QDir>
 #include <QFileInfo>
 
+#include <QLoggingCategory>
+
+static Q_LOGGING_CATEGORY(propertyEditorBenchmark, "qtc.propertyeditor.load")
 
 static QmlJS::SimpleReaderNode::Ptr s_templateConfiguration = QmlJS::SimpleReaderNode::Ptr();
 
@@ -103,9 +106,8 @@ PropertyEditorQmlBackend::PropertyEditorQmlBackend(PropertyEditorView *propertyE
     m_contextObject->setModel(propertyEditor->model());
     m_contextObject->insertInQmlContext(context());
 
-    context()->setContextProperty(QLatin1String("creatorTheme"), Theming::theme());
-
-    QObject::connect(&m_backendValuesPropertyMap, &DesignerPropertyMap::valueChanged, propertyEditor, &PropertyEditorView::changeValue);
+    QObject::connect(&m_backendValuesPropertyMap, &DesignerPropertyMap::valueChanged,
+                     propertyEditor, &PropertyEditorView::changeValue);
 }
 
 PropertyEditorQmlBackend::~PropertyEditorQmlBackend()
@@ -269,6 +271,13 @@ void PropertyEditorQmlBackend::setup(const QmlObjectNode &qmlObjectNode, const Q
         return;
 
     if (qmlObjectNode.isValid()) {
+
+        qCInfo(propertyEditorBenchmark) << Q_FUNC_INFO;
+
+        QTime time;
+        if (propertyEditorBenchmark().isInfoEnabled())
+            time.start();
+
         foreach (const PropertyName &propertyName, qmlObjectNode.modelNode().metaInfo().propertyNames())
             createPropertyEditorValue(qmlObjectNode, propertyName, qmlObjectNode.instanceValue(propertyName), propertyEditor);
 
@@ -301,11 +310,17 @@ void PropertyEditorQmlBackend::setup(const QmlObjectNode &qmlObjectNode, const Q
 
         context()->setContextProperty(QLatin1String("transaction"), m_propertyEditorTransaction.data());
 
+        qCInfo(propertyEditorBenchmark) << "anchors:" << time.elapsed();
+
         // model node
         m_backendModelNode.setup(qmlObjectNode.modelNode());
         context()->setContextProperty(QLatin1String("modelNodeBackend"), &m_backendModelNode);
 
+        qCInfo(propertyEditorBenchmark) << "context:" << time.elapsed();
+
         contextObject()->setSpecificsUrl(qmlSpecificsFile);
+
+        qCInfo(propertyEditorBenchmark) << "specifics:" << time.elapsed();
 
         contextObject()->setStateName(stateName);
         if (!qmlObjectNode.isValid())
@@ -333,6 +348,8 @@ void PropertyEditorQmlBackend::setup(const QmlObjectNode &qmlObjectNode, const Q
 
         contextObject()->setMajorQtQuickVersion(qmlObjectNode.view()->majorQtQuickVersion());
         contextObject()->setMinorQtQuickVersion(qmlObjectNode.view()->minorQtQuickVersion());
+
+        qCInfo(propertyEditorBenchmark) << "final:" << time.elapsed();
     } else {
         qWarning() << "PropertyEditor: invalid node for setup";
     }

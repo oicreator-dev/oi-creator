@@ -56,9 +56,10 @@ private:
 
     QStringList m_directories;
     QStringList m_filters;
+    QStringList m_exclusionFilters;
     // Our config dialog, uses in addDirectory and editDirectory
     // to give their dialogs the right parent
-    QDialog *m_dialog;
+    QDialog *m_dialog = nullptr;
     Ui::DirectoryFilterOptions m_ui;
     mutable QMutex m_lock;
     QStringList m_files;

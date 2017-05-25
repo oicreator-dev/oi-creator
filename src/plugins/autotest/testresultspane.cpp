@@ -107,6 +107,9 @@ TestResultsPane::TestResultsPane(QObject *parent) :
     m_treeView->setHeaderHidden(true);
     m_treeView->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     m_treeView->setContextMenuPolicy(Qt::CustomContextMenu);
+    pal = m_treeView->palette();
+    pal.setColor(QPalette::Base, pal.window().color());
+    m_treeView->setPalette(pal);
     m_model = new TestResultModel(this);
     m_filterModel = new TestResultFilterModel(m_model, this);
     m_filterModel->setDynamicSortFilter(true);
@@ -162,7 +165,7 @@ void TestResultsPane::createToolButtons()
 
     m_runSelected = new QToolButton(m_treeView);
     Utils::Icon runSelectedIcon = Utils::Icons::RUN_SMALL_TOOLBAR;
-    foreach (const Utils::IconMaskAndColor &maskAndColor, Icons::RUN_SELECTED_OVERLAY)
+    for (const Utils::IconMaskAndColor &maskAndColor : Icons::RUN_SELECTED_OVERLAY)
         runSelectedIcon.append(maskAndColor);
     m_runSelected->setIcon(runSelectedIcon.icon());
     m_runSelected->setToolTip(tr("Run Selected Tests"));
@@ -187,19 +190,19 @@ void TestResultsPane::createToolButtons()
     m_filterButton->setMenu(m_filterMenu);
 }
 
-static TestResultsPane *m_instance = 0;
+static TestResultsPane *s_instance = nullptr;
 
 TestResultsPane *TestResultsPane::instance()
 {
-    if (!m_instance)
-        m_instance = new TestResultsPane;
-    return m_instance;
+    if (!s_instance)
+        s_instance = new TestResultsPane;
+    return s_instance;
 }
 
 TestResultsPane::~TestResultsPane()
 {
     delete m_treeView;
-    m_instance = 0;
+    s_instance = nullptr;
 }
 
 void TestResultsPane::addTestResult(const TestResultPtr &result)
@@ -226,7 +229,7 @@ QWidget *TestResultsPane::outputWidget(QWidget *parent)
 
 QList<QWidget *> TestResultsPane::toolBarWidgets() const
 {
-    return { m_expandCollapse, m_runAll, m_runSelected, m_stopTestRun, m_filterButton };
+    return {m_expandCollapse, m_runAll, m_runSelected, m_stopTestRun, m_filterButton};
 }
 
 QString TestResultsPane::displayName() const
@@ -259,11 +262,9 @@ void TestResultsPane::visibilityChanged(bool visible)
                 this, &TestResultsPane::updateRunActions);
         // make sure run/run all are in correct state
         updateRunActions();
-        TestTreeModel::instance()->enableParsing();
     } else {
         disconnect(TestTreeModel::instance(), &TestTreeModel::testTreeModelChanged,
                    this, &TestResultsPane::updateRunActions);
-        TestTreeModel::instance()->disableParsing();
     }
     m_wasVisibleBefore = visible;
 }
@@ -418,7 +419,7 @@ void TestResultsPane::initializeFilterMenu()
     textAndType.insert(Result::MessageDebug, tr("Debug Messages"));
     textAndType.insert(Result::MessageWarn, tr("Warning Messages"));
     textAndType.insert(Result::MessageInternal, tr("Internal Messages"));
-    foreach (Result::Type result, textAndType.keys()) {
+    for (Result::Type result : textAndType.keys()) {
         QAction *action = new QAction(m_filterMenu);
         action->setText(textAndType.value(result));
         action->setCheckable(true);
@@ -463,7 +464,7 @@ void TestResultsPane::updateSummaryLabel()
 
 void TestResultsPane::enableAllFilter()
 {
-    foreach (QAction *action, m_filterMenu->actions()) {
+    for (QAction *action : m_filterMenu->actions()) {
         if (action->isCheckable())
             action->setChecked(true);
     }
@@ -561,7 +562,7 @@ void TestResultsPane::onCopyWholeTriggered()
 void TestResultsPane::onSaveWholeTriggered()
 {
     const QString fileName = QFileDialog::getSaveFileName(Core::ICore::dialogParent(),
-                                                          tr("Save Output To..."));
+                                                          tr("Save Output To"));
     if (fileName.isEmpty())
         return;
 

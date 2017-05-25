@@ -39,6 +39,7 @@ publication by Neil Fraser: http://neil.fraser.name/writing/diff/
 #include <QMap>
 #include <QPair>
 #include <QCoreApplication>
+#include <QFutureInterfaceBase>
 
 namespace DiffEditor {
 
@@ -88,6 +89,7 @@ static QList<Diff> decode(const QList<Diff> &diffList,
                                   const QStringList &lines)
 {
     QList<Diff> newDiffList;
+    newDiffList.reserve(diffList.count());
     for (int i = 0; i < diffList.count(); i++) {
         Diff diff = diffList.at(i);
         QString text;
@@ -202,23 +204,23 @@ static QList<Diff> cleanupOverlaps(const QList<Diff> &diffList)
 
 static int cleanupSemanticsScore(const QString &text1, const QString &text2)
 {
-    static QRegExp blankLineEnd = QRegExp(QLatin1String("\\n\\r?\\n$"));
-    static QRegExp blankLineStart = QRegExp(QLatin1String("^\\r?\\n\\r?\\n"));
-    static QRegExp sentenceEnd = QRegExp(QLatin1String("\\. $"));
+    const QRegExp blankLineEnd = QRegExp(QLatin1String("\\n\\r?\\n$"));
+    const QRegExp blankLineStart = QRegExp(QLatin1String("^\\r?\\n\\r?\\n"));
+    const QRegExp sentenceEnd = QRegExp(QLatin1String("\\. $"));
 
     if (!text1.count() || !text2.count()) // Edges
         return 6;
 
-    QChar char1 = text1[text1.count() - 1];
-    QChar char2 = text2[0];
-    bool nonAlphaNumeric1 = !char1.isLetterOrNumber();
-    bool nonAlphaNumeric2 = !char2.isLetterOrNumber();
-    bool whitespace1 = nonAlphaNumeric1 && char1.isSpace();
-    bool whitespace2 = nonAlphaNumeric2 && char2.isSpace();
-    bool lineBreak1 = whitespace1 && char1.category() == QChar::Other_Control;
-    bool lineBreak2 = whitespace2 && char2.category() == QChar::Other_Control;
-    bool blankLine1 = lineBreak1 && blankLineEnd.indexIn(text1) != -1;
-    bool blankLine2 = lineBreak2 && blankLineStart.indexIn(text2) != -1;
+    const QChar char1 = text1[text1.count() - 1];
+    const QChar char2 = text2[0];
+    const bool nonAlphaNumeric1 = !char1.isLetterOrNumber();
+    const bool nonAlphaNumeric2 = !char2.isLetterOrNumber();
+    const bool whitespace1 = nonAlphaNumeric1 && char1.isSpace();
+    const bool whitespace2 = nonAlphaNumeric2 && char2.isSpace();
+    const bool lineBreak1 = whitespace1 && char1.category() == QChar::Other_Control;
+    const bool lineBreak2 = whitespace2 && char2.category() == QChar::Other_Control;
+    const bool blankLine1 = lineBreak1 && blankLineEnd.indexIn(text1) != -1;
+    const bool blankLine2 = lineBreak2 && blankLineStart.indexIn(text2) != -1;
 
     if (blankLine1 || blankLine2) // Blank lines
       return 5;
@@ -986,9 +988,10 @@ QString Diff::toString() const
 
 ///////////////
 
-Differ::Differ()
+Differ::Differ(QFutureInterfaceBase *jobController)
     : m_diffMode(Differ::LineMode),
-      m_currentDiffMode(Differ::LineMode)
+      m_currentDiffMode(Differ::LineMode),
+      m_jobController(jobController)
 {
 
 }
@@ -1125,6 +1128,11 @@ QList<Diff> Differ::diffMyers(const QString &text1, const QString &text2)
     int kMinReverse = -D;
     int kMaxReverse = D;
     for (int d = 0; d <= D; d++) {
+        if (m_jobController && m_jobController->isCanceled()) {
+            delete [] forwardV;
+            delete [] reverseV;
+            return QList<Diff>();
+        }
         // going forward
         for (int k = qMax(-d, kMinForward + qAbs(d + kMinForward) % 2);
              k <= qMin(d, kMaxForward - qAbs(d + kMaxForward) % 2);
@@ -1238,7 +1246,18 @@ QList<Diff> Differ::diffNonCharMode(const QString &text1, const QString &text2)
     QString lastDelete;
     QString lastInsert;
     QList<Diff> newDiffList;
+    if (m_jobController) {
+        m_jobController->setProgressRange(0, diffList.count());
+        m_jobController->setProgressValue(0);
+    }
     for (int i = 0; i <= diffList.count(); i++) {
+        if (m_jobController) {
+            if (m_jobController->isCanceled()) {
+                m_currentDiffMode = diffMode;
+                return QList<Diff>();
+            }
+            m_jobController->setProgressValue(i + 1);
+        }
         const Diff diffItem = i < diffList.count()
                   ? diffList.at(i)
                   : Diff(Diff::Equal); // dummy, ensure we process to the end

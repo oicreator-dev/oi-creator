@@ -68,11 +68,6 @@
 #include <texteditor/texteditor.h>
 #include <texteditor/textdocument.h>
 
-#include <utils/fancymainwindow.h>
-#include <utils/qtcassert.h>
-#include <utils/styledbar.h>
-#include <utils/utilsicons.h>
-
 #include <projectexplorer/project.h>
 #include <projectexplorer/projectexplorer.h>
 #include <projectexplorer/projectexplorericons.h>
@@ -503,11 +498,11 @@ CallgrindTool::CallgrindTool(QObject *parent)
     Debugger::registerToolbar(CallgrindPerspectiveId, toolbar);
 
     Debugger::registerPerspective(CallgrindPerspectiveId, new Perspective(tr("Callgrind"), {
-        { CallgrindFlatDockId, m_flatView, {}, Perspective::SplitVertical },
-        { CallgrindCalleesDockId, m_calleesView, {}, Perspective::SplitVertical },
-        { CallgrindCallersDockId, m_callersView, CallgrindCalleesDockId, Perspective::SplitHorizontal },
-        { CallgrindVisualizationDockId, m_visualization, {}, Perspective::SplitVertical,
-          false, Qt::RightDockWidgetArea }
+        {CallgrindFlatDockId, m_flatView, {}, Perspective::SplitVertical},
+        {CallgrindCalleesDockId, m_calleesView, {}, Perspective::SplitVertical},
+        {CallgrindCallersDockId, m_callersView, CallgrindCalleesDockId, Perspective::SplitHorizontal},
+        {CallgrindVisualizationDockId, m_visualization, {}, Perspective::SplitVertical,
+         false, Qt::RightDockWidgetArea}
     }));
 
     connect(ProjectExplorerPlugin::instance(), &ProjectExplorerPlugin::updateRunActions,

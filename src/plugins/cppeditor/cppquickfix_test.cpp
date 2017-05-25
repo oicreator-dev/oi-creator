@@ -1502,7 +1502,7 @@ void CppEditorPlugin::test_quickfix_data()
                  "            return;\n"
                  "\n"
                  "        m_it = it;\n"
-                 "        emit itChanged(it);\n"
+                 "        emit itChanged(m_it);\n"
                  "    }\n"
                  "\n"
                  "signals:\n"
@@ -3644,7 +3644,7 @@ void CppEditorPlugin::test_quickfix_AddIncludeForUndefinedIdentifier_noDoubleQtH
                                          ProjectPartHeaderPath::IncludePath);
 
     AddIncludeForUndefinedIdentifier factory;
-    const QStringList expectedOperations = QStringList() << QLatin1String("Add #include <QDir>");
+    const QStringList expectedOperations = QStringList("Add #include <QDir>");
     QuickFixOfferedOperationsTest(testDocuments, &factory, headerPaths, expectedOperations);
 }
 

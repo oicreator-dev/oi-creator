@@ -45,7 +45,6 @@
                 \li \l{Creating a Qt Quick Application}
                 \li \l{Creating a Qt Widget Based Application}
                 \li \l{Creating a Mobile Application}
-                \li \l{Using Qt Quick UI Forms}
             \endlist
         \endlist
         \li \l{Managing Projects}
@@ -193,8 +192,8 @@
             \li \l{Supported Platforms}
             \li \l{Using Other Build Systems}
             \list
-                \li \l{Setting Up a CMake Project}
-                \li \l{Setting Up a Qbs Project}
+                \li \l{Setting Up CMake}
+                \li \l{Setting Up Qbs}
                 \li \l{Setting Up an Autotools Project}
                 \li \l{Setting Up a Generic Project}
             \endlist

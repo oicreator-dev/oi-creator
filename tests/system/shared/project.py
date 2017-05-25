@@ -34,10 +34,11 @@ def openQbsProject(projectPath):
 def openQmakeProject(projectPath, targets=Targets.desktopTargetClasses(), fromWelcome=False):
     cleanUpUserFiles(projectPath)
     if fromWelcome:
-        welcomePage = ":Qt Creator.WelcomePage_QQuickWidget"
-        mouseClick(waitForObject("{clip='false' container='%s' enabled='true' text='Open Project' "
-                                 "type='Button' unnamed='1' visible='true'}" % welcomePage),
-                   5, 5, 0, Qt.LeftButton)
+        wsButtonFrame, wsButtonLabel = getWelcomeScreenMainButton('Open Project')
+        if not all((wsButtonFrame, wsButtonLabel)):
+            test.fatal("Could not find 'Open Project' button on Welcome Page.")
+            return []
+        mouseClick(wsButtonLabel)
     else:
         invokeMenuItem("File", "Open File or Project...")
     selectFromFileDialog(projectPath)
@@ -82,10 +83,11 @@ def openCmakeProject(projectPath, buildDir):
 # this list can be used in __chooseTargets__()
 def __createProjectOrFileSelectType__(category, template, fromWelcome = False, isProject=True):
     if fromWelcome:
-        welcomePage = ":Qt Creator.WelcomePage_QQuickWidget"
-        mouseClick(waitForObject("{clip='false' container='%s' enabled='true' text='New Project' "
-                                 "type='Button' unnamed='1' visible='true'}" % welcomePage),
-                   5, 5, 0, Qt.LeftButton)
+        wsButtonFrame, wsButtonLabel = getWelcomeScreenMainButton("New Project")
+        if not all((wsButtonFrame, wsButtonLabel)):
+            test.fatal("Could not find 'New Project' button on Welcome Page")
+            return []
+        mouseClick(wsButtonLabel)
     else:
         invokeMenuItem("File", "New File or Project...")
     categoriesView = waitForObject(":New.templateCategoryView_QTreeView")
@@ -121,6 +123,24 @@ def __createProjectSetNameAndPath__(path, projectName = None, checks = True, lib
                         LibType.getStringForLib(libType))
     clickButton(waitForObject(":Next_QPushButton"))
     return str(projectName)
+
+def __handleBuildSystem__(buildSystem):
+    combo = "{name='BuildSystem' type='Utils::TextFieldComboBox' visible='1'}"
+    try:
+        comboObj = waitForObject(combo, 2000)
+    except:
+        test.warning("No build system combo box found at all.")
+        return
+    try:
+        if buildSystem is None:
+            test.log("Keeping default build system '%s'" % str(comboObj.currentText))
+        else:
+            test.log("Trying to select build system '%s'" % buildSystem)
+            selectFromCombo(combo, buildSystem)
+    except:
+        t, v = sys.exc_info()[:2]
+        test.warning("Exception while handling build system", "%s(%s)" % (str(t), str(v)))
+    clickButton(waitForObject(":Next_QPushButton"))
 
 def __createProjectHandleQtQuickSelection__(minimumQtVersion):
     comboBox = waitForObject("{leftWidget=':Minimal required Qt version:_QLabel' name='QtVersion' "
@@ -238,9 +258,10 @@ def createProject_Qt_GUI(path, projectName, checks = True, addToVersionControl =
 # param path specifies where to create the project
 # param projectName is the name for the new project
 # param checks turns tests in the function on if set to True
-def createProject_Qt_Console(path, projectName, checks = True):
+def createProject_Qt_Console(path, projectName, checks = True, buildSystem = None):
     available = __createProjectOrFileSelectType__("  Application", "Qt Console Application")
     __createProjectSetNameAndPath__(path, projectName, checks)
+    __handleBuildSystem__(buildSystem)
     checkedTargets = __selectQtVersionDesktop__(checks, available)
 
     expectedFiles = []
@@ -261,14 +282,21 @@ def createProject_Qt_Console(path, projectName, checks = True):
 
 def createNewQtQuickApplication(workingDir, projectName = None,
                                 targets=Targets.desktopTargetClasses(), minimumQtVersion="5.3",
-                                withControls = False, fromWelcome=False):
+                                withControls = False, fromWelcome = False, buildSystem = None):
     if withControls:
-        template = "Qt Quick Controls Application"
+        template = "Qt Quick Controls 2 Application"
     else:
         template = "Qt Quick Application"
     available = __createProjectOrFileSelectType__("  Application", template, fromWelcome)
     projectName = __createProjectSetNameAndPath__(workingDir, projectName)
-    requiredQt = __createProjectHandleQtQuickSelection__(minimumQtVersion)
+    __handleBuildSystem__(buildSystem)
+    if withControls:
+        requiredQt = "5.7"
+        # TODO use parameter to define style to choose
+        test.log("Using default controls style")
+        clickButton(waitForObject(":Next_QPushButton"))
+    else:
+        requiredQt = __createProjectHandleQtQuickSelection__(minimumQtVersion)
     __modifyAvailableTargets__(available, requiredQt)
     checkedTargets = __chooseTargets__(targets, available)
     snooze(1)
@@ -281,12 +309,8 @@ def createNewQtQuickApplication(workingDir, projectName = None,
 
     return checkedTargets, projectName
 
-def createNewQtQuickUI(workingDir, qtVersion = "5.3", withControls = False):
-    if withControls:
-        template = 'Qt Quick Controls UI'
-    else:
-        template = 'Qt Quick UI'
-    __createProjectOrFileSelectType__("  Other Project", template)
+def createNewQtQuickUI(workingDir, qtVersion = "5.3"):
+    __createProjectOrFileSelectType__("  Other Project", 'Qt Quick UI Prototype')
     if workingDir == None:
         workingDir = tempDir()
     projectName = __createProjectSetNameAndPath__(workingDir)
@@ -296,9 +320,8 @@ def createNewQtQuickUI(workingDir, qtVersion = "5.3", withControls = False):
 
     return projectName
 
-def createNewQmlExtension(workingDir, targets=Targets.DESKTOP_474_GCC, qtQuickVersion=1):
-    available = __createProjectOrFileSelectType__("  Library", "Qt Quick %d Extension Plugin"
-                                                  % qtQuickVersion)
+def createNewQmlExtension(workingDir, targets=[Targets.DESKTOP_531_DEFAULT]):
+    available = __createProjectOrFileSelectType__("  Library", "Qt Quick 2 Extension Plugin")
     if workingDir == None:
         workingDir = tempDir()
     __createProjectSetNameAndPath__(workingDir)
@@ -726,13 +749,14 @@ def compareProjectTree(rootObject, dataset):
 # creates C++ file(s) and adds them to the current project if one is open
 # name                  name of the created object: filename for files, classname for classes
 # template              "C++ Class", "C++ Header File" or "C++ Source File"
+# projectName           None or name of open project that the files will be added to
 # forceOverwrite        bool: force overwriting existing files?
 # addToVCS              name of VCS to add the file(s) to
 # newBasePath           path to create the file(s) at
 # expectedSourceName    expected name of created source file
 # expectedHeaderName    expected name of created header file
-def addCPlusPlusFileToCurrentProject(name, template, forceOverwrite=False, addToVCS="<None>",
-                                     newBasePath=None, expectedSourceName=None, expectedHeaderName=None):
+def addCPlusPlusFile(name, template, projectName, forceOverwrite=False, addToVCS="<None>",
+                     newBasePath=None, expectedSourceName=None, expectedHeaderName=None):
     if name == None:
         test.fatal("File must have a name - got None.")
         return
@@ -762,6 +786,14 @@ def addCPlusPlusFileToCurrentProject(name, template, forceOverwrite=False, addTo
             test.compare(str(waitForObject("{name='HdrFileName' type='QLineEdit' visible='1'}").text),
                          expectedHeaderName)
     clickButton(waitForObject(":Next_QPushButton"))
+    projectComboBox = waitForObjectExists(":projectComboBox_Utils::TreeViewComboBox")
+    test.compare(projectComboBox.enabled, projectName != None,
+                 "Project combo box must be enabled when a project is open")
+    projectNameToDisplay = "<None>"
+    if projectName:
+        projectNameToDisplay = projectName
+    test.compare(str(projectComboBox.currentText), projectNameToDisplay,
+                 "The right project must be selected")
     fileExistedBefore = False
     if template == "C++ Class":
         fileExistedBefore = (os.path.exists(os.path.join(basePath, name.lower() + ".cpp"))

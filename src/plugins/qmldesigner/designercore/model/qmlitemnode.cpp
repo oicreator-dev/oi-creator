@@ -27,6 +27,7 @@
 #include <metainfo.h>
 #include "qmlchangeset.h"
 #include "nodelistproperty.h"
+#include "nodehints.h"
 #include "variantproperty.h"
 #include "bindingproperty.h"
 #include "qmlanchors.h"
@@ -51,6 +52,9 @@ bool QmlItemNode::isItemOrWindow(const ModelNode &modelNode)
         return true;
 
     if (modelNode.metaInfo().isSubclassOf("QtQuick.Window.Window") && modelNode.isRootNode())
+        return true;
+
+    if (modelNode.metaInfo().isSubclassOf("QtQuick.Controls.Popup"))
         return true;
 
     return false;
@@ -367,29 +371,51 @@ bool itemIsMovable(const ModelNode &modelNode)
     if (modelNode.metaInfo().isSubclassOf("QtQuick.Controls.Tab"))
         return false;
 
-    if (modelNode.hasParentProperty()) {
-        ModelNode parentModelNode = modelNode.parentProperty().parentModelNode();
-        if (QmlItemNode::isValidQmlItemNode(parentModelNode)
-                && parentModelNode.metaInfo().isLayoutable())
-            return false;
-    }
+    if (!modelNode.hasParentProperty())
+        return false;
 
-    return true;
+    if (!modelNode.parentProperty().isNodeListProperty())
+        return false;
+
+    return NodeHints::fromModelNode(modelNode).isMovable();
 }
 
+bool itemIsResizable(const ModelNode &modelNode)
+{
+    if (modelNode.metaInfo().isSubclassOf("QtQuick.Controls.Tab"))
+        return false;
+
+    return NodeHints::fromModelNode(modelNode).isResizable();
+}
 
 bool QmlItemNode::modelIsMovable() const
 {
     return !modelNode().hasBindingProperty("x")
             && !modelNode().hasBindingProperty("y")
-            && itemIsMovable(modelNode());
+            && itemIsMovable(modelNode())
+            && !modelIsInLayout();
 }
 
 bool QmlItemNode::modelIsResizable() const
 {
     return !modelNode().hasBindingProperty("width")
             && !modelNode().hasBindingProperty("height")
-            && itemIsMovable(modelNode());
+            && itemIsResizable(modelNode())
+            && !modelIsInLayout();
+}
+
+bool QmlItemNode::modelIsInLayout() const
+{
+    if (modelNode().hasParentProperty()) {
+        ModelNode parentModelNode = modelNode().parentProperty().parentModelNode();
+        if (QmlItemNode::isValidQmlItemNode(parentModelNode)
+                && parentModelNode.metaInfo().isLayoutable())
+            return true;
+
+        return NodeHints::fromModelNode(parentModelNode).doesLayoutChildren();
+    }
+
+    return false;
 }
 
 QRectF  QmlItemNode::instanceBoundingRect() const
@@ -605,12 +631,28 @@ bool QmlItemNode::isInLayout() const
     return false;
 }
 
+bool QmlItemNode::canBereparentedTo(const ModelNode &potentialParent) const
+{
+    if (!NodeHints::fromModelNode(potentialParent).canBeContainerFor(modelNode()))
+        return false;
+    return NodeHints::fromModelNode(modelNode()).canBeReparentedTo(potentialParent);
+}
+
+bool QmlItemNode::isInStackedContainer() const
+{
+    if (hasInstanceParent())
+        return NodeHints::fromModelNode(instanceParent()).isStackedContainer();
+    return false;
+}
+
 void QmlItemNode::setSize(const QSizeF &size)
 {
-    if (!hasBindingProperty("width") && !anchors().instanceHasAnchor(AnchorLineRight))
+    if (!hasBindingProperty("width") && !(anchors().instanceHasAnchor(AnchorLineRight)
+                                          && anchors().instanceHasAnchor(AnchorLineLeft)))
         setVariantProperty("width", qRound(size.width()));
 
-    if (!hasBindingProperty("height") && !anchors().instanceHasAnchor(AnchorLineBottom))
+    if (!hasBindingProperty("height") && !(anchors().instanceHasAnchor(AnchorLineBottom)
+                                           && anchors().instanceHasAnchor(AnchorLineTop)))
         setVariantProperty("height", qRound(size.height()));
 }
 

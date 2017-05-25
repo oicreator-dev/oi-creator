@@ -66,18 +66,18 @@ QString GerritPushDialog::determineRemoteBranch(const QString &localBranch)
     QString error;
 
     if (!GitPlugin::client()->synchronousBranchCmd(
-                m_workingDir, { "-r", "--contains", earliestCommit + '^' }, &output, &error)) {
+                m_workingDir, {"-r", "--contains", earliestCommit + '^'}, &output, &error)) {
         return QString();
     }
     const QString head = "/HEAD";
-    QStringList refs = output.split('\n');
+    const QStringList refs = output.split('\n');
 
     QString remoteTrackingBranch;
     if (localBranch != "HEAD")
         remoteTrackingBranch = GitPlugin::client()->synchronousTrackingBranch(m_workingDir, localBranch);
 
     QString remoteBranch;
-    foreach (const QString &reference, refs) {
+    for (const QString &reference : refs) {
         const QString ref = reference.trimmed();
         if (ref.contains(head) || ref.isEmpty())
             continue;
@@ -99,12 +99,12 @@ void GerritPushDialog::initRemoteBranches()
 
     QString remotesPrefix("refs/remotes/");
     if (!GitPlugin::client()->synchronousForEachRefCmd(
-                m_workingDir, { "--format=%(refname)\t%(committerdate:raw)", remotesPrefix }, &output)) {
+                m_workingDir, {"--format=%(refname)\t%(committerdate:raw)", remotesPrefix}, &output)) {
         return;
     }
 
     const QStringList refs = output.split("\n");
-    foreach (const QString &reference, refs) {
+    for (const QString &reference : refs) {
         QStringList entries = reference.split('\t');
         if (entries.count() < 2 || entries.first().endsWith(head))
             continue;
@@ -221,6 +221,13 @@ bool GerritPushDialog::isValid() const
     return m_isValid;
 }
 
+void GerritPushDialog::storeTopic()
+{
+    const QString branch = m_ui->localBranchComboBox->currentText();
+    GitPlugin::client()->setConfigValue(m_workingDir, QString("branch.%1.topic").arg(branch),
+                                        selectedTopic());
+}
+
 void GerritPushDialog::setRemoteBranches(bool includeOld)
 {
     bool blocked = m_ui->targetBranchComboBox->blockSignals(true);
@@ -230,7 +237,7 @@ void GerritPushDialog::setRemoteBranches(bool includeOld)
     if (!m_remoteBranches.contains(remoteName)) {
         const QStringList remoteBranches =
                 GitPlugin::client()->synchronousRepositoryBranches(remoteName, m_workingDir);
-        foreach (const QString &branch, remoteBranches)
+        for (const QString &branch : remoteBranches)
             m_remoteBranches.insertMulti(remoteName, qMakePair(branch, QDate()));
         if (remoteBranches.isEmpty()) {
             m_ui->targetBranchComboBox->setEditable(true);
@@ -243,7 +250,8 @@ void GerritPushDialog::setRemoteBranches(bool includeOld)
 
     int i = 0;
     bool excluded = false;
-    foreach (const BranchDate &bd, m_remoteBranches.values(remoteName)) {
+    const QList<BranchDate> remoteBranches = m_remoteBranches.values(remoteName);
+    for (const BranchDate &bd : remoteBranches) {
         const bool isSuggested = bd.first == m_suggestedRemoteBranch;
         if (includeOld || isSuggested || !bd.second.isValid()
                 || bd.second.daysTo(QDate::currentDate()) <= Git::Constants::OBSOLETE_COMMIT_AGE_IN_DAYS) {
@@ -266,6 +274,10 @@ void GerritPushDialog::updateCommits(int index)
 {
     const QString branch = m_ui->localBranchComboBox->itemText(index);
     m_hasLocalCommits = m_ui->commitView->init(m_workingDir, branch, LogChangeWidget::Silent);
+    QString topic = GitPlugin::client()->readConfigValue(
+                m_workingDir, QString("branch.%1.topic").arg(branch));
+    if (!topic.isEmpty())
+        m_ui->topicLineEdit->setText(topic);
 
     const QString remoteBranch = determineRemoteBranch(branch);
     if (!remoteBranch.isEmpty()) {

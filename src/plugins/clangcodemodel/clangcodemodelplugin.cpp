@@ -29,6 +29,7 @@
 #include "clangprojectsettingswidget.h"
 
 #ifdef WITH_TESTS
+#  include "test/clangbatchfileprocessor.h"
 #  include "test/clangcodecompletion_test.h"
 #endif
 
@@ -74,8 +75,13 @@ void addProjectPanelWidget()
 
 bool ClangCodeModelPlugin::initialize(const QStringList &arguments, QString *errorMessage)
 {
-    Q_UNUSED(arguments)
-    Q_UNUSED(errorMessage)
+    Q_UNUSED(arguments);
+    Q_UNUSED(errorMessage);
+
+    connect(ProjectExplorer::ProjectExplorerPlugin::instance(),
+            &ProjectExplorer::ProjectExplorerPlugin::finishedInitialization,
+            this,
+            &ClangCodeModelPlugin::maybeHandleBatchFileAndExit);
 
     CppTools::CppModelManager::instance()->activateClangCodeModel(&m_modelManagerSupportProvider);
 
@@ -87,6 +93,18 @@ bool ClangCodeModelPlugin::initialize(const QStringList &arguments, QString *err
 
 void ClangCodeModelPlugin::extensionsInitialized()
 {
+}
+
+// For e.g. creation of profile-guided optimization builds.
+void ClangCodeModelPlugin::maybeHandleBatchFileAndExit() const
+{
+#ifdef WITH_TESTS
+    const QString batchFilePath = QString::fromLocal8Bit(qgetenv("QTC_CLANG_BATCH"));
+    if (!batchFilePath.isEmpty() && QTC_GUARD(QFileInfo::exists(batchFilePath))) {
+        const bool runSucceeded = runClangBatchFile(batchFilePath);
+        QCoreApplication::exit(!runSucceeded);
+    }
+#endif
 }
 
 #ifdef WITH_TESTS

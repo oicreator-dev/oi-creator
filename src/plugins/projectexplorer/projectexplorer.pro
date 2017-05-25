@@ -1,4 +1,4 @@
-QT += quick qml
+QT += qml
 
 include(../../qtcreatorplugin.pri)
 include(customwizard/customwizard.pri)
@@ -59,7 +59,7 @@ HEADERS += projectexplorer.h \
     projectexplorerconstants.h \
     projectexplorersettings.h \
     project.h \
-    iprojectmanager.h \
+    projectmanager.h \
     currentprojectfilter.h \
     allprojectsfind.h \
     buildstep.h \
@@ -80,7 +80,6 @@ HEADERS += projectexplorer.h \
     sessionview.h \
     projectwizardpage.h \
     buildstepspage.h \
-    nodesvisitor.h \
     projectmodels.h \
     currentprojectfind.h \
     toolchain.h \
@@ -125,7 +124,6 @@ HEADERS += projectexplorer.h \
     devicesupport/devicesettingspage.h \
     devicesupport/devicetestdialog.h \
     devicesupport/deviceusedportsgatherer.h \
-    devicesupport/deviceapplicationrunner.h \
     devicesupport/localprocesslist.h \
     devicesupport/sshdeviceprocess.h \
     devicesupport/sshdeviceprocesslist.h \
@@ -227,7 +225,6 @@ SOURCES += projectexplorer.cpp \
     sessionview.cpp \
     projectwizardpage.cpp \
     buildstepspage.cpp \
-    nodesvisitor.cpp \
     projectmodels.cpp \
     currentprojectfind.cpp \
     toolchain.cpp \
@@ -267,7 +264,6 @@ SOURCES += projectexplorer.cpp \
     devicesupport/devicesettingspage.cpp \
     devicesupport/devicetestdialog.cpp \
     devicesupport/deviceusedportsgatherer.cpp \
-    devicesupport/deviceapplicationrunner.cpp \
     devicesupport/localprocesslist.cpp \
     devicesupport/sshdeviceprocess.cpp \
     devicesupport/sshdeviceprocesslist.cpp \

@@ -27,15 +27,34 @@
 
 #include "clangbackendipc_global.h"
 
-#include <utils/smallstring.h>
 #include <utils/smallstringio.h>
+
+#include <QDataStream>
 
 namespace ClangBackEnd {
 
-struct FilePath
+class FilePath
 {
 public:
     FilePath() = default;
+    explicit FilePath(Utils::SmallString &&filePath)
+    {
+        auto foundReverse = std::find(filePath.rbegin(), filePath.rend(), '/');
+        auto found = foundReverse.base();
+
+        Utils::SmallString fileName(found, filePath.end());
+        if (foundReverse != filePath.rend())
+            filePath.resize(std::size_t(std::distance(filePath.begin(), --found)));
+
+        directory_ = std::move(filePath);
+        name_ = std::move(fileName);
+    }
+
+    explicit FilePath(const QString &filePath)
+        : FilePath(Utils::SmallString(filePath))
+    {
+    }
+
     FilePath(Utils::SmallString &&directory, Utils::SmallString &&name)
         : directory_(std::move(directory)),
           name_(std::move(name))
@@ -46,9 +65,24 @@ public:
         return directory_;
     }
 
+    Utils::SmallString takeDirectory()
+    {
+        return std::move(directory_);
+    }
+
     const Utils::SmallString &name() const
     {
         return name_;
+    }
+
+    Utils::SmallString takeName()
+    {
+        return std::move(name_);
+    }
+
+    Utils::PathString path()  const
+    {
+        return {directory_, "/", name_};
     }
 
     friend QDataStream &operator<<(QDataStream &out, const FilePath &filePath)
@@ -67,10 +101,23 @@ public:
         return in;
     }
 
+    friend std::ostream &operator<<(std::ostream &out, const FilePath &filePath)
+    {
+        out << filePath.directory() << "/" << filePath.name();
+
+        return out;
+    }
+
     friend bool operator==(const FilePath &first, const FilePath &second)
     {
-        return first.directory_ == second.directory_
-                && first.name_ == second.name_;
+        return first.name_ == second.name_
+            && first.directory_ == second.directory_;
+    }
+
+    friend bool operator<(const FilePath &first, const FilePath &second)
+    {
+        return std::tie(first.name_, first.directory_)
+             < std::tie(second.name_, second.directory_);
     }
 
     FilePath clone() const

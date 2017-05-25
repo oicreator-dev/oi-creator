@@ -102,7 +102,7 @@ QVariant fixResourcePaths(const QVariant &value)
                     if (qrcDefintion.count() == 2) {
                         QString fixedPath = path;
                         fixedPath.replace(QLatin1String("qrc:") + qrcDefintion.first(), qrcDefintion.last() + QLatin1Char('/'));
-                        if (QFileInfo(fixedPath).exists()) {
+                        if (QFileInfo::exists(fixedPath)) {
                             fixedPath.replace(QLatin1String("//"), QLatin1String("/"));
                             fixedPath.replace(QLatin1Char('\\'), QLatin1Char('/'));
                             return QUrl::fromLocalFile(fixedPath);
@@ -123,7 +123,7 @@ QVariant fixResourcePaths(const QVariant &value)
                     if (qrcDefintion.count() == 2) {
                         QString fixedPath = str;
                         fixedPath.replace(QLatin1String("qrc:") + qrcDefintion.first(), qrcDefintion.last() + QLatin1Char('/'));
-                        if (QFileInfo(fixedPath).exists()) {
+                        if (QFileInfo::exists(fixedPath)) {
                             fixedPath.replace(QLatin1String("//"), QLatin1String("/"));
                             fixedPath.replace(QLatin1Char('\\'), QLatin1Char('/'));
                             return QUrl::fromLocalFile(fixedPath);
@@ -139,7 +139,7 @@ QVariant fixResourcePaths(const QVariant &value)
 
 void fixResourcePathsForObject(QObject *object)
 {
-    if (qgetenv("QMLDESIGNER_RC_PATHS").isEmpty())
+    if (qEnvironmentVariableIsEmpty("QMLDESIGNER_RC_PATHS"))
         return;
 
     PropertyNameList propertyNameList = propertyNameListForWritableProperties(object);

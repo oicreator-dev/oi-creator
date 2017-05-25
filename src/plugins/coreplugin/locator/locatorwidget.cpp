@@ -82,6 +82,7 @@ public:
 
 private:
     mutable QList<LocatorFilterEntry> mEntries;
+    bool hasExtraInfo = false;
 };
 
 class CompletionList : public QTreeView
@@ -90,6 +91,7 @@ public:
     CompletionList(QWidget *parent = 0);
 
     void resize();
+    void resizeHeaders();
     QSize preferredSize() const { return m_preferredSize; }
 
     void focusOutEvent (QFocusEvent *event) {
@@ -128,6 +130,7 @@ void LocatorModel::clear()
 {
     beginResetModel();
     mEntries.clear();
+    hasExtraInfo = false;
     endResetModel();
 }
 
@@ -140,7 +143,9 @@ int LocatorModel::rowCount(const QModelIndex & parent) const
 
 int LocatorModel::columnCount(const QModelIndex &parent) const
 {
-    return parent.isValid() ? 0 : 2;
+    if (parent.isValid())
+        return 0;
+    return hasExtraInfo ? 2 : 1;
 }
 
 QVariant LocatorModel::data(const QModelIndex &index, int role) const
@@ -188,6 +193,13 @@ void LocatorModel::addEntries(const QList<LocatorFilterEntry> &entries)
     beginInsertRows(QModelIndex(), mEntries.size(), mEntries.size() + entries.size() - 1);
     mEntries.append(entries);
     endInsertRows();
+    if (hasExtraInfo)
+        return;
+    if (Utils::anyOf(entries, [](const LocatorFilterEntry &e) { return !e.extraInfo.isEmpty();})) {
+        beginInsertColumns(QModelIndex(), 1, 1);
+        hasExtraInfo = true;
+        endInsertColumns();
+    }
 }
 
 // =========== CompletionList ===========
@@ -218,8 +230,14 @@ void CompletionList::resize()
 
     const int width = qMax(730, windowSize.width() * 2 / 3);
     m_preferredSize = QSize(width, shint.height() * 17 + frameWidth() * 2);
-    header()->resizeSection(0, width / 2);
     QTreeView::resize(m_preferredSize);
+    resizeHeaders();
+}
+
+void CompletionList::resizeHeaders()
+{
+    header()->resizeSection(0, m_preferredSize.width() / 2);
+    header()->resizeSection(1, 0); // last section is auto resized because of stretchLastSection
 }
 
 // =========== LocatorWidget ===========
@@ -269,6 +287,8 @@ LocatorWidget::LocatorWidget(Locator *qop) :
 
     m_completionList->setModel(m_locatorModel);
     m_completionList->resize();
+    connect(m_locatorModel, &QAbstractItemModel::columnsInserted,
+            m_completionList, &CompletionList::resizeHeaders);
 
     m_filterMenu->addAction(m_refreshAction);
     m_filterMenu->addAction(m_configureAction);

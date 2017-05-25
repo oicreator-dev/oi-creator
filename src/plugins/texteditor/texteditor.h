@@ -190,6 +190,7 @@ public:
     using QPlainTextEdit::cursorRect;
     QRect cursorRect(int pos) const;
     void setCursorPosition(int pos);
+    QToolBar *toolBar();
 
     void print(QPrinter *);
 
@@ -339,7 +340,6 @@ public:
 
     virtual void encourageApply();
 
-public slots: // Qt4-style connect used in EditorConfiguration
     virtual void setDisplaySettings(const TextEditor::DisplaySettings &);
     virtual void setMarginSettings(const TextEditor::MarginSettings &);
     void setBehaviorSettings(const TextEditor::BehaviorSettings &);
@@ -348,7 +348,6 @@ public slots: // Qt4-style connect used in EditorConfiguration
     void setCompletionSettings(const TextEditor::CompletionSettings &);
     void setExtraEncodingSettings(const TextEditor::ExtraEncodingSettings &);
 
-public:
     void circularPaste();
     void switchUtf8bom();
 
@@ -357,6 +356,8 @@ public:
 
     void cutLine();
     void copyLine();
+    void duplicateSelection();
+    void duplicateSelectionAndComment();
     void deleteLine();
     void deleteEndOfWord();
     void deleteEndOfWordCamelCase();
@@ -586,7 +587,7 @@ signals:
     void tooltipRequested(const QPoint &globalPos, int position);
     void activateEditor();
 
-protected slots:
+protected:
     virtual void slotCursorPositionChanged(); // Used in VcsBase
     virtual void slotCodeStyleSettingsChanged(const QVariant &); // Used in CppEditor
 
@@ -656,7 +657,7 @@ public:
     void setParenthesesMatchingEnabled(bool on);
     void setCodeFoldingSupported(bool on);
 
-    Core::IEditor *createEditor();
+    Core::IEditor *createEditor() override;
 
 private:
     friend class BaseTextEditor;

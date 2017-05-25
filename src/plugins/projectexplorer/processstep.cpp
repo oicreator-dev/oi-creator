@@ -30,6 +30,8 @@
 #include "target.h"
 #include "kit.h"
 
+#include <coreplugin/variablechooser.h>
+
 #include <utils/macroexpander.h>
 
 #include <QDebug>
@@ -84,7 +86,7 @@ bool ProcessStep::init(QList<const BuildStep *> &earlierSteps)
 
 void ProcessStep::run(QFutureInterface<bool> & fi)
 {
-    return AbstractProcessStep::run(fi);
+    AbstractProcessStep::run(fi);
 }
 
 BuildStepConfigWidget *ProcessStep::createConfigWidget()
@@ -157,7 +159,7 @@ bool ProcessStep::fromMap(const QVariantMap &map)
 QList<BuildStepInfo> ProcessStepFactory::availableSteps(BuildStepList *parent) const
 {
     Q_UNUSED(parent);
-    return {{ PROCESS_STEP_ID, ProcessStep::tr("Custom Process Step", "item in combobox") }};
+    return {{PROCESS_STEP_ID, ProcessStep::tr("Custom Process Step", "item in combobox")}};
 }
 
 BuildStep *ProcessStepFactory::create(BuildStepList *parent, Core::Id id)
@@ -204,6 +206,7 @@ ProcessStepConfigWidget::ProcessStepConfigWidget(ProcessStep *step) :
 
     connect(m_ui.commandArgumentsLineEdit, &QLineEdit::textEdited,
             this, &ProcessStepConfigWidget::commandArgumentsLineEditTextEdited);
+    Core::VariableChooser::addSupportForChildWidgets(this, m_step->macroExpander());
 }
 
 void ProcessStepConfigWidget::updateDetails()

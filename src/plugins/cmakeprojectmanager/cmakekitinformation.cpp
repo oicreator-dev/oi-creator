@@ -76,6 +76,11 @@ CMakeKitInformation::CMakeKitInformation()
             [this]() { foreach (Kit *k, KitManager::kits()) fix(k); });
 }
 
+Core::Id CMakeKitInformation::id()
+{
+    return TOOL_ID;
+}
+
 CMakeTool *CMakeKitInformation::cmakeTool(const Kit *k)
 {
     if (!k)
@@ -262,7 +267,7 @@ void CMakeGeneratorKitInformation::set(Kit *k,
                                        const QString &generator, const QString &extraGenerator,
                                        const QString &platform, const QString &toolset)
 {
-    GeneratorInfo info = { generator, extraGenerator, platform, toolset };
+    GeneratorInfo info = {generator, extraGenerator, platform, toolset};
     setGeneratorInfo(k, info);
 }
 
@@ -306,12 +311,12 @@ QVariant CMakeGeneratorKitInformation::defaultValue(const Kit *k) const
         k->addToEnvironment(env);
         const Utils::FileName ninjaExec = env.searchInPath(QLatin1String("ninja"));
         if (!ninjaExec.isEmpty())
-            return GeneratorInfo({ QString("Ninja"), extraGenerator, QString(), QString() }).toVariant();
+            return GeneratorInfo({QString("Ninja"), extraGenerator, QString(), QString()}).toVariant();
     }
 
     if (Utils::HostOsInfo::isWindowsHost()) {
         // *sigh* Windows with its zoo of incompatible stuff again...
-        ToolChain *tc = ToolChainKitInformation::toolChain(k, ToolChain::Language::Cxx);
+        ToolChain *tc = ToolChainKitInformation::toolChain(k, Constants::CXX_LANGUAGE_ID);
         if (tc && tc->typeId() == ProjectExplorer::Constants::MINGW_TOOLCHAIN_TYPEID) {
             it = std::find_if(known.constBegin(), known.constEnd(),
                               [extraGenerator](const CMakeTool::Generator &g) {
@@ -336,7 +341,7 @@ QVariant CMakeGeneratorKitInformation::defaultValue(const Kit *k) const
     if (it == known.constEnd())
         return QVariant();
 
-    return GeneratorInfo({ it->name, extraGenerator, QString(), QString() }).toVariant();
+    return GeneratorInfo({it->name, extraGenerator, QString(), QString()}).toVariant();
 }
 
 QList<Task> CMakeGeneratorKitInformation::validate(const Kit *k) const
@@ -367,9 +372,10 @@ QList<Task> CMakeGeneratorKitInformation::validate(const Kit *k) const
                                    Utils::FileName(), -1, Core::Id(Constants::TASK_CATEGORY_BUILDSYSTEM));
                 }
             }
-            if (info.extraGenerator != "CodeBlocks") {
-                result << Task(Task::Warning, tr("CMake generator does not generate a CodeBlocks file. "
-                                                 "Qt Creator will not be able to parse the CMake project."),
+            if (!tool->hasServerMode() && info.extraGenerator != "CodeBlocks") {
+                result << Task(Task::Warning, tr("The selected CMake binary has no server-mode and the CMake "
+                                                 "generator does not generate a CodeBlocks file. "
+                                                 "Qt Creator will not be able to parse CMake projects."),
                                Utils::FileName(), -1, Core::Id(Constants::TASK_CATEGORY_BUILDSYSTEM));
             }
         }
@@ -401,9 +407,9 @@ void CMakeGeneratorKitInformation::fix(Kit *k)
         dv.fromVariant(defaultValue(k));
         setGeneratorInfo(k, dv);
     } else {
-        const GeneratorInfo dv = { info.generator, info.extraGenerator,
-                                   it->supportsPlatform ? info.platform : QString(),
-                                   it->supportsToolset ? info.toolset : QString() };
+        const GeneratorInfo dv = {info.generator, info.extraGenerator,
+                                  it->supportsPlatform ? info.platform : QString(),
+                                  it->supportsToolset ? info.toolset : QString()};
         setGeneratorInfo(k, dv);
     }
 }
@@ -530,8 +536,8 @@ QVariant CMakeConfigurationKitInformation::defaultValue(const Kit *k) const
 QList<Task> CMakeConfigurationKitInformation::validate(const Kit *k) const
 {
     const QtSupport::BaseQtVersion *const version = QtSupport::QtKitInformation::qtVersion(k);
-    const ToolChain *const tcC = ToolChainKitInformation::toolChain(k, ToolChain::Language::C);
-    const ToolChain *const tcCxx = ToolChainKitInformation::toolChain(k, ToolChain::Language::Cxx);
+    const ToolChain *const tcC = ToolChainKitInformation::toolChain(k, Constants::C_LANGUAGE_ID);
+    const ToolChain *const tcCxx = ToolChainKitInformation::toolChain(k, Constants::CXX_LANGUAGE_ID);
     const CMakeConfig config = configuration(k);
 
     const bool isQt4 = version && version->qtVersion() < QtSupport::QtVersionNumber(5, 0, 0);

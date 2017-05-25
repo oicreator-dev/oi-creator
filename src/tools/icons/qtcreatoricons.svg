@@ -2349,7 +2349,7 @@
          transform="translate(0,-100)" />
     </g>
     <g
-       id="src/libs/utils/images/sidebaricon"
+       id="src/libs/utils/images/leftsidebaricon"
        clip-path="none"
        transform="translate(399,0)">
       <rect
@@ -4034,7 +4034,7 @@
     <g
        transform="translate(336,0)"
        style="display:inline"
-       id="src/plugins/scxmleditor/common/images/icon-pan">
+       id="src/libs/utils/images/pan">
       <rect
          style="fill:#ffffff;fill-opacity:1"
          x="1228"
@@ -4076,6 +4076,148 @@
          width="100%"
          height="100%" />
     </g>
+    <g
+       transform="translate(352)"
+       style="display:inline"
+       id="src/plugins/qmldesigner/components/componentcore/images/row">
+      <rect
+         style="fill:#ffffff;fill-opacity:1"
+         x="1228"
+         y="568"
+         width="16"
+         height="16"
+         id="rect6782-96-0-0-7-8-1-0-4-0-1-7-9-1-9-5-6-3-0-4-1" />
+      <rect
+         style="fill:#999999"
+         id="rect4534-6-5-6-6-0"
+         width="13"
+         height="8"
+         x="1230"
+         y="572" />
+      <rect
+         style="fill:#cccccc;stroke:#000000;stroke-width:0.5"
+         id="rect4534-6-5-6-6"
+         width="2.5"
+         height="5.5"
+         x="1231.25"
+         y="573.25" />
+      <use
+         x="0"
+         y="0"
+         xlink:href="#rect4534-6-5-6-6"
+         id="use5744"
+         transform="translate(4)"
+         width="100%"
+         height="100%" />
+      <use
+         x="0"
+         y="0"
+         xlink:href="#rect4534-6-5-6-6"
+         id="use5746"
+         transform="translate(8)"
+         width="100%"
+         height="100%" />
+    </g>
+    <use
+       x="0"
+       y="0"
+       xlink:href="#src/plugins/qmldesigner/components/componentcore/images/row"
+       id="src/plugins/qmldesigner/components/componentcore/images/column"
+       transform="rotate(90,1596,584)"
+       width="100%"
+       height="100%" />
+    <g
+       transform="translate(384)"
+       style="display:inline"
+       id="src/plugins/qmldesigner/components/componentcore/images/grid">
+      <rect
+         style="fill:#ffffff;fill-opacity:1"
+         x="1228"
+         y="568"
+         width="16"
+         height="16"
+         id="rect6782-96-0-0-7-8-1-0-4-0-1-7-9-1-9-5-6-3-0-4-1-9" />
+      <rect
+         style="fill:#999999"
+         id="rect4534-6-5-6-6-0-7"
+         width="13"
+         height="11"
+         x="1230"
+         y="571" />
+      <rect
+         style="fill:#cccccc;stroke:#000000;stroke-width:0.5"
+         id="rect4534-6-5-6-6-8"
+         width="4.5"
+         height="3.5"
+         x="1231.25"
+         y="572.25" />
+      <use
+         x="0"
+         y="0"
+         xlink:href="#rect4534-6-5-6-6-8"
+         id="use5800"
+         transform="translate(6)"
+         width="100%"
+         height="100%" />
+      <use
+         x="0"
+         y="0"
+         xlink:href="#rect4534-6-5-6-6-8"
+         id="use5804"
+         transform="translate(0,5)"
+         width="100%"
+         height="100%" />
+      <use
+         x="0"
+         y="0"
+         xlink:href="#rect4534-6-5-6-6-8"
+         id="use5806"
+         transform="translate(6,5)"
+         width="100%"
+         height="100%" />
+    </g>
+    <g
+       style="display:inline"
+       id="src/plugins/qmldesigner/components/componentcore/images/lower"
+       transform="translate(1155)">
+      <rect
+         id="rect4959-4-5-4-4-9"
+         height="16"
+         width="16"
+         y="568"
+         x="473"
+         style="display:inline;fill:#ffffff;fill-opacity:1;stroke:none" />
+      <path
+         sodipodi:nodetypes="ccccccccc"
+         inkscape:connector-curvature="0"
+         d="m 475.5,576 3,3 3,-3 z m 2.5,0 v -4 h 1 v 4 z"
+         style="fill:#000000"
+         id="path4774-4" />
+      <path
+         id="path5700"
+         style="fill:#000000;fill-opacity:1"
+         d="m 485,582 h 3 v 1 h -3 z m 0,-4 h 3 v 1 h -3 z m 0,-4 h 3 v 1 h -3 z m 0,2 h 3 v 1 h -3 z m 0,-4 h 3 v 1 h -3 z m -10,8 h 13 v 1 h -13 z" />
+      <path
+         style="fill:#707070"
+         d="m 475,570 h 13 v 1 h -13 z"
+         id="path5907-4-74" />
+    </g>
+    <use
+       x="0"
+       y="0"
+       xlink:href="#src/plugins/qmldesigner/components/componentcore/images/lower"
+       id="src/plugins/qmldesigner/components/componentcore/images/raise"
+       transform="matrix(1,0,0,-1,16,1152)"
+       width="100%"
+       height="100%" />
+    <use
+       x="0"
+       y="0"
+       xlink:href="#src/libs/utils/images/leftsidebaricon"
+       id="src/libs/utils/images/rightsidebaricon"
+       width="100%"
+       height="100%"
+       transform="matrix(-1,0,0,1,2293,0)" />
   </g>
   <g
      inkscape:groupmode="layer"
@@ -6767,6 +6909,68 @@
          sodipodi:nodetypes="ccccccc" />
     </g>
     <g
+       id="src/libs/utils/images/iconoverlay_reset"
+       transform="translate(208)">
+      <rect
+         id="rect5759-5-9-0-8-6-3-01"
+         height="16"
+         width="16"
+         y="363"
+         x="570"
+         style="fill:#ffffff" />
+      <circle
+         style="opacity:1;fill:#000000"
+         id="path5134-8"
+         cx="581.5"
+         cy="374.5"
+         r="3.5" />
+      <path
+         style="fill:none;stroke:#ffffff"
+         d="m 580,376.5 h 2 c 2.5,0 2,-3 0.5,-3 H 580"
+         id="path5676"
+         inkscape:connector-curvature="0"
+         sodipodi:nodetypes="cccc" />
+      <path
+         style="fill:#ffffff"
+         d="m 582,371.5 -3,2 3,2"
+         id="path5677"
+         inkscape:connector-curvature="0"
+         sodipodi:nodetypes="ccc" />
+    </g>
+    <g
+       id="src/plugins/cmakeprojectmanager/images/fileoverlay_cmake">
+      <rect
+         style="fill:none"
+         id="rect6843-2-6"
+         width="16"
+         height="16"
+         x="192"
+         y="520" />
+      <path
+         d="m 197,535 5,-9.5 5,9.5 z"
+         id="path5434"
+         inkscape:connector-curvature="0"
+         style="fill:#ffffff;fill-opacity:0.74901961;stroke:#ffffff;stroke-width:2;stroke-linecap:butt;stroke-linejoin:round;stroke-opacity:0.74901961" />
+      <path
+         sodipodi:nodetypes="cccc"
+         inkscape:connector-curvature="0"
+         id="path4544"
+         d="M 202.70313,533.34375 207,535 l -5,-9.5 z"
+         style="fill:#ce3434;fill-opacity:1" />
+      <path
+         sodipodi:nodetypes="cccc"
+         inkscape:connector-curvature="0"
+         id="path4544-6"
+         d="M 202.46673,530.56042 202,525.5 197,535 Z"
+         style="fill:#4a4bd0;fill-opacity:1" />
+      <path
+         sodipodi:nodetypes="cccc"
+         inkscape:connector-curvature="0"
+         id="path4544-6-2"
+         d="M 200.23323,532.37183 197,535 l 10,0 z"
+         style="fill:#0dbf0d;fill-opacity:1" />
+    </g>
+    <g
        transform="translate(-48,32)"
        id="src/plugins/baremetal/images/baremetaldevice">
       <rect
@@ -7218,6 +7422,74 @@
          id="use5311"
          width="100%"
          height="100%" />
+    </g>
+    <g
+       id="src/plugins/winrt/images/winrtdevice">
+      <rect
+         style="display:inline;fill:#ffffff;fill-opacity:1"
+         x="602"
+         y="379"
+         width="32"
+         height="32"
+         id="rect5759-5-9-0-5-9-1" />
+      <path
+         sodipodi:nodetypes="cccccccccccccccccccc"
+         style="fill:#000000;fill-opacity:1"
+         inkscape:connector-curvature="0"
+         d="m 606,394 10,0 0,-10.16502 -10,1.1313 z m 12,-10.3911 0,10.3911 12,0 0,-11.74108 z m 0,22.75938 12,1.34794 0,-11.71622 -12,0 z m -12,-1.35943 10,1.12952 0,-10.13837 -10,0 z"
+         id="path5333-0" />
+    </g>
+    <g
+       id="src/plugins/winrt/images/winrtdevicesmall">
+      <rect
+         id="rect5759-5-9-0-8-6-4-8-8-5"
+         height="16"
+         width="16"
+         y="395"
+         x="634"
+         style="fill:#ffffff;fill-opacity:1" />
+      <path
+         sodipodi:nodetypes="cccccccccccccccccccc"
+         style="fill:#000000;fill-opacity:1"
+         inkscape:connector-curvature="0"
+         d="m 636.00003,403 4.99997,0 0,-4.67861 -4.99997,0.67433 z M 642,398.18129 642,403 l 6.00003,0 0,-5.6287 z m 0,10.72061 6.00003,0.81345 0,-5.71535 L 642,404 Z M 636.00003,408.09093 641,408.7667 641,404 l -4.99997,0 z"
+         id="path5333" />
+    </g>
+    <g
+       id="src/plugins/qmldesigner/components/resources/images/spliteditorvertically"
+       transform="translate(12)">
+      <rect
+         transform="rotate(90)"
+         id="rect5154-0-3-5-8-1-6-8"
+         height="8"
+         width="16"
+         y="-858"
+         x="584"
+         style="fill:#ffffff" />
+      <path
+         id="formEditorSplit_"
+         style="fill:none;stroke:#000000"
+         d="m 852,592.5 h 5 m -5.5,-3 h 6 v 6 h -6 z"
+         inkscape:connector-curvature="0" />
+    </g>
+    <g
+       id="src/plugins/qmldesigner/components/resources/images/spliteditorhorizontally">
+      <rect
+         style="fill:#ffffff"
+         x="584"
+         y="-878"
+         width="16"
+         height="8"
+         id="rect5704"
+         transform="rotate(90)" />
+      <use
+         height="100%"
+         width="100%"
+         transform="rotate(90,864.5,602.5)"
+         id="use5730"
+         xlink:href="#formEditorSplit_"
+         y="0"
+         x="0" />
     </g>
   </g>
 </svg>

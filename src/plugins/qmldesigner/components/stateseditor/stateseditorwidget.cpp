@@ -28,7 +28,8 @@
 #include "stateseditorview.h"
 #include "stateseditorimageprovider.h"
 
-#include <theming.h>
+#include <designersettings.h>
+#include <theme.h>
 
 #include <invalidqmlsourceexception.h>
 
@@ -64,6 +65,7 @@ int StatesEditorWidget::currentStateInternalId() const
 
 void StatesEditorWidget::setCurrentStateInternalId(int internalId)
 {
+    Q_ASSERT(rootObject());
     rootObject()->setProperty("currentStateInternalId", internalId);
 }
 
@@ -90,7 +92,7 @@ StatesEditorWidget::StatesEditorWidget(StatesEditorView *statesEditorView, State
     engine()->addImportPath(qmlSourcesPath());
 
     m_qmlSourceUpdateShortcut = new QShortcut(QKeySequence(Qt::CTRL + Qt::Key_F4), this);
-    connect(m_qmlSourceUpdateShortcut, SIGNAL(activated()), this, SLOT(reloadQmlSource()));
+    connect(m_qmlSourceUpdateShortcut, &QShortcut::activated, this, &StatesEditorWidget::reloadQmlSource);
 
     setResizeMode(QQuickWidget::SizeRootObjectToView);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
@@ -99,9 +101,7 @@ StatesEditorWidget::StatesEditorWidget(StatesEditorView *statesEditorView, State
 
     rootContext()->setContextProperty(QLatin1String("canAddNewStates"), true);
 
-    rootContext()->setContextProperty(QLatin1String("creatorTheme"), Theming::theme());
-
-    Theming::registerIconProvider(engine());
+    Theme::setupTheme(engine());
 
     setWindowTitle(tr("States", "Title of Editor widget"));
 
@@ -115,6 +115,12 @@ StatesEditorWidget::~StatesEditorWidget()
 
 QString StatesEditorWidget::qmlSourcesPath() {
     return Core::ICore::resourcePath() + QStringLiteral("/qmldesigner/statesEditorQmlSources");
+}
+
+void StatesEditorWidget::toggleStatesViewExpanded()
+{
+    bool expanded = rootObject()->property("expanded").toBool();
+    rootObject()->setProperty("expanded", !expanded);
 }
 
 void StatesEditorWidget::reloadQmlSource()
@@ -131,11 +137,20 @@ void StatesEditorWidget::reloadQmlSource()
     m_statesEditorView.data()->synchonizeCurrentStateFromWidget();
     setFixedHeight(initialSize().height());
 
-    connect(rootObject(), SIGNAL(expandedChanged()), this, SLOT(changeHeight()));
+    if (!DesignerSettings::getValue(DesignerSettingsKey::STATESEDITOR_EXPANDED).toBool()) {
+        toggleStatesViewExpanded();
+        setFixedHeight(rootObject()->height());
+    }
+
+    connect(rootObject(), SIGNAL(expandedChanged()), this, SLOT(handleExpandedChanged()));
 }
 
-void StatesEditorWidget::changeHeight()
+void StatesEditorWidget::handleExpandedChanged()
 {
+    bool expanded = rootObject()->property("expanded").toBool();
+
+    DesignerSettings::setValue(DesignerSettingsKey::STATESEDITOR_EXPANDED, expanded);
+
     setFixedHeight(rootObject()->height());
 }
 }

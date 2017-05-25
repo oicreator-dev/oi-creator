@@ -110,19 +110,15 @@ static QString winExpandDelayedEnvReferences(QString in, const Utils::Environmen
 // This is pretty much the same as the ReadEnvironmentSetting in the msvctoolchain.cpp, but
 // this takes account of the library, binary and include paths to replace the vcvars versions
 // with the ones for this toolchain.
-Utils::Environment WinCEToolChain::readEnvironmentSetting(Utils::Environment &env) const
+Utils::Environment WinCEToolChain::readEnvironmentSetting(const Utils::Environment &env) const
 {
-    Utils::Environment result = env;
-    if (!QFileInfo::exists(m_vcvarsBat))
-        return result;
-
-    // Get the env pairs
+    Utils::Environment result;
     QMap<QString, QString> envPairs;
 
     if (!generateEnvironmentSettings(env, m_vcvarsBat, QString(), envPairs))
-        return result;
+        return env;
 
-    for (auto envPairIter = envPairs.constBegin(); envPairIter!=envPairs.constEnd(); ++envPairIter) {
+    for (auto envPairIter = envPairs.constBegin(); envPairIter != envPairs.constEnd(); ++envPairIter) {
         // Replace the env values with those from the WinCE SDK
         QString varValue = envPairIter.value();
         if (envPairIter.key() == QLatin1String("PATH"))
@@ -136,18 +132,13 @@ Utils::Environment WinCEToolChain::readEnvironmentSetting(Utils::Environment &en
             result.set(envPairIter.key(), varValue);
     }
 
-
     // Now loop round and do the delayed expansion
-    auto envIter = result.constBegin();
-    while (envIter != result.constEnd()) {
+    for (auto envIter = result.constBegin(); envIter != result.constEnd(); ++envIter) {
         const QString key = result.key(envIter);
         const QString unexpandedValue = result.value(envIter);
-
         const QString expandedValue = winExpandDelayedEnvReferences(unexpandedValue, result);
 
         result.set(key, expandedValue);
-
-        ++envIter;
     }
 
     if (debug) {
@@ -236,9 +227,9 @@ WinCEToolChain::WinCEToolChain(const QString &name,
                                const QString &binPath,
                                const QString &includePath,
                                const QString &libPath,
-                               const Language &l,
+                               Core::Id language,
                                Detection d) :
-    AbstractMsvcToolChain(Constants::WINCE_TOOLCHAIN_TYPEID, l, d, abi, vcvarsBat),
+    AbstractMsvcToolChain(Constants::WINCE_TOOLCHAIN_TYPEID, language, d, abi, vcvarsBat),
     m_msvcVer(msvcVer),
     m_ceVer(ceVer),
     m_binPath(binPath),
@@ -348,9 +339,9 @@ WinCEToolChainFactory::WinCEToolChainFactory()
     setDisplayName(tr("WinCE"));
 }
 
-QSet<ToolChain::Language> WinCEToolChainFactory::supportedLanguages() const
+QSet<Core::Id> WinCEToolChainFactory::supportedLanguages() const
 {
-    return { ProjectExplorer::ToolChain::Language::Cxx };
+    return {Constants::CXX_LANGUAGE_ID};
 }
 
 static ToolChain *findOrCreateToolChain(const QList<ToolChain *> &alreadyKnown,
@@ -375,7 +366,7 @@ static ToolChain *findOrCreateToolChain(const QList<ToolChain *> &alreadyKnown,
                                          });
     if (!tc)
         tc = new WinCEToolChain(name, abi, vcvarsBat, msvcVer, ceVer, binPath, includePath, libPath,
-                                ProjectExplorer::ToolChain::Language::Cxx, d);
+                                Constants::CXX_LANGUAGE_ID, d);
     return tc;
 }
 

@@ -58,7 +58,7 @@ enum Type {
     MessageTestCaseWarn,
     MessageTestCaseFail,
     MessageTestCaseEnd,
-    MessageTestCaseRepetition,
+    MessageIntermediate,
     MessageCurrentTest, INTERNAL_MESSAGES_END = MessageCurrentTest,
 
     Invalid,
@@ -90,6 +90,11 @@ public:
     static Result::Type toResultType(int rt);
     static QString resultToString(const Result::Type type);
     static QColor colorForType(const Result::Type type);
+    static bool isMessageCaseStart(const Result::Type type);
+
+    virtual bool isDirectParentOf(const TestResult *other, bool *needsIntermediate) const;
+    virtual bool isIntermediateFor(const TestResult *other) const;
+    virtual TestResult *createIntermediateResultFor(const TestResult *other);
 
 private:
     QString m_name;

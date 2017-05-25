@@ -61,12 +61,6 @@ public:
     explicit LldbEngine(const DebuggerRunParameters &runParameters);
     ~LldbEngine() override;
 
-    enum LldbCommandFlag {
-        NoFlags = 0,
-        // Do not echo to log.
-        Silent = 1
-    };
-
 signals:
     void outputReady(const QString &data);
 
@@ -163,6 +157,7 @@ private:
     QMap<QPointer<DisassemblerAgent>, int> m_disassemblerAgents;
 
     QHash<int, DebuggerCommand> m_commandForToken;
+    DebuggerCommandSequence m_onStop;
 
     // Console handling.
     void stubError(const QString &msg);

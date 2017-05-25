@@ -66,14 +66,14 @@ bool ClangStaticAnalyzerRunControlFactory::canRun(RunConfiguration *runConfigura
     Project *project = runConfiguration->target()->project();
     QTC_ASSERT(project, return false);
     const Core::Context context = project->projectLanguages();
-    if (!context.contains(ProjectExplorer::Constants::LANG_CXX))
+    if (!context.contains(ProjectExplorer::Constants::CXX_LANGUAGE_ID))
         return false;
 
     Target *target = runConfiguration->target();
     QTC_ASSERT(target, return false);
     Kit *kit = target->kit();
     QTC_ASSERT(kit, return false);
-    ToolChain *toolChain = ToolChainKitInformation::toolChain(kit, ToolChain::Language::Cxx);
+    ToolChain *toolChain = ToolChainKitInformation::toolChain(kit, ProjectExplorer::Constants::CXX_LANGUAGE_ID);
     return toolChain;
 }
 

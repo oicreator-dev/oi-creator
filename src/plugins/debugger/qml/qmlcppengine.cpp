@@ -254,6 +254,11 @@ void QmlCppEngine::attemptBreakpointSynchronization()
     }
 }
 
+void QmlCppEngine::doUpdateLocals(const UpdateParameters &up)
+{
+    m_activeEngine->doUpdateLocals(up);
+}
+
 bool QmlCppEngine::acceptsBreakpoint(Breakpoint bp) const
 {
     return m_cppEngine->acceptsBreakpoint(bp)
@@ -449,6 +454,7 @@ void QmlCppEngine::shutdownInferior()
 void QmlCppEngine::shutdownEngine()
 {
     EDEBUG("\nMASTER SHUTDOWN ENGINE");
+    m_qmlEngine->shutdownSlaveEngine();
     m_cppEngine->shutdownSlaveEngine();
 }
 

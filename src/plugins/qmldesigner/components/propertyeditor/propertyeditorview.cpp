@@ -40,7 +40,7 @@
 
 #include <nodeabstractproperty.h>
 
-#include <theming.h>
+#include <theme.h>
 
 #include <coreplugin/icore.h>
 #include <utils/fileutils.h>
@@ -80,13 +80,13 @@ PropertyEditorView::PropertyEditorView(QWidget *parent) :
     m_qmlDir = PropertyEditorQmlBackend::propertyEditorResourcesPath();
 
     m_updateShortcut = new QShortcut(QKeySequence(Qt::CTRL + Qt::Key_F3), m_stackedWidget);
-    connect(m_updateShortcut, SIGNAL(activated()), this, SLOT(reloadQml()));
+    connect(m_updateShortcut, &QShortcut::activated, this, &PropertyEditorView::reloadQml);
 
-    m_stackedWidget->setStyleSheet(Theming::replaceCssColors(
+    m_stackedWidget->setStyleSheet(Theme::replaceCssColors(
             QString::fromUtf8(Utils::FileReader::fetchQrc(QStringLiteral(":/qmldesigner/stylesheet.css")))));
     m_stackedWidget->setMinimumWidth(320);
     m_stackedWidget->move(0, 0);
-    connect(m_stackedWidget, SIGNAL(resized()), this, SLOT(updateSize()));
+    connect(m_stackedWidget, &PropertyEditorWidget::resized, this, &PropertyEditorView::updateSize);
 
     m_stackedWidget->insertWidget(0, new QWidget(m_stackedWidget));
 
@@ -138,7 +138,7 @@ void PropertyEditorView::changeValue(const QString &name)
     if (m_locked)
         return;
 
-    if (propertyName == "type")
+    if (propertyName == "className")
         return;
 
     if (!m_selectedNode.isValid())
@@ -278,7 +278,7 @@ void PropertyEditorView::changeExpression(const QString &propertyName)
                 }
             } else if (qmlObjectNode.modelNode().metaInfo().propertyTypeName(name) == "qreal") {
                 bool ok;
-                qreal realValue = value->expression().toFloat(&ok);
+                qreal realValue = value->expression().toDouble(&ok);
                 if (ok) {
                     qmlObjectNode.setVariantProperty(name, realValue);
                     transaction.commit(); //committing in the try block
@@ -384,8 +384,9 @@ void PropertyEditorView::setupPanes()
 
 void PropertyEditorView::delayedResetView()
 {
-    if (m_timerId == 0)
-        m_timerId = startTimer(100);
+    if (m_timerId)
+        killTimer(m_timerId);
+    m_timerId = startTimer(50);
 }
 
 void PropertyEditorView::timerEvent(QTimerEvent *timerEvent)
@@ -530,7 +531,7 @@ void PropertyEditorView::modelAttached(Model *model)
     if (!m_setupCompleted) {
         m_singleShotTimer->setSingleShot(true);
         m_singleShotTimer->setInterval(100);
-        connect(m_singleShotTimer, SIGNAL(timeout()), this, SLOT(setupPanes()));
+        connect(m_singleShotTimer, &QTimer::timeout, this, &PropertyEditorView::setupPanes);
         m_singleShotTimer->start();
     }
 
@@ -566,7 +567,7 @@ void PropertyEditorView::propertiesRemoved(const QList<AbstractProperty>& proper
                 m_qmlBackEndForCurrentType->setValueforLayoutAttachedProperties(m_selectedNode, property.name());
 
             if ("width" == property.name() || "height" == property.name()) {
-                QmlItemNode qmlItemNode = m_selectedNode;
+                const QmlItemNode qmlItemNode = m_selectedNode;
                 if (qmlItemNode.isValid() && qmlItemNode.isInLayout())
                     resetPuppet();
             }
@@ -627,13 +628,13 @@ void PropertyEditorView::bindingPropertiesChanged(const QList<BindingProperty>& 
     }
 }
 
-void PropertyEditorView::instanceInformationsChange(const QMultiHash<ModelNode, InformationName> &informationChangeHash)
+void PropertyEditorView::instanceInformationsChanged(const QMultiHash<ModelNode, InformationName> &informationChangedHash)
 {
     if (!m_selectedNode.isValid())
         return;
 
     m_locked = true;
-    QList<InformationName> informationNameList = informationChangeHash.values(m_selectedNode);
+    QList<InformationName> informationNameList = informationChangedHash.values(m_selectedNode);
     if (informationNameList.contains(Anchor)
             || informationNameList.contains(HasAnchor))
         m_qmlBackEndForCurrentType->backendAnchorBinding().setup(QmlItemNode(m_selectedNode));
@@ -687,7 +688,7 @@ void PropertyEditorView::currentStateChanged(const ModelNode &node)
     delayedResetView();
 }
 
-void PropertyEditorView::instancePropertyChange(const QList<QPair<ModelNode, PropertyName> > &propertyList)
+void PropertyEditorView::instancePropertyChanged(const QList<QPair<ModelNode, PropertyName> > &propertyList)
 {
     if (!m_selectedNode.isValid())
         return;
@@ -717,7 +718,13 @@ void PropertyEditorView::instancePropertyChange(const QList<QPair<ModelNode, Pro
 
 void PropertyEditorView::rootNodeTypeChanged(const QString &/*type*/, int /*majorVersion*/, int /*minorVersion*/)
 {
-    // TODO: we should react to this case
+    delayedResetView();
+}
+
+void PropertyEditorView::nodeTypeChanged(const ModelNode &node, const TypeName &, int, int)
+{
+     if (node == m_selectedNode)
+         delayedResetView();
 }
 
 void PropertyEditorView::nodeReparented(const ModelNode &node,

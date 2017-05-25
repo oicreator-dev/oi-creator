@@ -25,6 +25,8 @@
 
 #include "designersettings.h"
 
+#include <qmldesignerplugin.h>
+
 #include <QSettings>
 
 namespace QmlDesigner {
@@ -59,7 +61,7 @@ void DesignerSettings::fromSettings(QSettings *settings)
     restoreValue(settings, DesignerSettingsKey::ENABLE_DEBUGVIEW, false);
     restoreValue(settings, DesignerSettingsKey::ALWAYS_SAFE_IN_CRUMBLEBAR, false);
     restoreValue(settings, DesignerSettingsKey::USE_ONLY_FALLBACK_PUPPET, true);
-    restoreValue(settings, DesignerSettingsKey::USE_QSTR_FUNCTION, true);
+    restoreValue(settings, DesignerSettingsKey::TYPE_OF_QSTR_FUNCTION, 0);
     restoreValue(settings, DesignerSettingsKey::PUPPET_FALLBACK_DIRECTORY);
     restoreValue(settings, DesignerSettingsKey::PUPPET_TOPLEVEL_BUILD_DIRECTORY);
     restoreValue(settings, DesignerSettingsKey::CONTROLS_STYLE);
@@ -69,6 +71,7 @@ void DesignerSettings::fromSettings(QSettings *settings)
     restoreValue(settings, DesignerSettingsKey::DEBUG_PUPPET, QString());
     restoreValue(settings, DesignerSettingsKey::FORWARD_PUPPET_OUTPUT, QString());
     restoreValue(settings, DesignerSettingsKey::REFORMAT_UI_QML_FILES, true);
+    restoreValue(settings, DesignerSettingsKey::IGNORE_DEVICE_PIXEL_RATIO, false);
 
     settings->endGroup();
     settings->endGroup();
@@ -94,6 +97,19 @@ void DesignerSettings::toSettings(QSettings *settings) const
 
     settings->endGroup();
     settings->endGroup();
+}
+
+QVariant DesignerSettings::getValue(const QByteArray &key)
+{
+    DesignerSettings settings = QmlDesignerPlugin::instance()->settings();
+    return settings.value(key);
+}
+
+void DesignerSettings::setValue(const QByteArray &key, const QVariant &value)
+{
+    DesignerSettings settings = QmlDesignerPlugin::instance()->settings();
+    settings.insert(key, value);
+    QmlDesignerPlugin::instance()->setSettings(settings);
 }
 
 } // namespace QmlDesigner

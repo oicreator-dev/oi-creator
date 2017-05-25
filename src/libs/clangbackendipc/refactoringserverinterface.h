@@ -33,6 +33,8 @@ namespace ClangBackEnd {
 
 class RefactoringClientInterface;
 class RequestSourceLocationsForRenamingMessage;
+class RequestSourceRangesAndDiagnosticsForQueryMessage;
+class CancelMessage;
 
 class CMBIPC_EXPORT RefactoringServerInterface : public IpcServerInterface<RefactoringClientInterface>
 {
@@ -41,6 +43,20 @@ public:
 
     virtual void end() = 0;
     virtual void requestSourceLocationsForRenamingMessage(RequestSourceLocationsForRenamingMessage &&message) = 0;
+    virtual void requestSourceRangesAndDiagnosticsForQueryMessage(RequestSourceRangesAndDiagnosticsForQueryMessage &&message) = 0;
+    virtual void cancel() = 0;
+
+    bool isUsable() const
+    {
+        return isUsable_;
+    }
+    void setUsable(bool isUsable)
+    {
+        isUsable_ = isUsable;
+    }
+
+private:
+    bool isUsable_ = false;
 };
 
 } // namespace ClangBackEnd

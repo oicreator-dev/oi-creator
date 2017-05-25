@@ -87,7 +87,6 @@ public:
     void saveState();
     void restoreState();
 
-public slots:
     void setDisplaySettings(const DisplaySettings &ds) override;
 
 signals:
@@ -534,8 +533,8 @@ SideBySideDiffEditorWidget::SideBySideDiffEditorWidget(QWidget *parent)
 
     connect(m_leftEditor, &QPlainTextEdit::cursorPositionChanged,
             this, &SideBySideDiffEditorWidget::leftCursorPositionChanged);
-//    connect(m_leftEditor->document()->documentLayout(), SIGNAL(documentSizeChanged(QSizeF)),
-//            this, SLOT(leftDocumentSizeChanged()));
+//    connect(m_leftEditor->document()->documentLayout(), &QAbstractTextDocumentLayout::documentSizeChanged,
+//            this, &SideBySideDiffEditorWidget::leftDocumentSizeChanged);
 
     connect(m_rightEditor->verticalScrollBar(), &QAbstractSlider::valueChanged,
             this, &SideBySideDiffEditorWidget::rightVSliderChanged);
@@ -562,6 +561,19 @@ SideBySideDiffEditorWidget::SideBySideDiffEditorWidget(QWidget *parent)
 void SideBySideDiffEditorWidget::setDocument(DiffEditorDocument *document)
 {
     m_controller.setDocument(document);
+    clear();
+    QList<FileData> diffFileList;
+    QString workingDirectory;
+    if (document) {
+        diffFileList = document->diffFiles();
+        workingDirectory = document->baseDirectory();
+    }
+    setDiff(diffFileList, workingDirectory);
+}
+
+DiffEditorDocument *SideBySideDiffEditorWidget::diffDocument() const
+{
+    return m_controller.document();
 }
 
 void SideBySideDiffEditorWidget::clear(const QString &message)

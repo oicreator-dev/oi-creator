@@ -30,7 +30,7 @@
 
 namespace Debugger { class DebuggerRunControl; }
 
-namespace ProjectExplorer { class DeviceApplicationRunner; }
+namespace ProjectExplorer { class ApplicationLauncher; }
 
 namespace BareMetal {
 namespace Internal {
@@ -43,7 +43,9 @@ public:
     explicit BareMetalDebugSupport(Debugger::DebuggerRunControl *runControl);
     ~BareMetalDebugSupport();
 
-private slots:
+private:
+    enum State { Inactive, StartingRunner, Running };
+
     void remoteSetupRequested();
     void debuggingFinished();
     void remoteOutputMessage(const QByteArray &output);
@@ -53,9 +55,6 @@ private slots:
     void progressReport(const QString &progressOutput);
     void appRunnerError(const QString &error);
 
-private:
-    enum State { Inactive, StartingRunner, Running };
-
     void adapterSetupDone();
     void adapterSetupFailed(const QString &error);
 
@@ -64,9 +63,9 @@ private:
     void reset();
     void showMessage(const QString &msg, int channel);
 
-    ProjectExplorer::DeviceApplicationRunner *m_appRunner;
+    ProjectExplorer::ApplicationLauncher *m_appLauncher;
     const QPointer<Debugger::DebuggerRunControl> m_runControl;
-    BareMetalDebugSupport::State m_state;
+    State m_state;
 };
 
 } // namespace Internal

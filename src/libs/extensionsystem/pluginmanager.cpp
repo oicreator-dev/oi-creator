@@ -49,6 +49,7 @@
 #include <utils/algorithm.h>
 #include <utils/executeondestruction.h>
 #include <utils/hostosinfo.h>
+#include <utils/mimetypes/mimedatabase.h>
 #include <utils/qtcassert.h>
 #include <utils/synchronousprocess.h>
 
@@ -105,7 +106,7 @@ enum { debugLeaks = 0 };
     loading.
     \code
         // 'plugins' and subdirs will be searched for plugins
-        PluginManager::setPluginPaths(QStringList() << "plugins");
+        PluginManager::setPluginPaths(QStringList("plugins"));
         PluginManager::loadPlugins(); // try to load all the plugins
     \endcode
     Additionally, it is possible to directly access the plugin specifications
@@ -271,9 +272,10 @@ enum { debugLeaks = 0 };
 */
 
 
-using namespace ExtensionSystem;
-using namespace ExtensionSystem::Internal;
 using namespace Utils;
+using namespace ExtensionSystem::Internal;
+
+namespace ExtensionSystem {
 
 static Internal::PluginManagerPrivate *d = 0;
 static PluginManager *m_instance = 0;
@@ -359,7 +361,7 @@ QReadWriteLock *PluginManager::listLock()
 */
 void PluginManager::loadPlugins()
 {
-    return d->loadPlugins();
+    d->loadPlugins();
 }
 
 /*!
@@ -1232,12 +1234,15 @@ void PluginManagerPrivate::removeObject(QObject *obj)
 void PluginManagerPrivate::loadPlugins()
 {
     QList<PluginSpec *> queue = loadQueue();
+    Utils::setMimeStartupPhase(MimeStartupPhase::PluginsLoading);
     foreach (PluginSpec *spec, queue) {
         loadPlugin(spec, PluginSpec::Loaded);
     }
+    Utils::setMimeStartupPhase(MimeStartupPhase::PluginsInitializing);
     foreach (PluginSpec *spec, queue) {
         loadPlugin(spec, PluginSpec::Initialized);
     }
+    Utils::setMimeStartupPhase(MimeStartupPhase::PluginsDelayedInitializing);
     Utils::reverseForeach(queue, [this](PluginSpec *spec) {
         loadPlugin(spec, PluginSpec::Running);
         if (spec->state() == PluginSpec::Running) {
@@ -1248,6 +1253,7 @@ void PluginManagerPrivate::loadPlugins()
         }
     });
     emit q->pluginsChanged();
+    Utils::setMimeStartupPhase(MimeStartupPhase::UpAndRunning);
 
     delayedInitializeTimer = new QTimer;
     delayedInitializeTimer->setInterval(DELAYED_INITIALIZE_INTERVAL);
@@ -1699,3 +1705,5 @@ QObject *PluginManager::getObjectByClassName(const QString &className)
         return obj->inherits(ba.constData());
     });
 }
+
+} // ExtensionSystem

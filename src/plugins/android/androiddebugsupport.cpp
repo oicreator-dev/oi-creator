@@ -69,7 +69,7 @@ static QStringList qtSoPaths(QtSupport::BaseQtVersion *qtVersion)
         QString path = qtVersion->qmakeProperty(qMakeVariables[i]);
         if (path.isNull())
             continue;
-        QDirIterator it(path, QStringList() << QLatin1String("*.so"), QDir::Files, QDirIterator::Subdirectories);
+        QDirIterator it(path, QStringList("*.so"), QDir::Files, QDirIterator::Subdirectories);
         while (it.hasNext()) {
             it.next();
             paths.insert(it.fileInfo().absolutePath());
@@ -104,8 +104,10 @@ RunControl *AndroidDebugSupport::createDebugRunControl(AndroidRunConfiguration *
     params.displayName = AndroidManager::packageName(target);
     params.remoteSetupNeeded = true;
     params.useContinueInsteadOfRun = true;
-    if (!Utils::HostOsInfo::isWindowsHost()) // Workaround for NDK 11c(b?)
+    if (!Utils::HostOsInfo::isWindowsHost() &&
+            AndroidConfigurations::currentConfig().ndkVersion() >= QVersionNumber(11, 0, 0)) {
         params.useTargetAsync = true;
+    }
 
     auto aspect = runConfig->extraAspect<DebuggerRunConfigurationAspect>();
     if (aspect->useCppDebugger()) {
@@ -131,7 +133,7 @@ RunControl *AndroidDebugSupport::createDebugRunControl(AndroidRunConfiguration *
         Kit *kit = target->kit();
         QtSupport::BaseQtVersion *version = QtSupport::QtKitInformation::qtVersion(kit);
         if (version) {
-            const QString qmlQtDir = version->versionInfo().value(QLatin1String("QT_INSTALL_QML"));
+            const QString qmlQtDir = version->qmakeProperty("QT_INSTALL_QML");
             params.additionalSearchDirectories = QStringList(qmlQtDir);
         }
     }

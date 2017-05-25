@@ -174,6 +174,12 @@ QUrl ModelPrivate::fileUrl() const
     return m_fileUrl;
 }
 
+void ModelPrivate::setDocumentMessages(const QList<DocumentMessage> &errors, const QList<DocumentMessage> &warnings)
+{
+    foreach (const QPointer<AbstractView> &view, m_viewList)
+        view->documentMessagesChanged(errors, warnings);
+}
+
 void ModelPrivate::setFileUrl(const QUrl &fileUrl)
 {
     QUrl oldPath = m_fileUrl;
@@ -184,6 +190,22 @@ void ModelPrivate::setFileUrl(const QUrl &fileUrl)
         foreach (const QPointer<AbstractView> &view, m_viewList)
             view->fileUrlChanged(oldPath, fileUrl);
     }
+}
+
+void ModelPrivate::changeNodeType(const InternalNodePointer &internalNodePointer, const TypeName &typeName, int majorVersion, int minorVersion)
+{
+    internalNodePointer->setType(typeName);
+    internalNodePointer->setMajorVersion(majorVersion);
+    internalNodePointer->setMinorVersion(minorVersion);
+
+    try {
+        notifyNodeTypeChanged(internalNodePointer, typeName, majorVersion, minorVersion);
+
+    } catch (const RewritingException &e) {
+        throw InvalidArgumentException(__LINE__, __FUNCTION__, __FILE__, e.description().toUtf8());
+
+    }
+
 }
 
 InternalNode::Pointer ModelPrivate::createNode(const TypeName &typeName,
@@ -224,6 +246,9 @@ InternalNode::Pointer ModelPrivate::createNode(const TypeName &typeName,
         newInternalNodePointer->setNodeSource(nodeSource);
 
     notifyNodeCreated(newInternalNodePointer);
+
+    if (!newInternalNodePointer->propertyNameList().isEmpty())
+        notifyVariantPropertiesChanged(newInternalNodePointer, newInternalNodePointer->propertyNameList(), AbstractView::PropertiesAdded);
 
     return newInternalNodePointer;
 }
@@ -426,7 +451,7 @@ void ModelPrivate::notifyInstancePropertyChange(const QList<QPair<ModelNode, Pro
             adaptedPropertyList.append(newPair);
         }
 
-        view->instancePropertyChange(adaptedPropertyList);
+        view->instancePropertyChanged(adaptedPropertyList);
     }
 }
 
@@ -439,7 +464,7 @@ void ModelPrivate::notifyInstanceErrorChange(const QVector<qint32> &instanceIds)
         Q_ASSERT(view != 0);
         foreach (qint32 instanceId, instanceIds)
             errorNodeList.append(ModelNode(model()->d->nodeForInternalId(instanceId), model(), view));
-        view->instanceErrorChange(errorNodeList);
+        view->instanceErrorChanged(errorNodeList);
     }
 }
 
@@ -490,7 +515,7 @@ void ModelPrivate::notifyInstancesInformationsChange(const QMultiHash<ModelNode,
 
     try {
         if (rewriterView())
-            rewriterView()->instanceInformationsChange(convertModelNodeInformationHash(informationChangeHash, rewriterView()));
+            rewriterView()->instanceInformationsChanged(convertModelNodeInformationHash(informationChangeHash, rewriterView()));
     } catch (const RewritingException &e) {
         description = e.description();
         resetModel = true;
@@ -498,11 +523,11 @@ void ModelPrivate::notifyInstancesInformationsChange(const QMultiHash<ModelNode,
 
     foreach (const QPointer<AbstractView> &view, m_viewList) {
         Q_ASSERT(view != 0);
-        view->instanceInformationsChange(convertModelNodeInformationHash(informationChangeHash, view.data()));
+        view->instanceInformationsChanged(convertModelNodeInformationHash(informationChangeHash, view.data()));
     }
 
     if (nodeInstanceView())
-        nodeInstanceView()->instanceInformationsChange(convertModelNodeInformationHash(informationChangeHash, nodeInstanceView()));
+        nodeInstanceView()->instanceInformationsChanged(convertModelNodeInformationHash(informationChangeHash, nodeInstanceView()));
 
     if (resetModel)
         resetModelByRewriter(description);
@@ -951,6 +976,37 @@ void ModelPrivate::notifyNodeRemoved(const InternalNodePointer &internalNodePoin
 
     if (resetModel)
         resetModelByRewriter(description);
+}
+
+void ModelPrivate::notifyNodeTypeChanged(const InternalNodePointer &internalNodePointer, const TypeName &type, int majorVersion, int minorVersion)
+{
+    bool resetModel = false;
+    QString description;
+
+    try {
+        if (rewriterView()) {
+            ModelNode modelNode(internalNodePointer, model(), rewriterView());
+            rewriterView()->nodeTypeChanged(modelNode, type, majorVersion, minorVersion);
+        }
+    } catch (const RewritingException &e) {
+        description = e.description();
+        resetModel = true;
+    }
+
+    foreach (const QPointer<AbstractView> &view, m_viewList) {
+        Q_ASSERT(view != 0);
+        ModelNode modelNode(internalNodePointer, model(), view.data());
+        view->nodeTypeChanged(modelNode, type, majorVersion, minorVersion);
+    }
+
+    if (nodeInstanceView()) {
+        ModelNode modelNode(internalNodePointer, model(), nodeInstanceView());
+        nodeInstanceView()->nodeTypeChanged(modelNode, type, majorVersion, minorVersion);
+    }
+
+    if (resetModel)
+        resetModelByRewriter(description);
+
 }
 
 void ModelPrivate::notifyNodeIdChanged(const InternalNode::Pointer& internalNodePointer, const QString& newId, const QString& oldId)
@@ -1893,6 +1949,11 @@ TextModifier *Model::textModifier() const
 void Model::setTextModifier(TextModifier *textModifier)
 {
     d->m_textModifier = textModifier;
+}
+
+void Model::setDocumentMessages(const QList<DocumentMessage> &errors, const QList<DocumentMessage> &warnings)
+{
+    d->setDocumentMessages(errors, warnings);
 }
 
 /*!

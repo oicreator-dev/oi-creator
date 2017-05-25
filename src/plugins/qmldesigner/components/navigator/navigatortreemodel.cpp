@@ -27,6 +27,7 @@
 
 #include <bindingproperty.h>
 #include <nodeabstractproperty.h>
+#include <nodehints.h>
 #include <nodelistproperty.h>
 #include <nodeproperty.h>
 #include <variantproperty.h>
@@ -39,6 +40,7 @@
 
 #include <coreplugin/icore.h>
 
+#include <utils/qtcassert.h>
 #include <utils/utilsicons.h>
 
 #include <QMimeData>
@@ -113,8 +115,8 @@ NavigatorTreeModel::NavigatorTreeModel(QObject *parent)
     setColumnCount(2);
 #    endif
 
-    connect(this, SIGNAL(itemChanged(QStandardItem*)),
-            this, SLOT(handleChangedItem(QStandardItem*)));
+    connect(this, &QStandardItemModel::itemChanged,
+            this, &NavigatorTreeModel::handleChangedItem);
 }
 
 NavigatorTreeModel::~NavigatorTreeModel()
@@ -365,7 +367,12 @@ void NavigatorTreeModel::updateItemRow(const ModelNode &modelNode, ItemRow items
 
     if (currentQmlObjectNode.hasError()) {
         items.idItem->setData(true, ErrorRole);
-        items.idItem->setToolTip(currentQmlObjectNode.error());
+        QString errorString = currentQmlObjectNode.error();
+        if (currentQmlObjectNode.isRootNode()) {
+            errorString.append(QString("\n%1").arg(tr("Changing the setting \"%1\" might solve the issue.").arg(
+                tr("Use QML emulation layer that is built with the selected Qt"))));
+        }
+        items.idItem->setToolTip(errorString);
         items.idItem->setIcon(Utils::Icons::WARNING.icon());
     } else {
         items.idItem->setData(false, ErrorRole);
@@ -373,6 +380,7 @@ void NavigatorTreeModel::updateItemRow(const ModelNode &modelNode, ItemRow items
             items.idItem->setToolTip(QString::fromUtf8(modelNode.type()));
         else
             items.idItem->setToolTip(msgUnknownItem(QString::fromUtf8(modelNode.type())));
+        items.idItem->setIcon(getTypeIcon(modelNode));
     }
 
     blockItemChangedSignal(blockSignal);
@@ -414,6 +422,7 @@ void NavigatorTreeModel::handleChangedExportItem(QStandardItem *exportItem, Mode
 {
     bool exported = (exportItem->checkState() == Qt::Checked);
 
+    QTC_ASSERT(m_view, return);
     ModelNode rootModelNode = m_view->rootModelNode();
     Q_ASSERT(rootModelNode.isValid());
     PropertyName modelNodeId = modelNode.id().toUtf8();
@@ -491,13 +500,13 @@ QModelIndex NavigatorTreeModel::indexForNode(const ModelNode &node) const
 ModelNode NavigatorTreeModel::nodeForIndex(const QModelIndex &index) const
 {
     qint32 internalId = index.data(InternalIdRole).toInt();
-    return m_view->modelNodeForInternalId(internalId);
+    return m_view ? m_view->modelNodeForInternalId(internalId) : ModelNode();
 }
 
 bool NavigatorTreeModel::hasNodeForIndex(const QModelIndex &index) const
 {
     QVariant internalIdVariant = index.data(InternalIdRole);
-    if (internalIdVariant.isValid()) {
+    if (m_view && internalIdVariant.isValid()) {
         qint32 internalId = internalIdVariant.toInt();
         return m_view->hasModelNodeForInternalId(internalId);
     }
@@ -689,6 +698,7 @@ static void reparentModelNodeToNodeProperty(NodeAbstractProperty &parentProperty
 
 void NavigatorTreeModel::moveNodesInteractive(NodeAbstractProperty &parentProperty, const QList<ModelNode> &modelNodes, int targetIndex)
 {
+    QTC_ASSERT(m_view, return);
     try {
         TypeName propertyQmlType = parentProperty.parentModelNode().metaInfo().propertyTypeName(parentProperty.name());
 
@@ -709,6 +719,7 @@ void NavigatorTreeModel::moveNodesInteractive(NodeAbstractProperty &parentProper
                 }
             }
         }
+        transaction.commit();
     }  catch (const RewritingException &exception) { //better safe than sorry! There always might be cases where we fail
         exception.showException();
     }
@@ -718,6 +729,7 @@ void NavigatorTreeModel::handleInternalDrop(const QMimeData *mimeData,
                                             int rowNumber,
                                             const QModelIndex &dropModelIndex)
 {
+    QTC_ASSERT(m_view, return);
     QModelIndex rowModelIndex = dropModelIndex.sibling(dropModelIndex.row(), 0);
     int targetRowNumber = rowNumber;
     NodeAbstractProperty targetProperty;
@@ -744,6 +756,7 @@ static ItemLibraryEntry itemLibraryEntryFromData(const QByteArray &data)
 
 void NavigatorTreeModel::handleItemLibraryItemDrop(const QMimeData *mimeData, int rowNumber, const QModelIndex &dropModelIndex)
 {
+    QTC_ASSERT(m_view, return);
     QModelIndex rowModelIndex = dropModelIndex.sibling(dropModelIndex.row(), 0);
     int targetRowNumber = rowNumber;
     NodeAbstractProperty targetProperty;
@@ -752,6 +765,10 @@ void NavigatorTreeModel::handleItemLibraryItemDrop(const QMimeData *mimeData, in
 
     if (foundTarget) {
         ItemLibraryEntry itemLibraryEntry = itemLibraryEntryFromData(mimeData->data(QLatin1String("application/vnd.bauhaus.itemlibraryinfo")));
+
+         if (!NodeHints::fromItemLibraryEntry(itemLibraryEntry).canBeDroppedInNavigator())
+             return;
+
         QmlItemNode newQmlItemNode = QmlItemNode::createQmlItemNode(m_view, itemLibraryEntry, QPointF(), targetProperty);
 
         if (newQmlItemNode.isValid() && targetProperty.isNodeListProperty()) {
@@ -765,6 +782,7 @@ void NavigatorTreeModel::handleItemLibraryItemDrop(const QMimeData *mimeData, in
 
 void NavigatorTreeModel::handleItemLibraryImageDrop(const QMimeData *mimeData, int rowNumber, const QModelIndex &dropModelIndex)
 {
+    QTC_ASSERT(m_view, return);
     QModelIndex rowModelIndex = dropModelIndex.sibling(dropModelIndex.row(), 0);
     int targetRowNumber = rowNumber;
     NodeAbstractProperty targetProperty;
@@ -816,6 +834,7 @@ void NavigatorTreeModel::setExported(const QModelIndex &index, bool exported)
 
 void NavigatorTreeModel::openContextMenu(const QPoint &position)
 {
+    QTC_ASSERT(m_view, return);
     ModelNodeContextMenu::showContextMenu(m_view.data(), position, QPoint(), false);
 }
 

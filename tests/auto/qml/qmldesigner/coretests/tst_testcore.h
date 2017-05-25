@@ -87,6 +87,7 @@ private slots:
     void testModelPropertyValueTypes();
     void testModelNodeInHierarchy();
     void testModelNodeIsAncestorOf();
+    void testModelChangeType();
 
     //
     // unit tests Rewriter
@@ -138,6 +139,7 @@ private slots:
     void testRewriterActionCompression();
     void testRewriterImports();
     void testRewriterChangeImports();
+    void testRewriterUnicodeChars();
 
     //
     // unit tests QmlModelNodeFacade/QmlModelState

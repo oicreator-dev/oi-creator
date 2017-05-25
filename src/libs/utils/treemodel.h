@@ -64,10 +64,14 @@ public:
     TreeItem *lastChild() const;
     int level() const;
 
+    using const_iterator = QVector<TreeItem *>::const_iterator;
+    using value_type = TreeItem *;
     int childCount() const { return m_children.size(); }
     int indexInParent() const;
     TreeItem *childAt(int index) const;
-    QVector<TreeItem *> children() const { return m_children; }
+    int indexOf(const TreeItem *item) const;
+    const_iterator begin() const { return m_children.begin(); }
+    const_iterator end() const { return m_children.end(); }
     QModelIndex index() const;
     QAbstractItemModel *model() const;
 
@@ -249,13 +253,16 @@ public:
     explicit TreeModel(QObject *parent = 0) : BaseTreeModel(new RootItem, parent) {}
     explicit TreeModel(RootItem *root, QObject *parent = 0) : BaseTreeModel(root, parent) {}
 
+    using BaseTreeModel::canFetchMore;
     using BaseTreeModel::clear;
     using BaseTreeModel::columnCount;
     using BaseTreeModel::data;
     using BaseTreeModel::destroyItem;
+    using BaseTreeModel::fetchMore;
     using BaseTreeModel::hasChildren;
     using BaseTreeModel::index;
     using BaseTreeModel::indexForItem;
+    using BaseTreeModel::parent;
     using BaseTreeModel::rowCount;
     using BaseTreeModel::setData;
     using BaseTreeModel::setHeader;

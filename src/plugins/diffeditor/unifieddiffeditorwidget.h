@@ -54,6 +54,7 @@ public:
     UnifiedDiffEditorWidget(QWidget *parent = 0);
 
     void setDocument(DiffEditorDocument *document);
+    DiffEditorDocument *diffDocument() const;
 
     void setDiff(const QList<FileData> &diffFileList,
                  const QString &workingDirectory);
@@ -63,12 +64,10 @@ public:
     void restoreState();
 
     void clear(const QString &message = QString());
+    void setDisplaySettings(const TextEditor::DisplaySettings &ds) override;
 
 signals:
     void currentDiffFileIndexChanged(int index);
-
-public slots:
-    void setDisplaySettings(const TextEditor::DisplaySettings &ds) override;
 
 protected:
     void mouseDoubleClickEvent(QMouseEvent *e) override;
@@ -76,12 +75,11 @@ protected:
     QString lineNumber(int blockNumber) const override;
     int lineNumberDigits() const override;
 
-private slots:
+private:
     void setFontSettings(const TextEditor::FontSettings &fontSettings);
 
     void slotCursorPositionChangedInEditor();
 
-private:
     void setLeftLineNumber(int blockNumber, int lineNumber);
     void setRightLineNumber(int blockNumber, int lineNumber);
     void setFileInfo(int blockNumber,

@@ -329,6 +329,7 @@ QString DiffEditorDocument::plainText() const
 void DiffEditorDocument::beginReload()
 {
     emit aboutToReload();
+    m_isReloading = true;
     const bool blocked = blockSignals(true);
     setDiffFiles(QList<FileData>(), QString());
     setDescription(QString());
@@ -337,6 +338,7 @@ void DiffEditorDocument::beginReload()
 
 void DiffEditorDocument::endReload(bool success)
 {
+    m_isReloading = false;
     emit reloadFinished(success);
 }
 

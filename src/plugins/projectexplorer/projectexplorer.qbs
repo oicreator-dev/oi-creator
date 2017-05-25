@@ -7,7 +7,6 @@ Project {
 
     QtcPlugin {
         Depends { name: "Qt"; submodules: ["widgets", "xml", "network", "qml"] }
-        Depends { name: "Qt.quick" }
         Depends { name: "Aggregation" }
         Depends { name: "QtcSsh" }
         Depends { name: "Utils" }
@@ -83,7 +82,6 @@ Project {
                 "importwidget.cpp", "importwidget.h",
                 "ioutputparser.cpp", "ioutputparser.h",
                 "ipotentialkit.h",
-                "iprojectmanager.h",
                 "itaskhandler.h",
                 "kit.cpp", "kit.h",
                 "kitchooser.cpp", "kitchooser.h",
@@ -101,7 +99,6 @@ Project {
                 "localenvironmentaspect.cpp", "localenvironmentaspect.h",
                 "miniprojecttargetselector.cpp", "miniprojecttargetselector.h",
                 "namedwidget.cpp", "namedwidget.h",
-                "nodesvisitor.cpp", "nodesvisitor.h",
                 "osparser.cpp", "osparser.h",
                 "panelswidget.cpp", "panelswidget.h",
                 "processparameters.cpp", "processparameters.h",
@@ -119,6 +116,7 @@ Project {
                 "projectfilewizardextension.cpp", "projectfilewizardextension.h",
                 "projectimporter.cpp", "projectimporter.h",
                 "projectmacroexpander.cpp", "projectmacroexpander.h",
+                "projectmanager.h",
                 "projectmodels.cpp", "projectmodels.h",
                 "projectnodes.cpp", "projectnodes.h",
                 "projectpanelfactory.cpp", "projectpanelfactory.h",
@@ -203,7 +201,6 @@ Project {
             files: [
                 "desktopdevice.cpp", "desktopdevice.h",
                 "desktopdevicefactory.cpp", "desktopdevicefactory.h",
-                "deviceapplicationrunner.cpp", "deviceapplicationrunner.h",
                 "devicecheckbuildstep.cpp", "devicecheckbuildstep.h",
                 "devicefactoryselectiondialog.cpp", "devicefactoryselectiondialog.h", "devicefactoryselectiondialog.ui",
                 "devicemanager.cpp", "devicemanager.h",

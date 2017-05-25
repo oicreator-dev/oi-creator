@@ -39,10 +39,6 @@
 
     \image qtcreator-autotests.png
 
-    To enable the experimental Auto Test plugin, select \uicontrol Help >
-    \uicontrol {About Plugins} > \uicontrol Utilities > \uicontrol {Auto Test}.
-    Restart \QC to be able to use the plugin.
-
     \section1 Creating Tests
 
     You can use a wizard to create projects that contain Qt or Google tests.
@@ -89,10 +85,9 @@
 
     \endlist
 
-    \QC creates the test in the \c{tests\auto} directory in the project
-    directory. Edit the .cpp file to add private slots for each test
-    function in your test. For more information about creating Qt tests, see
-    \l{Creating a Test}.
+    \QC creates the test in the specified project directory. Edit the .cpp file
+    to add private slots for each test function in your test. For more information
+    about creating Qt tests, see \l{Creating a Test}.
 
     \section2 Creating Google Tests
 
@@ -137,8 +132,7 @@
 
     \endlist
 
-    \QC creates the test in the \c{tests\auto} directory in the project
-    directory.
+    \QC creates the test in the specified project directory.
 
     \section1 Setting Up the Google C++ Testing Framework
 
@@ -235,9 +229,7 @@
     \image qtcreator-autotests-options.png
 
     \QC scans the project for tests when you open the project and updates the
-    test list when you edit tests. To only update the test list when the
-    \uicontrol Tests view or the \uicontrol {Test Results} output pane is open,
-    deselect the \uicontrol {Always parse current project for tests} check box.
+    test list for the currently active test frameworks when you edit tests.
 
     The code inside a benchmark test is measured, and possibly also repeated
     several times in order to get an accurate measurement. This depends on the

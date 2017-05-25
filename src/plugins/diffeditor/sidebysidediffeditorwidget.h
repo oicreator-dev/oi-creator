@@ -54,6 +54,7 @@ public:
     explicit SideBySideDiffEditorWidget(QWidget *parent = 0);
 
     void setDocument(DiffEditorDocument *document);
+    DiffEditorDocument *diffDocument() const;
 
     void setDiff(const QList<FileData> &diffFileList,
                  const QString &workingDirectory);
@@ -69,7 +70,7 @@ public:
 signals:
     void currentDiffFileIndexChanged(int index);
 
-private slots:
+private:
     void setFontSettings(const TextEditor::FontSettings &fontSettings);
     void slotLeftJumpToOriginalFileRequested(int diffFileIndex,
                                              int lineNumber, int columnNumber);
@@ -86,7 +87,6 @@ private slots:
     void leftCursorPositionChanged();
     void rightCursorPositionChanged();
 
-private:
     void showDiff();
 
     SideDiffEditorWidget *m_leftEditor;

@@ -76,6 +76,9 @@ public:
     bool reload(QString *errorString, ReloadFlag flag, ChangeType type) override;
     OpenResult open(QString *errorString, const QString &fileName,
                     const QString &realFileName) override;
+    bool isReloading() const { return m_isReloading; }
+    void beginReload();
+    void endReload(bool success);
 
     QString plainText() const;
 
@@ -85,10 +88,6 @@ signals:
     void descriptionChanged();
     void chunkActionsRequested(QMenu *menu, int diffFileIndex, int chunkIndex);
     void requestMoreInformation();
-
-public slots:
-    void beginReload();
-    void endReload(bool success);
 
 private:
     void setController(DiffEditorController *controller);
@@ -101,6 +100,7 @@ private:
     int m_contextLineCount;
     bool m_isContextLineCountForced;
     bool m_ignoreWhitespace;
+    bool m_isReloading = false;
 
     friend class ::DiffEditor::DiffEditorController;
 };

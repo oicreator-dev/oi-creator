@@ -55,7 +55,7 @@ public:
     ~ClangEditorDocumentProcessor();
 
     // BaseEditorDocumentProcessor interface
-    void run() override;
+    void runImpl(const CppTools::BaseEditorDocumentParser::UpdateParams &updateParams) override;
     void semanticRehighlight() override;
     void recalculateSemanticInfoDetached(bool force) override;
     CppTools::SemanticInfo recalculateSemanticInfo() override;
@@ -82,6 +82,8 @@ public:
 
     void editorDocumentTimerRestarted() override;
 
+    void setParserConfig(const CppTools::BaseEditorDocumentParser::Configuration config) override;
+
     ClangBackEnd::FileContainer fileContainerWithArguments() const;
 
     void clearDiagnosticsWithFixIts();
@@ -89,10 +91,8 @@ public:
 public:
     static ClangEditorDocumentProcessor *get(const QString &filePath);
 
-private slots:
-    void onParserFinished();
-
 private:
+    void onParserFinished();
     void updateProjectPartAndTranslationUnitForEditor();
     void registerTranslationUnitForEditor(CppTools::ProjectPart *projectPart);
     void updateTranslationUnitIfProjectPartExists();

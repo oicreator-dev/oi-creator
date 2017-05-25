@@ -57,6 +57,7 @@ using namespace ProjectExplorer::Internal;
 namespace {
 const int MAX_LINECOUNT = 100000;
 const char SETTINGS_KEY[] = "ProjectExplorer/CompileOutput/Zoom";
+const char C_COMPILE_OUTPUT[] = "ProjectExplorer.CompileOutput";
 }
 
 namespace ProjectExplorer {
@@ -148,7 +149,7 @@ CompileOutputWindow::CompileOutputWindow(QAction *cancelBuildAction) :
     m_zoomOutButton(new QToolButton),
     m_escapeCodeHandler(new Utils::AnsiEscapeCodeHandler)
 {
-    Core::Context context(Constants::C_COMPILE_OUTPUT);
+    Core::Context context(C_COMPILE_OUTPUT);
     m_outputWindow = new CompileOutputTextEdit(context);
     m_outputWindow->setWindowTitle(displayName());
     m_outputWindow->setWindowIcon(Icons::WINDOW.icon());
@@ -245,7 +246,7 @@ QWidget *CompileOutputWindow::outputWidget(QWidget *)
 
 QList<QWidget *> CompileOutputWindow::toolBarWidgets() const
 {
-     return { m_cancelBuildButton, m_zoomInButton, m_zoomOutButton };
+     return {m_cancelBuildButton, m_zoomInButton, m_zoomOutButton};
 }
 
 void CompileOutputWindow::appendText(const QString &text, BuildStep::OutputFormat format)
@@ -254,18 +255,18 @@ void CompileOutputWindow::appendText(const QString &text, BuildStep::OutputForma
     Theme *theme = Utils::creatorTheme();
     QTextCharFormat textFormat;
     switch (format) {
-    case BuildStep::NormalOutput:
+    case BuildStep::OutputFormat::Stdout:
         textFormat.setForeground(theme->color(Theme::TextColorNormal));
         textFormat.setFontWeight(QFont::Normal);
         break;
-    case BuildStep::ErrorOutput:
+    case BuildStep::OutputFormat::Stderr:
         textFormat.setForeground(theme->color(Theme::OutputPanes_ErrorMessageTextColor));
         textFormat.setFontWeight(QFont::Normal);
         break;
-    case BuildStep::MessageOutput:
+    case BuildStep::OutputFormat::NormalMessage:
         textFormat.setForeground(theme->color(Theme::OutputPanes_MessageOutput));
         break;
-    case BuildStep::ErrorMessageOutput:
+    case BuildStep::OutputFormat::ErrorMessage:
         textFormat.setForeground(theme->color(Theme::OutputPanes_ErrorMessageTextColor));
         textFormat.setFontWeight(QFont::Bold);
         break;

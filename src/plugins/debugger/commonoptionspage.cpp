@@ -115,13 +115,11 @@ QWidget *CommonOptionsPage::widget()
                        "will automatically open views associated with the current location.") + QLatin1Char('\n');
         auto checkBoxCloseSourceBuffersOnExit = new QCheckBox(behaviorBox);
         checkBoxCloseSourceBuffersOnExit->setText(tr("Close temporary source views on debugger exit"));
-        checkBoxCloseSourceBuffersOnExit->setToolTip(t + tr("Select this option to close "
-                                                            "automatically opened source views when the debugger exits."));
+        checkBoxCloseSourceBuffersOnExit->setToolTip(t + tr("Closes automatically opened source views when the debugger exits."));
 
         auto checkBoxCloseMemoryBuffersOnExit = new QCheckBox(behaviorBox);
         checkBoxCloseMemoryBuffersOnExit->setText(tr("Close temporary memory views on debugger exit"));
-        checkBoxCloseMemoryBuffersOnExit->setToolTip(t + tr("Select this option to close "
-                                                            "automatically opened memory views when the debugger exits."));
+        checkBoxCloseMemoryBuffersOnExit->setToolTip(t + tr("Closes automatically opened memory views when the debugger exits."));
 
         auto checkBoxSwitchModeOnExit = new QCheckBox(behaviorBox);
         checkBoxSwitchModeOnExit->setText(tr("Switch to previous mode on debugger exit"));
@@ -359,15 +357,6 @@ QWidget *LocalsAndExpressionsOptionsPage::widget()
         m_group.insert(action(ShowQObjectNames), checkBoxShowQObjectNames);
         m_group.insert(action(DisplayStringLimit), spinBoxDisplayStringLimit);
         m_group.insert(action(MaximalStringLength), spinBoxMaximalStringLength);
-
-#ifndef QT_DEBUG
-#if 0
-        cmd = am->registerAction(m_dumpLogAction, DUMP_LOG, globalcontext);
-        //cmd->setDefaultKeySequence(QKeySequence(tr("Ctrl+D,Ctrl+L")));
-        cmd->setDefaultKeySequence(QKeySequence(QCoreApplication::translate("Debugger", "Ctrl+Shift+F11")));
-        mdebug->addAction(cmd);
-#endif
-#endif
     }
     return m_widget;
 }

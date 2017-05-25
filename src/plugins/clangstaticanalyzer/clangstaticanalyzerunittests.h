@@ -26,7 +26,6 @@
 #pragma once
 
 #include <QObject>
-#include <QTemporaryDir>
 
 namespace CppTools { namespace Tests { class TemporaryCopiedDir; } }
 
@@ -46,6 +45,9 @@ private slots:
     void cleanupTestCase();
     void testProject();
     void testProject_data();
+
+private:
+    void addTestRow(const QByteArray &relativeFilePath, int expectedDiagCount);
 
 private:
     ClangStaticAnalyzerTool * const m_analyzerTool;

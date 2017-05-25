@@ -95,6 +95,9 @@ public:
     bool selectBlockUp() override;
     bool selectBlockDown() override;
 
+    static void updateWidgetHighlighting(QWidget *widget, bool highlight);
+    static bool isWidgetHighlighted(QWidget *widget);
+
 protected:
     bool event(QEvent *e) override;
     void contextMenuEvent(QContextMenuEvent *) override;
@@ -108,9 +111,6 @@ protected:
 
     void slotCodeStyleSettingsChanged(const QVariant &) override;
 
-public:
-    using HeaderErrorDiagnosticWidgetCreator = std::function<QWidget*()>;
-
 private:
     void updateFunctionDeclDefLink();
     void updateFunctionDeclDefLinkNow();
@@ -121,12 +121,12 @@ private:
 
     void onCodeWarningsUpdated(unsigned revision,
                                const QList<QTextEdit::ExtraSelection> selections,
-                               const HeaderErrorDiagnosticWidgetCreator &creator,
                                const TextEditor::RefactorMarkers &refactorMarkers);
     void onIfdefedOutBlocksUpdated(unsigned revision,
                                    const QList<TextEditor::BlockRange> ifdefedOutBlocks);
 
-    void updateHeaderErrorWidgets();
+    void onShowInfoBarAction(const Core::Id &id, bool show);
+
     void updateSemanticInfo(const CppTools::SemanticInfo &semanticInfo,
                             bool updateUseSelectionSynchronously = false);
     void updatePreprocessorButtonTooltip();
@@ -144,8 +144,6 @@ private:
 
     void renameSymbolUnderCursorClang();
     void renameSymbolUnderCursorBuiltin();
-
-    void addHeaderErrorInfoBarEntry() const;
 
     CppTools::ProjectPart *projectPart() const;
 

@@ -110,7 +110,7 @@ namespace Internal {
 
 ShortcutButton::ShortcutButton(QWidget *parent)
     : QPushButton(parent)
-    , m_key({{ 0, 0, 0, 0 }})
+    , m_key({{0, 0, 0, 0}})
 {
     // Using ShortcutButton::tr() as workaround for QTBUG-34128
     setToolTip(ShortcutButton::tr("Click and type the new key sequence."));
@@ -499,7 +499,7 @@ void ShortcutSettingsWidget::initialize()
         const QString section = identifier.left(pos);
         const QString subId = identifier.mid(pos + 1);
         if (!sections.contains(section)) {
-            QTreeWidgetItem *categoryItem = new QTreeWidgetItem(commandList(), QStringList() << section);
+            QTreeWidgetItem *categoryItem = new QTreeWidgetItem(commandList(), QStringList(section));
             QFont f = categoryItem->font(0);
             f.setBold(true);
             categoryItem->setFont(0, f);

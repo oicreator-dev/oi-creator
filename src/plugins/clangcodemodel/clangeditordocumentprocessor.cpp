@@ -80,6 +80,9 @@ ClangEditorDocumentProcessor::ClangEditorDocumentProcessor(
     connect(&m_updateTranslationUnitTimer, &QTimer::timeout,
             this, &ClangEditorDocumentProcessor::updateTranslationUnitIfProjectPartExists);
 
+    connect(m_parser.data(), &ClangEditorDocumentParser::projectPartInfoUpdated,
+            this, &BaseEditorDocumentProcessor::projectPartInfoUpdated);
+
     // Forwarding the semantic info from the builtin processor enables us to provide all
     // editor (widget) related features that are not yet implemented by the clang plugin.
     connect(&m_builtinProcessor, &CppTools::BuiltinEditorDocumentProcessor::cppDocumentUpdated,
@@ -101,7 +104,8 @@ ClangEditorDocumentProcessor::~ClangEditorDocumentProcessor()
     }
 }
 
-void ClangEditorDocumentProcessor::run()
+void ClangEditorDocumentProcessor::runImpl(
+        const CppTools::BaseEditorDocumentParser::UpdateParams &updateParams)
 {
     m_updateTranslationUnitTimer.start();
 
@@ -114,12 +118,11 @@ void ClangEditorDocumentProcessor::run()
     m_parserRevision = revision();
     connect(&m_parserWatcher, &QFutureWatcher<void>::finished,
             this, &ClangEditorDocumentProcessor::onParserFinished);
-    const CppTools::WorkingCopy workingCopy = CppTools::CppModelManager::instance()->workingCopy();
-    const QFuture<void> future = ::Utils::runAsync(&runParser, parser(), workingCopy);
+    const QFuture<void> future = ::Utils::runAsync(&runParser, parser(), updateParams);
     m_parserWatcher.setFuture(future);
 
     // Run builtin processor
-    m_builtinProcessor.run();
+    m_builtinProcessor.runImpl(updateParams);
 }
 
 void ClangEditorDocumentProcessor::recalculateSemanticInfoDetached(bool force)
@@ -277,6 +280,13 @@ void ClangEditorDocumentProcessor::editorDocumentTimerRestarted()
     m_updateTranslationUnitTimer.stop(); // Wait for the next call to run().
 }
 
+void ClangEditorDocumentProcessor::setParserConfig(
+        const CppTools::BaseEditorDocumentParser::Configuration config)
+{
+    m_parser->setConfiguration(config);
+    m_builtinProcessor.parser()->setConfiguration(config);
+}
+
 ClangBackEnd::FileContainer ClangEditorDocumentProcessor::fileContainerWithArguments() const
 {
     return fileContainerWithArguments(m_projectPart.data());
@@ -302,7 +312,7 @@ static bool isProjectPartLoadedOrIsFallback(CppTools::ProjectPart::Ptr projectPa
 
 void ClangEditorDocumentProcessor::updateProjectPartAndTranslationUnitForEditor()
 {
-    const CppTools::ProjectPart::Ptr projectPart = m_parser->projectPart();
+    const CppTools::ProjectPart::Ptr projectPart = m_parser->projectPartInfo().projectPart;
 
     if (isProjectPartLoadedOrIsFallback(projectPart)) {
         registerTranslationUnitForEditor(projectPart.data());
@@ -321,18 +331,24 @@ void ClangEditorDocumentProcessor::onParserFinished()
 
 void ClangEditorDocumentProcessor::registerTranslationUnitForEditor(CppTools::ProjectPart *projectPart)
 {
+    // On registration we send the document content immediately as an unsaved
+    // file, because
+    //   (1) a refactoring action might have opened and already modified
+    //       this document.
+    //   (2) it prevents an extra preamble generation on first user
+    //       modification of the document in case the line endings on disk
+    //       differ from the ones returned by textDocument()->toPlainText(),
+    //       like on Windows.
+
     if (m_projectPart) {
-        if (projectPart->id() != m_projectPart->id()) {
-            m_ipcCommunicator.unregisterTranslationUnitsForEditor({fileContainerWithArguments()});
-            m_ipcCommunicator.registerTranslationUnitsForEditor({fileContainerWithArguments(projectPart)});
-        }
-    } else if (revision() != 1) {
-        // E.g. a refactoring action opened the document and modified it immediately.
-        m_ipcCommunicator.registerTranslationUnitsForEditor({{fileContainerWithArgumentsAndDocumentContent(projectPart)}});
-        ClangCodeModel::Utils::setLastSentDocumentRevision(filePath(), revision());
-    } else {
-        m_ipcCommunicator.registerTranslationUnitsForEditor({{fileContainerWithArguments(projectPart)}});
+        if (projectPart->id() == m_projectPart->id())
+            return;
+        m_ipcCommunicator.unregisterTranslationUnitsForEditor({fileContainerWithArguments()});
     }
+
+    m_ipcCommunicator.registerTranslationUnitsForEditor(
+        {fileContainerWithArgumentsAndDocumentContent(projectPart)});
+    ClangCodeModel::Utils::setLastSentDocumentRevision(filePath(), revision());
 }
 
 void ClangEditorDocumentProcessor::updateTranslationUnitIfProjectPartExists()
@@ -384,8 +400,17 @@ static CppTools::ProjectPart projectPartForLanguageOption(CppTools::ProjectPart 
 static QStringList languageOptions(const QString &filePath, CppTools::ProjectPart *projectPart)
 {
     const auto theProjectPart = projectPartForLanguageOption(projectPart);
+
+    // Determine file kind with respect to ambiguous headers.
+    CppTools::ProjectFile::Kind fileKind = CppTools::ProjectFile::classify(filePath);
+    if (fileKind == CppTools::ProjectFile::AmbiguousHeader) {
+        fileKind = theProjectPart.languageVersion <= CppTools::ProjectPart::LatestCVersion
+             ? CppTools::ProjectFile::CHeader
+             : CppTools::ProjectFile::CXXHeader;
+    }
+
     CppTools::CompilerOptionsBuilder builder(theProjectPart);
-    builder.addLanguageOption(CppTools::ProjectFile::classify(filePath));
+    builder.addLanguageOption(fileKind);
 
     return builder.options();
 }

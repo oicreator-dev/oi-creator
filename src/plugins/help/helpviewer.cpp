@@ -30,10 +30,9 @@
 #include <coreplugin/icore.h>
 
 #include <utils/fileutils.h>
+#include <utils/temporarydirectory.h>
 
 #include <QFileInfo>
-#include <QStringBuilder>
-#include <QDir>
 #include <QUrl>
 
 #include <QApplication>
@@ -48,37 +47,37 @@ struct ExtensionMap {
     const char *extension;
     const char *mimeType;
 } extensionMap[] = {
-    { ".bmp", "image/bmp" },
-    { ".css", "text/css" },
-    { ".gif", "image/gif" },
-    { ".html", "text/html" },
-    { ".htm", "text/html" },
-    { ".ico", "image/x-icon" },
-    { ".jpeg", "image/jpeg" },
-    { ".jpg", "image/jpeg" },
-    { ".js", "application/x-javascript" },
-    { ".mng", "video/x-mng" },
-    { ".pbm", "image/x-portable-bitmap" },
-    { ".pgm", "image/x-portable-graymap" },
-    { ".pdf", "application/pdf" },
-    { ".png", "image/png" },
-    { ".ppm", "image/x-portable-pixmap" },
-    { ".rss", "application/rss+xml" },
-    { ".svg", "image/svg+xml" },
-    { ".svgz", "image/svg+xml" },
-    { ".text", "text/plain" },
-    { ".tif", "image/tiff" },
-    { ".tiff", "image/tiff" },
-    { ".txt", "text/plain" },
-    { ".xbm", "image/x-xbitmap" },
-    { ".xml", "text/xml" },
-    { ".xpm", "image/x-xpm" },
-    { ".xsl", "text/xsl" },
-    { ".xhtml", "application/xhtml+xml" },
-    { ".wml", "text/vnd.wap.wml" },
-    { ".wmlc", "application/vnd.wap.wmlc" },
-    { "about:blank", 0 },
-    { 0, 0 }
+    {".bmp", "image/bmp"},
+    {".css", "text/css"},
+    {".gif", "image/gif"},
+    {".html", "text/html"},
+    {".htm", "text/html"},
+    {".ico", "image/x-icon"},
+    {".jpeg", "image/jpeg"},
+    {".jpg", "image/jpeg"},
+    {".js", "application/x-javascript"},
+    {".mng", "video/x-mng"},
+    {".pbm", "image/x-portable-bitmap"},
+    {".pgm", "image/x-portable-graymap"},
+    {".pdf", "application/pdf"},
+    {".png", "image/png"},
+    {".ppm", "image/x-portable-pixmap"},
+    {".rss", "application/rss+xml"},
+    {".svg", "image/svg+xml"},
+    {".svgz", "image/svg+xml"},
+    {".text", "text/plain"},
+    {".tif", "image/tiff"},
+    {".tiff", "image/tiff"},
+    {".txt", "text/plain"},
+    {".xbm", "image/x-xbitmap"},
+    {".xml", "text/xml"},
+    {".xpm", "image/x-xpm"},
+    {".xsl", "text/xsl"},
+    {".xhtml", "application/xhtml+xml"},
+    {".wml", "text/vnd.wap.wml"},
+    {".wmlc", "application/vnd.wap.wmlc"},
+    {"about:blank", 0},
+    {0, 0}
 };
 
 HelpViewer::HelpViewer(QWidget *parent)
@@ -135,7 +134,7 @@ bool HelpViewer::launchWithExternalApp(const QUrl &url)
 
         const QString& path = resolvedUrl.path();
         if (!canOpenPage(path)) {
-            Utils::TempFileSaver saver(QDir::tempPath()
+            Utils::TempFileSaver saver(Utils::TemporaryDirectory::masterDirectoryPath()
                 + "/qtchelp_XXXXXX." + QFileInfo(path).completeSuffix());
             saver.setAutoRemove(false);
             if (!saver.hasError())

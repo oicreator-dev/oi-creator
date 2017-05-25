@@ -26,24 +26,34 @@
 #pragma once
 
 #include <sourcelocationscontainer.h>
+#include <sourcerangescontainer.h>
 
 #if defined(__GNUC__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
+#    pragma GCC diagnostic push
+#    pragma GCC diagnostic ignored "-Wunused-parameter"
+#elif defined(_MSC_VER)
+#    pragma warning(push)
+#    pragma warning( disable : 4100 )
 #endif
 
 #include <clang/Basic/SourceManager.h>
+#include <clang/Lex/Lexer.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/FileUtilities.h>
 
 #if defined(__GNUC__)
-#pragma GCC diagnostic pop
+#    pragma GCC diagnostic pop
+#elif defined(_MSC_VER)
+#    pragma warning(pop)
 #endif
+
+#include <iterator>
+#include <cctype>
 
 namespace ClangBackEnd {
 
 inline
-llvm::SmallString<256> absolutePath(const char *path)
+llvm::SmallString<256> absolutePath(const llvm::StringRef &path)
 {
     llvm::SmallString<256> absolutePath(path);
 
@@ -75,10 +85,12 @@ void appendSourceLocationsToSourceLocationsContainer(
 
     for (const auto &sourceLocation : sourceLocations) {
         clang::FullSourceLoc fullSourceLocation(sourceLocation, sourceManager);
-        auto fileId = fullSourceLocation.getFileID();
-        auto fileEntry = sourceManager.getFileEntryForID(fileId);
+        const auto decomposedLoction = fullSourceLocation.getDecomposedLoc();
+        const auto fileId = decomposedLoction.first;
+        const auto offset = decomposedLoction.second;
+        const auto fileEntry = sourceManager.getFileEntryForID(fileId);
         auto filePath = absolutePath(fileEntry->getName());
-        auto fileName = llvm::sys::path::filename(filePath);
+        const auto fileName = llvm::sys::path::filename(filePath);
         llvm::sys::path::remove_filename(filePath);
 
         sourceLocationsContainer.insertFilePath(fileId.getHashValue(),
@@ -86,8 +98,11 @@ void appendSourceLocationsToSourceLocationsContainer(
                                                 fromNativePath(fileName));
         sourceLocationsContainer.insertSourceLocation(fileId.getHashValue(),
                                                       fullSourceLocation.getSpellingLineNumber(),
-                                                      fullSourceLocation.getSpellingColumnNumber());
+                                                      fullSourceLocation.getSpellingColumnNumber(),
+                                                      offset);
     }
 }
+
+
 
 } // namespace ClangBackEnd

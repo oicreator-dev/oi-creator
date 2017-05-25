@@ -166,23 +166,24 @@ SearchResultWidget::SearchResultWidget(QWidget *parent) :
     connect(m_cancelButton, &QAbstractButton::clicked, this, &SearchResultWidget::cancel);
     m_searchAgainButton = new QToolButton(topFindWidget);
     m_searchAgainButton->setToolTip(tr("Repeat the search with same parameters."));
-    m_searchAgainButton->setText(tr("Search again"));
+    m_searchAgainButton->setText(tr("&Search Again"));
     m_searchAgainButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
     m_searchAgainButton->setVisible(false);
     connect(m_searchAgainButton, &QAbstractButton::clicked, this, &SearchResultWidget::searchAgain);
 
-    m_replaceLabel = new QLabel(tr("Replace with:"), m_topReplaceWidget);
+    m_replaceLabel = new QLabel(tr("Repla&ce with:"), m_topReplaceWidget);
     m_replaceTextEdit = new WideEnoughLineEdit(m_topReplaceWidget);
+    m_replaceLabel->setBuddy(m_replaceTextEdit);
     m_replaceTextEdit->setMinimumWidth(120);
     m_replaceTextEdit->setEnabled(false);
     m_replaceTextEdit->setTabOrder(m_replaceTextEdit, m_searchResultTreeView);
     m_replaceButton = new QToolButton(m_topReplaceWidget);
     m_replaceButton->setToolTip(tr("Replace all occurrences."));
-    m_replaceButton->setText(tr("Replace"));
+    m_replaceButton->setText(tr("&Replace"));
     m_replaceButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
     m_replaceButton->setEnabled(false);
     m_preserveCaseCheck = new QCheckBox(m_topReplaceWidget);
-    m_preserveCaseCheck->setText(tr("Preserve case"));
+    m_preserveCaseCheck->setText(tr("Preser&ve case"));
     m_preserveCaseCheck->setEnabled(false);
 
     m_preserveCaseCheck->setChecked(Find::hasFindFlag(FindPreserveCase));
@@ -227,15 +228,15 @@ void SearchResultWidget::setInfo(const QString &label, const QString &toolTip, c
     m_searchTerm->setVisible(!term.isEmpty());
 }
 
-void SearchResultWidget::addResult(const QString &fileName, int lineNumber, const QString &rowText,
-    int searchTermStart, int searchTermLength, const QVariant &userData)
+void SearchResultWidget::addResult(const QString &fileName,
+                                   const QString &rowText,
+                                   Search::TextRange mainRange,
+                                   const QVariant &userData)
 {
     SearchResultItem item;
-    item.path = QStringList() << QDir::toNativeSeparators(fileName);
-    item.lineNumber = lineNumber;
+    item.path = QStringList({QDir::toNativeSeparators(fileName)});
+    item.mainRange = mainRange;
     item.text = rowText;
-    item.textMarkPos = searchTermStart;
-    item.textMarkLength = searchTermLength;
     item.useTextEditorFont = true;
     item.userData = userData;
     addResults(QList<SearchResultItem>() << item, SearchResult::AddOrdered);

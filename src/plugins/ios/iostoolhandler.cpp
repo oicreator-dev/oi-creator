@@ -101,7 +101,7 @@ public:
                 if (!fi.isCanceled())
                     emit logMessage(QString::fromLocal8Bit(tailProcess->readAll()));
             });
-            tailProcess->start(QStringLiteral("tail"), QStringList() << "-f" << file->fileName());
+            tailProcess->start(QStringLiteral("tail"), {"-f", file->fileName()});
         };
 
         auto processDeleter = [](QProcess *process) {
@@ -248,6 +248,7 @@ class IosDeviceToolHandlerPrivate : public IosToolHandlerPrivate
 {
 public:
     explicit IosDeviceToolHandlerPrivate(const IosDeviceType &devType, IosToolHandler *q);
+    ~IosDeviceToolHandlerPrivate();
 
 // IosToolHandlerPrivate overrides
 public:
@@ -479,7 +480,7 @@ void IosDeviceToolHandlerPrivate::processXml()
                 stack.append(ParserState(ParserState::AppOutput));
             } else if (elName == QLatin1String("control_char")) {
                 QXmlStreamAttributes attributes = outputParser.attributes();
-                QChar c[1] = { QChar::fromLatin1(static_cast<char>(attributes.value(QLatin1String("code")).toString().toInt())) };
+                QChar c[1] = {QChar::fromLatin1(static_cast<char>(attributes.value(QLatin1String("code")).toString().toInt()))};
                 if (stack.size() > 0 && stack.last().collectChars())
                     stack.last().chars.append(c[0]);
                 stack.append(ParserState(ParserState::ControlChar));
@@ -656,8 +657,11 @@ IosDeviceToolHandlerPrivate::IosDeviceToolHandlerPrivate(const IosDeviceType &de
     : IosToolHandlerPrivate(devType, q)
 {
     auto deleter = [](QProcess *p) {
-        p->kill();
-        p->waitForFinished(10000);
+        if (p->state() != QProcess::NotRunning) {
+            p->kill();
+            if (!p->waitForFinished(2000))
+                p->terminate();
+        }
         delete p;
     };
     process = std::shared_ptr<QProcess>(new QProcess, deleter);
@@ -694,6 +698,20 @@ IosDeviceToolHandlerPrivate::IosDeviceToolHandlerPrivate(const IosDeviceType &de
                      std::bind(&IosDeviceToolHandlerPrivate::subprocessError, this, _1));
 
     QObject::connect(&killTimer, &QTimer::timeout, std::bind(&IosDeviceToolHandlerPrivate::killProcess, this));
+}
+
+IosDeviceToolHandlerPrivate::~IosDeviceToolHandlerPrivate()
+{
+    if (isRunning()) {
+        // Disconnect the signals to avoid notifications while destructing.
+        // QTCREATORBUG-18147
+        process->disconnect();
+        // Quit ios-tool gracefully before kill is executed.
+        process->write("k\n\r");
+        process->closeWriteChannel();
+        // Give some time to ios-tool to finish.
+        process->waitForFinished(2000);
+    }
 }
 
 void IosDeviceToolHandlerPrivate::requestTransferApp(const QString &bundlePath,
@@ -848,13 +866,12 @@ void IosSimulatorToolHandlerPrivate::requestRunApp(const QString &appBundlePath,
     }
 
     auto onSimulatorStart = [this, extraArgs] (const SimulatorControl::ResponseData &response) {
-        if (isResponseValid(response))
+        if (!isResponseValid(response))
             return;
         if (response.success) {
             launchAppOnSimulator(extraArgs);
         } else {
-            errorMsg(IosToolHandler::tr("Application launch on Simulator failed. Simulator not running.")
-                     .arg(bundlePath));
+            errorMsg(IosToolHandler::tr("Application launch on Simulator failed. Simulator not running."));
             didStartApp(bundlePath, deviceId, Ios::IosToolHandler::Failure);
         }
     };
@@ -915,11 +932,8 @@ void IosSimulatorToolHandlerPrivate::launchAppOnSimulator(const QStringList &ext
 
     if (captureConsole) {
         const QString fileTemplate = CONSOLE_PATH_TEMPLATE.arg(deviceId).arg(bundleId);
-        stdoutFile.reset(new QTemporaryFile);
-        stdoutFile->setFileTemplate(fileTemplate + QStringLiteral(".stdout"));
-
-        stderrFile.reset(new QTemporaryFile);
-        stderrFile->setFileTemplate(fileTemplate + QStringLiteral(".stderr"));
+        stdoutFile.reset(new QTemporaryFile(fileTemplate + ".stdout"));
+        stderrFile.reset(new QTemporaryFile(fileTemplate + ".stderr"));
 
         captureConsole = stdoutFile->open() && stderrFile->open();
         if (!captureConsole)

@@ -136,7 +136,7 @@ void PdbEngine::setupEngine()
         notifyEngineSetupFailed();
     }
 
-    QStringList args = { bridge, scriptFile.fileName() };
+    QStringList args = {bridge, scriptFile.fileName()};
     args.append(Utils::QtcProcess::splitArgs(runParameters().inferior.workingDirectory));
     showMessage("STARTING " + m_interpreter + QLatin1Char(' ') + args.join(QLatin1Char(' ')));
     m_proc.setEnvironment(runParameters().debugger.environment.toStringList());
@@ -559,7 +559,7 @@ void PdbEngine::updateLocals()
     watchHandler()->appendFormatRequests(&cmd);
     watchHandler()->appendWatchersAndTooltipRequests(&cmd);
 
-    const static bool alwaysVerbose = !qgetenv("QTC_DEBUGGER_PYTHON_VERBOSE").isEmpty();
+    const static bool alwaysVerbose = qEnvironmentVariableIsSet("QTC_DEBUGGER_PYTHON_VERBOSE");
     cmd.arg("passexceptions", alwaysVerbose);
     cmd.arg("fancy", boolSetting(UseDebuggingHelpers));
 

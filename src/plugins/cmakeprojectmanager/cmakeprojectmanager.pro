@@ -2,10 +2,12 @@ DEFINES += CMAKEPROJECTMANAGER_LIBRARY
 include(../../qtcreatorplugin.pri)
 
 HEADERS = builddirmanager.h \
+    builddirreader.h \
     cmakebuildinfo.h \
     cmakebuildstep.h \
     cmakeconfigitem.h \
     cmakeproject.h \
+    cmakeprojectimporter.h \
     cmakeprojectplugin.h \
     cmakeprojectmanager.h \
     cmakeprojectconstants.h \
@@ -24,17 +26,22 @@ HEADERS = builddirmanager.h \
     cmakekitinformation.h \
     cmakekitconfigwidget.h \
     cmakecbpparser.h \
-    cmakefile.h \
     cmakebuildsettingswidget.h \
     cmakeindenter.h \
     cmakeautocompleter.h \
     configmodel.h \
-    configmodelitemdelegate.h
+    configmodelitemdelegate.h \
+    servermode.h \
+    servermodereader.h \
+    tealeafreader.h \
+    treescanner.h
 
 SOURCES = builddirmanager.cpp \
+    builddirreader.cpp \
     cmakebuildstep.cpp \
     cmakeconfigitem.cpp \
     cmakeproject.cpp \
+    cmakeprojectimporter.cpp \
     cmakeprojectplugin.cpp \
     cmakeprojectmanager.cpp \
     cmakeprojectnodes.cpp \
@@ -51,11 +58,14 @@ SOURCES = builddirmanager.cpp \
     cmakekitinformation.cpp \
     cmakekitconfigwidget.cpp \
     cmakecbpparser.cpp \
-    cmakefile.cpp \
     cmakebuildsettingswidget.cpp \
     cmakeindenter.cpp \
     cmakeautocompleter.cpp \
     configmodel.cpp \
-    configmodelitemdelegate.cpp
+    configmodelitemdelegate.cpp \
+    servermode.cpp \
+    servermodereader.cpp \
+    tealeafreader.cpp \
+    treescanner.cpp
 
 RESOURCES += cmakeproject.qrc

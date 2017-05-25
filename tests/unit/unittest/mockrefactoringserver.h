@@ -25,12 +25,9 @@
 
 #pragma once
 
-#include <refactoringserverinterface.h>
+#include "googletest.h"
 
-#include <gmock/gmock.h>
-#include <gmock/gmock-matchers.h>
-#include <gtest/gtest.h>
-#include "gtest-qt-printing.h"
+#include <refactoringserverinterface.h>
 
 class MockRefactoringServer : public ClangBackEnd::RefactoringServerInterface
 {
@@ -41,8 +38,19 @@ public:
     MOCK_METHOD1(requestSourceLocationsForRenamingMessage,
                  void (const ClangBackEnd::RequestSourceLocationsForRenamingMessage&));
 
+    MOCK_METHOD1(requestSourceRangesAndDiagnosticsForQueryMessage,
+                 void (const ClangBackEnd::RequestSourceRangesAndDiagnosticsForQueryMessage&));
+
+    MOCK_METHOD0(cancel,
+                 void ());
+
     void requestSourceLocationsForRenamingMessage(ClangBackEnd::RequestSourceLocationsForRenamingMessage &&message) override
     {
         requestSourceLocationsForRenamingMessage(message);
+    }
+
+    void requestSourceRangesAndDiagnosticsForQueryMessage(ClangBackEnd::RequestSourceRangesAndDiagnosticsForQueryMessage &&message) override
+    {
+        requestSourceRangesAndDiagnosticsForQueryMessage(message);
     }
 };

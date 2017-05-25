@@ -31,16 +31,6 @@
 
 #include <cstring>
 
-#pragma push_macro("constexpr")
-#ifndef __cpp_constexpr
-#define constexpr
-#endif
-
-#pragma push_macro("noexcept")
-#ifndef __cpp_noexcept
-#define noexcept
-#endif
-
 namespace Utils {
 
 class SmallStringView
@@ -60,7 +50,7 @@ public:
     }
 
     template<typename Type,
-             typename = typename std::enable_if<std::is_pointer<Type>::value>::type
+             typename = std::enable_if_t<std::is_pointer<Type>::value>
              >
     SmallStringView(Type characterPointer) noexcept
         : m_pointer(characterPointer),
@@ -135,6 +125,3 @@ bool operator!=(const SmallStringView& first, const SmallStringView& second) noe
 }
 
 } // namespace Utils
-
-#pragma pop_macro("noexcept")
-#pragma pop_macro("constexpr")

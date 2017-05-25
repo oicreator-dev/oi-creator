@@ -23,22 +23,46 @@
 **
 ****************************************************************************/
 
-#ifndef CLANGBACKEND_REFACTORINGSERVER_H
-#define CLANGBACKEND_REFACTORINGSERVER_H
+#pragma once
 
 #include <refactoringserverinterface.h>
 
+#include <future>
+#include <vector>
+
 namespace ClangBackEnd {
+
+class SourceRangesAndDiagnosticsForQueryMessage;
+
+namespace V2 {
+class FileContainer;
+}
 
 class RefactoringServer : public RefactoringServerInterface
 {
+    using Future = std::future<SourceRangesAndDiagnosticsForQueryMessage>;
 public:
     RefactoringServer();
 
     void end() override;
     void requestSourceLocationsForRenamingMessage(RequestSourceLocationsForRenamingMessage &&message) override;
+    void requestSourceRangesAndDiagnosticsForQueryMessage(RequestSourceRangesAndDiagnosticsForQueryMessage &&message) override;
+    void cancel() override;
+
+    bool isCancelingJobs() const;
+
+    void supersedePollEventLoop(std::function<void()> &&pollEventLoop);
+
+private:
+    void gatherSourceRangesAndDiagnosticsForQueryMessage(std::vector<V2::FileContainer> &&sources,
+                                                         std::vector<V2::FileContainer> &&unsaved,
+                                                         Utils::SmallString &&query);
+    std::size_t waitForNewSourceRangesAndDiagnosticsForQueryMessage(std::vector<Future> &futures);
+
+private:
+    std::function<void()> pollEventLoop;
+    std::atomic_bool cancelWork{false};
+
 };
 
 } // namespace ClangBackEnd
-
-#endif // CLANGBACKEND_REFACTORINGSERVER_H

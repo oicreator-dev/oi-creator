@@ -487,9 +487,20 @@ def qdump__QFile(d, value):
     # 9fc0965 and a373ffcd change the layout of the private structure
     qtVersion = d.qtVersion()
     is32bit = d.ptrSize() == 4
-    if qtVersion >= 0x050600:
+    if qtVersion >= 0x050700:
         if d.isWindowsTarget():
-            offset = 164 if is32bit else 248
+            if d.isMsvcTarget():
+                offset = 184 if is32bit else 248
+            else:
+                offset = 172 if is32bit else 248
+        else:
+            offset = 168 if is32bit else 248
+    elif qtVersion >= 0x050600:
+        if d.isWindowsTarget():
+            if d.isMsvcTarget():
+                offset = 184 if is32bit else 248
+            else:
+                offset = 180 if is32bit else 248
         else:
             offset = 168 if is32bit else 248
     elif qtVersion >= 0x050500:
@@ -631,7 +642,10 @@ def qdump__QFiniteStack(d, value):
 def qdump__QFlags(d, value):
     i = value.split('{int}')[0]
     enumType = value.type[0]
-    d.putValue(i.cast('enum ' + enumType.name).display())
+    if d.isGdb:
+        d.putValue(i.cast('enum ' + enumType.name).display())
+    else:
+        d.putValue(i.cast(enumType.name).display())
     d.putNumChild(0)
 
 
@@ -734,8 +748,13 @@ def qdump__QHostAddress(d, value):
     qtVersion = d.qtVersion()
     tiVersion = d.qtTypeInfoVersion()
     #warn('QT: %x, TI: %s' % (qtVersion, tiVersion))
+    mayNeedParse = True
     if tiVersion is not None:
-        if tiVersion >= 5:
+        if tiVersion >= 16:
+            # After a6cdfacf
+            p, scopeId, a6, a4, protocol = d.split('p{QString}16s{quint32}B', dd)
+            mayNeedParse = False
+        elif tiVersion >= 5:
             # Branch 5.8.0 at f70b4a13  TI: 15
             # Branch 5.7.0 at b6cf0418  TI: 5
             (ipString, scopeId, a6, a4, protocol, isParsed) \
@@ -744,7 +763,7 @@ def qdump__QHostAddress(d, value):
             (ipString, scopeId, a4, pad, a6, protocol, isParsed) \
                 = d.split('{QString}{QString}{quint32}I16sI{bool}', dd)
     elif qtVersion >= 0x050600: # 5.6.0 at f3aabb42
-        if d.ptrSize() == 8:
+        if d.ptrSize() == 8 or d.isWindowsTarget():
             (ipString, scopeId, a4, pad, a6, protocol, isParsed) \
                 = d.split('{QString}{QString}{quint32}I16sI{bool}', dd)
         else:
@@ -757,8 +776,9 @@ def qdump__QHostAddress(d, value):
         (a4, a6, protocol, pad, ipString, isParsed, pad, scopeId) \
                 = d.split('{quint32}16sB@{QString}{bool}@{QString}', dd)
 
-    (ipStringData, ipStringSize, ipStringAlloc) = d.stringData(ipString)
-    if isParsed.integer() and ipStringSize > 0:
+    if mayNeedParse:
+        ipStringData, ipStringSize, ipStringAlloc = d.stringData(ipString)
+    if mayNeedParse and isParsed.integer() and ipStringSize > 0:
         d.putStringValue(ipString)
     else:
         # value.d.d->protocol:
@@ -780,11 +800,13 @@ def qdump__QHostAddress(d, value):
         else:
             d.putValue('<unspecified protocol %s>' % protocol)
 
+    d.putNumChild(4)
     if d.isExpanded():
         with Children(d):
-            d.putSubItem('ipString', ipString)
+            if mayNeedParse:
+                d.putSubItem('ipString', ipString)
+                d.putSubItem('isParsed', isParsed)
             d.putSubItem('scopeId', scopeId)
-            d.putSubItem('isParsed', isParsed)
             d.putSubItem('a', a4)
 
 
@@ -901,6 +923,9 @@ def qdump__QLinkedList(d, value):
 qqLocalesCount = None
 
 def qdump__QLocale(d, value):
+    if d.isMsvcTarget(): # as long as this dumper relies on calling functions skip it for cdb
+        return
+
     # Check for uninitialized 'index' variable. Retrieve size of
     # QLocale data array from variable in qlocale.cpp.
     # Default is 368 in Qt 4.8, 438 in Qt 5.0.1, the last one
@@ -1059,6 +1084,26 @@ def qdump__QMetaObject(d, value):
         with Children(d):
             d.putQObjectGutsHelper(0, 0, -1, value.address(), 'QMetaObject')
             d.putMembersItem(value)
+
+
+def qdump__QObjectPrivate__ConnectionList(d, value):
+    d.putNumChild(1)
+    if d.isExpanded():
+        i = 0
+        with Children(d):
+            first, last = value.split('pp')
+            currentConnection = first
+            connectionType = d.createType('QObjectPrivate::Connection')
+            while currentConnection and currentConnection != last:
+                sender, receiver, slotObj, nextConnectionList, nextp, prev = \
+                    d.split('pppppp', currentConnection)
+                d.putSubItem(i, d.createValue(currentConnection, connectionType))
+                currentConnection = nextp
+                i += 1
+            d.putFields(value)
+        d.putItemCount(i)
+    else:
+        d.putSpecialValue('minimumitemcount', 0)
 
 
 def qdump__QPixmap(d, value):
@@ -1271,7 +1316,12 @@ def qdump__QPolygon(d, value):
 def qdump__QGraphicsPolygonItem(d, value):
     (vtbl, dptr) = value.split('pp')
     # Assume sizeof(QGraphicsPolygonItemPrivate) == 400
-    offset = 308 if d.ptrSize() == 4 else 384
+    if d.ptrSize() == 8:
+        offset = 384
+    elif d.isWindowsTarget():
+        offset = 328 if d.isMsvcTarget() else 320
+    else:
+        offset = 308
     data, size, alloc = d.vectorDataHelper(d.extractPointer(dptr + offset))
     d.putItemCount(size)
     d.putPlotData(data, size, d.createType('QPointF'))
@@ -2205,7 +2255,7 @@ def qdump_64__QV4__Value(d, value):
             d.putBetterType('%sQV4::Value (object)' % ns)
             #QV4_putObjectValue(d, d.extractPointer(value) + 2 * d.ptrSize())
             arrayVTable = d.symbolAddress(ns + 'QV4::ArrayObject::static_vtbl')
-            warn('ARRAY VTABLE: 0x%x' % arrayVTable)
+            #warn('ARRAY VTABLE: 0x%x' % arrayVTable)
             d.putNumChild(1)
             d.putItem(d.createValue(d.extractPointer(value) + 2 * d.ptrSize(), ns + 'QV4::Object'))
             return
@@ -2555,7 +2605,7 @@ def qdumpHelper_QJsonValue(d, data, base, pv):
         else:
             length = d.extractUInt(data)
             d.putValue(d.readMemory(data + 4, length * 2), 'utf16')
-        d.putNumChild(1)
+        d.putNumChild(0)
         return
     if t == 4:
         d.putType('QJsonValue (Array)')
@@ -2650,7 +2700,8 @@ def qdump__QJsonValue(d, value):
         return
     if t == 3:
         d.putType('QJsonValue (String)')
-        d.putStringValueByAddress(data)
+        elided, base = d.encodeStringHelper(data, d.displayStringLimit)
+        d.putValue(base, 'utf16', elided=elided)
         d.putNumChild(0)
         return
     if t == 4:
@@ -2673,3 +2724,69 @@ def qdump__QJsonArray(d, value):
 def qdump__QJsonObject(d, value):
     qdumpHelper_QJsonObject(d, value['d'].pointer(), value['o'].pointer())
 
+
+def qdump__QSqlResultPrivate(d, value):
+    # QSqlResult *q_ptr;
+    # QPointer<QSqlDriver> sqldriver;
+    # int idx;
+    # QString sql;
+    # bool active;
+    # bool isSel;
+    # QSqlError error;
+    # bool forwardOnly;
+    # QSql::NumericalPrecisionPolicy precisionPolicy;
+    # int bindCount;
+    # QSqlResult::BindingSyntax binds;
+    # QString executedQuery;
+    # QHash<int, QSql::ParamType> types;
+    # QVector<QVariant> values;
+    # QHash<QString, QList<int> > indexes;
+    # QVector<QHolder> holders
+    vptr, qptr, sqldriver1, sqldriver2, idx, pad, sql, active, isSel, pad, \
+        error1, error2, error3, \
+        forwardOnly, pad, precisionPolicy, bindCount, \
+        binds, executedQuery, types, values, indexes, holders = \
+        value.split('ppppi@{QString}bb@pppb@iiii{QString}ppp')
+
+    d.putStringValue(sql)
+    d.putPlainChildren(value)
+
+
+def qdump__QSqlField(d, value):
+    val, dptr = value.split('{QVariant}p')
+    d.putNumChild(1)
+    qdump__QVariant(d, val)
+    d.putBetterType(d.currentType.value.replace('QVariant', 'QSqlField'))
+    d.putPlainChildren(value)
+
+
+def qdump__QLazilyAllocated(d, value):
+    p = value.extractPointer()
+    if p == 0:
+        d.putValue("(null)")
+        d.putNumChild(0)
+    else:
+        d.putItem(d.createValue(p, value.type[0]))
+        d.putBetterType(value.type)
+
+
+def qdump__qfloat16(d, value):
+    h = value.split('H')[0]
+    # Stole^H^H^HHeavily inspired by J.F. Sebastian at
+    # http://math.stackexchange.com/questions/1128204/how-to-convert-
+    # from-floating-point-binary-to-decimal-in-half-precision16-bits
+    sign = h >> 15
+    exp = (h >> 10) & 0b011111
+    fraction = h & (2**10 - 1)
+    if exp == 0:
+        if fraction == 0:
+            res = -0.0 if sign else 0.0
+        else:
+            res = (-1)**sign * fraction / 2**10 * 2**(-14)  # subnormal
+    elif exp == 0b11111:
+        res = ('-inf' if sign else 'inf') if fraction == 0 else 'nan'
+    else:
+        res = (-1)**sign * (1 + fraction / 2**10) * 2**(exp - 15)
+    d.putValue(res)
+    d.putNumChild(1)
+    d.putPlainChildren(value)

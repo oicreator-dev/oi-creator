@@ -33,7 +33,6 @@
 #include <projectexplorer/project.h>
 #include <projectexplorer/target.h>
 #include <projectexplorer/toolchain.h>
-#include <projectexplorer/devicesupport/deviceapplicationrunner.h>
 #include <projectexplorer/kitinformation.h>
 #include <projectexplorer/runnables.h>
 
@@ -67,7 +66,8 @@ public:
                 runConfiguration->extraAspect("Analyzer.Perf.Settings");
         QTC_ASSERT(perfAspect, return);
         perfRecordArguments =
-                perfAspect->currentSettings()->property("perfRecordArguments").toString();
+                perfAspect->currentSettings()->property("perfRecordArguments").toStringList()
+                .join(' ');
     }
 
     const QPointer<AnalyzerRunControl> runControl;
@@ -76,7 +76,7 @@ public:
     QString remoteFifo;
     QString perfRecordArguments;
 
-    DeviceApplicationRunner outputGatherer;
+    ApplicationLauncher outputGatherer;
     QmlDebug::QmlOutputParser outputParser;
 };
 
@@ -144,18 +144,18 @@ void RemoteLinuxAnalyzeSupport::startExecution()
 
     setState(StartingRunner);
 
-    DeviceApplicationRunner *runner = appRunner();
-    connect(runner, &DeviceApplicationRunner::remoteStderr,
+    ApplicationLauncher *runner = appRunner();
+    connect(runner, &ApplicationLauncher::remoteStderr,
             this, &RemoteLinuxAnalyzeSupport::handleRemoteErrorOutput);
-    connect(runner, &DeviceApplicationRunner::remoteStdout,
+    connect(runner, &ApplicationLauncher::remoteStdout,
             this, &RemoteLinuxAnalyzeSupport::handleRemoteOutput);
-    connect(runner, &DeviceApplicationRunner::remoteProcessStarted,
+    connect(runner, &ApplicationLauncher::remoteProcessStarted,
             this, &RemoteLinuxAnalyzeSupport::handleRemoteProcessStarted);
-    connect(runner, &DeviceApplicationRunner::finished,
+    connect(runner, &ApplicationLauncher::finished,
             this, &RemoteLinuxAnalyzeSupport::handleAppRunnerFinished);
-    connect(runner, &DeviceApplicationRunner::reportProgress,
+    connect(runner, &ApplicationLauncher::reportProgress,
             this, &RemoteLinuxAnalyzeSupport::handleProgressReport);
-    connect(runner, &DeviceApplicationRunner::reportError,
+    connect(runner, &ApplicationLauncher::reportError,
             this, &RemoteLinuxAnalyzeSupport::handleAppRunnerError);
 
     auto r = runnable();
@@ -181,10 +181,10 @@ void RemoteLinuxAnalyzeSupport::startExecution()
         outputRunner.executable = QLatin1String("sh");
         outputRunner.commandLineArguments =
                 QString::fromLatin1("-c 'cat %1 && rm -r `dirname %1`'").arg(d->remoteFifo);
-        d->outputGatherer.start(device(), outputRunner);
+        d->outputGatherer.start(outputRunner, device());
         remoteIsRunning();
     }
-    runner->start(device(), r);
+    runner->start(r, device());
 }
 
 void RemoteLinuxAnalyzeSupport::handleAppRunnerError(const QString &error)

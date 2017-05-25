@@ -31,8 +31,10 @@
 #include <extensionsystem/pluginmanager.h>
 #include <extensionsystem/pluginspec.h>
 #include <qtsingleapplication.h>
+
 #include <utils/fileutils.h>
 #include <utils/hostosinfo.h>
+#include <utils/temporarydirectory.h>
 
 #include <QDebug>
 #include <QDir>
@@ -198,30 +200,14 @@ static bool copyRecursively(const QString &srcFilePath,
 
 static inline QStringList getPluginPaths()
 {
-    QStringList rc;
-    // Figure out root:  Up one from 'bin'
-    QDir rootDir = QApplication::applicationDirPath();
-    rootDir.cdUp();
-    const QString rootDirPath = rootDir.canonicalPath();
-    QString pluginPath;
-    if (Utils::HostOsInfo::isMacHost()) {
-        // 1) "PlugIns" (OS X)
-        pluginPath = rootDirPath + QLatin1String("/PlugIns");
-        rc.push_back(pluginPath);
-    } else {
-        // 2) "plugins" (Win/Linux)
-        pluginPath = rootDirPath;
-        pluginPath += QLatin1Char('/');
-        pluginPath += QLatin1String(IDE_LIBRARY_BASENAME);
-        pluginPath += QLatin1String("/qtcreator/plugins");
-        rc.push_back(pluginPath);
-    }
-    // 3) <localappdata>/plugins/<ideversion>
+    QStringList rc(QDir::cleanPath(QApplication::applicationDirPath()
+                                   + '/' + RELATIVE_PLUGIN_PATH));
+    // Local plugin path: <localappdata>/plugins/<ideversion>
     //    where <localappdata> is e.g.
     //    "%LOCALAPPDATA%\QtProject\qtcreator" on Windows Vista and later
     //    "$XDG_DATA_HOME/data/QtProject/qtcreator" or "~/.local/share/data/QtProject/qtcreator" on Linux
     //    "~/Library/Application Support/QtProject/Qt Creator" on Mac
-    pluginPath = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+    QString pluginPath = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
     if (Utils::HostOsInfo::isAnyUnixHost() && !Utils::HostOsInfo::isMacHost())
         pluginPath += QLatin1String("/data");
     pluginPath += QLatin1Char('/')
@@ -232,6 +218,25 @@ static inline QStringList getPluginPaths()
     pluginPath += QLatin1String(Core::Constants::IDE_VERSION_LONG);
     rc.push_back(pluginPath);
     return rc;
+}
+
+static void setupInstallSettings()
+{
+    // Check if the default install settings contain a setting for the actual install settings.
+    // This can be an absolute path, or a path relative to applicationDirPath().
+    // The result is interpreted like -settingspath, but for SystemScope
+    static const char kInstallSettingsKey[] = "Settings/InstallSettings";
+    QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope,
+                       QCoreApplication::applicationDirPath() + '/' + RELATIVE_DATA_PATH);
+    QSettings installSettings(QSettings::IniFormat, QSettings::UserScope,
+                              QLatin1String(Core::Constants::IDE_SETTINGSVARIANT_STR),
+                              QLatin1String("QtCreator"));
+    if (installSettings.contains(kInstallSettingsKey)) {
+        QString installSettingsPath = installSettings.value(kInstallSettingsKey).toString();
+        if (QDir::isRelativePath(installSettingsPath))
+            installSettingsPath = QCoreApplication::applicationDirPath() + '/' + installSettingsPath;
+        QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope, installSettingsPath);
+    }
 }
 
 static QSettings *createUserSettings()
@@ -284,13 +289,9 @@ static inline QSettings *userSettings()
     return createUserSettings();
 }
 
-static const char *SHARE_PATH =
-        Utils::HostOsInfo::isMacHost() ? "/../Resources" : "/../share/qtcreator";
-
 void loadFonts()
 {
-    const QDir dir(QCoreApplication::applicationDirPath() + QLatin1String(SHARE_PATH)
-                   + QLatin1String("/fonts/"));
+    const QDir dir(QCoreApplication::applicationDirPath() + '/' + RELATIVE_DATA_PATH + "/fonts/");
 
     foreach (const QFileInfo &fileInfo, dir.entryInfoList(QStringList("*.ttf"), QDir::Files))
         QFontDatabase::addApplicationFont(fileInfo.absoluteFilePath());
@@ -298,6 +299,11 @@ void loadFonts()
 
 int main(int argc, char **argv)
 {
+    if (Utils::HostOsInfo::isLinuxHost())
+        QApplication::setAttribute(Qt::AA_DontUseNativeMenuBar);
+
+    Utils::TemporaryDirectory::setMasterTemporaryDirectory(QDir::tempPath() + "/QtCreator-XXXXXX");
+
     const char *highDpiEnvironmentVariable = setHighDpiEnvironmentVariable();
 
     QLoggingCategory::setFilterRules(QLatin1String("qtc.*.debug=false\nqtc.*.info=false"));
@@ -329,7 +335,8 @@ int main(int argc, char **argv)
     QThreadPool::globalInstance()->setMaxThreadCount(qMax(4, 2 * threadCount));
 
     // Display a backtrace once a serious signal is delivered (Linux only).
-    const QString libexecPath = QCoreApplication::applicationDirPath() + "/../libexec/qtcreator";
+    const QString libexecPath = QCoreApplication::applicationDirPath()
+            + '/' + RELATIVE_LIBEXEC_PATH;
     CrashHandlerSetup setupCrashHandler(appNameC, CrashHandlerSetup::EnableRestart, libexecPath);
 
 #ifdef ENABLE_QT_BREAKPAD
@@ -364,11 +371,9 @@ int main(int argc, char **argv)
             testOptionProvided = true;
         }
     }
-    QScopedPointer<QTemporaryDir> temporaryCleanSettingsDir;
+    QScopedPointer<Utils::TemporaryDirectory> temporaryCleanSettingsDir;
     if (settingsPath.isEmpty() && testOptionProvided) {
-        const QString settingsPathTemplate = QDir::cleanPath(QDir::tempPath()
-            + QString::fromLatin1("/qtc-test-settings-XXXXXX"));
-        temporaryCleanSettingsDir.reset(new QTemporaryDir(settingsPathTemplate));
+        temporaryCleanSettingsDir.reset(new Utils::TemporaryDirectory("qtc-test-settings"));
         if (!temporaryCleanSettingsDir->isValid())
             return 1;
         settingsPath = temporaryCleanSettingsDir->path();
@@ -377,9 +382,8 @@ int main(int argc, char **argv)
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsPath);
 
     // Must be done before any QSettings class is created
-    QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope,
-                       QCoreApplication::applicationDirPath() + QLatin1String(SHARE_PATH));
     QSettings::setDefaultFormat(QSettings::IniFormat);
+    setupInstallSettings();
     // plugin manager takes control of this settings object
     QSettings *settings = userSettings();
 
@@ -399,7 +403,7 @@ int main(int argc, char **argv)
     if (!overrideLanguage.isEmpty())
         uiLanguages.prepend(overrideLanguage);
     const QString &creatorTrPath = QCoreApplication::applicationDirPath()
-            + QLatin1String(SHARE_PATH) + QLatin1String("/translations");
+            + '/' + RELATIVE_DATA_PATH + "/translations";
     foreach (QString locale, uiLanguages) {
         locale = QLocale(locale).name();
         if (translator.load(QLatin1String("qtcreator_") + locale, creatorTrPath)) {

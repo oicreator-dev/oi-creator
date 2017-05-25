@@ -43,7 +43,7 @@ public:
                    const QString &binPath,
                    const QString &includePath,
                    const QString &libPath,
-                   const Language &l,
+                   Core::Id language,
                    Detection d = ManualDetection);
 
     Utils::FileNameList suggestedMkspecList() const override;
@@ -71,7 +71,7 @@ public:
     bool operator ==(const ToolChain &other) const override;
 
 protected:
-    Utils::Environment readEnvironmentSetting(Utils::Environment& env) const override;
+    Utils::Environment readEnvironmentSetting(const Utils::Environment& env) const final;
 
 private:
     WinCEToolChain();
@@ -106,7 +106,7 @@ class WinCEToolChainFactory : public ToolChainFactory
 
 public:
     WinCEToolChainFactory();
-    QSet<ToolChain::Language> supportedLanguages() const override;
+    QSet<Core::Id> supportedLanguages() const override;
 
     QList<ToolChain *> autoDetect(const QList<ToolChain *> &alreadyKnown) override;
 

@@ -9,6 +9,7 @@ isEmpty(PRECOMPILED_HEADER):PRECOMPILED_HEADER = $$PWD/../../shared/qtcreator_pc
 
 SOURCES += \
     main.cpp \
+    addcmakeoperation.cpp \
     adddebuggeroperation.cpp \
     adddeviceoperation.cpp \
     addkeysoperation.cpp \
@@ -19,6 +20,7 @@ SOURCES += \
     findvalueoperation.cpp \
     getoperation.cpp \
     operation.cpp \
+    rmcmakeoperation.cpp \
     rmdebuggeroperation.cpp \
     rmdeviceoperation.cpp \
     rmkeysoperation.cpp \
@@ -28,6 +30,7 @@ SOURCES += \
     settings.cpp \
 
 HEADERS += \
+    addcmakeoperation.h \
     adddebuggeroperation.h \
     adddeviceoperation.h \
     addkeysoperation.h \
@@ -38,6 +41,7 @@ HEADERS += \
     findvalueoperation.h \
     getoperation.h \
     operation.h \
+    rmcmakeoperation.h \
     rmdebuggeroperation.h \
     rmdeviceoperation.h \
     rmkeysoperation.h \

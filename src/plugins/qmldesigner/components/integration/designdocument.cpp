@@ -165,7 +165,7 @@ Model* DesignDocument::createInFileComponentModel()
     return model;
 }
 
-QList<RewriterError> DesignDocument::qmlParseWarnings() const
+QList<DocumentMessage> DesignDocument::qmlParseWarnings() const
 {
     return m_rewriterView->warnings();
 }
@@ -175,7 +175,7 @@ bool DesignDocument::hasQmlParseWarnings() const
     return !m_rewriterView->warnings().isEmpty();
 }
 
-QList<RewriterError> DesignDocument::qmlParseErrors() const
+QList<DocumentMessage> DesignDocument::qmlParseErrors() const
 {
     return m_rewriterView->errors();
 }
@@ -196,8 +196,6 @@ QString DesignDocument::simplfiedDisplayName() const
         return rootModelNode().id();
     else
         return rootModelNode().simplifiedTypeName();
-
-    return fileName().fileName();
 }
 
 void DesignDocument::updateFileName(const Utils::FileName & /*oldFileName*/, const Utils::FileName &newFileName)
@@ -237,12 +235,12 @@ void DesignDocument::loadDocument(QPlainTextEdit *edit)
 {
     Q_CHECK_PTR(edit);
 
-    connect(edit, SIGNAL(undoAvailable(bool)),
-            this, SIGNAL(undoAvailable(bool)));
-    connect(edit, SIGNAL(redoAvailable(bool)),
-            this, SIGNAL(redoAvailable(bool)));
-    connect(edit, SIGNAL(modificationChanged(bool)),
-            this, SIGNAL(dirtyStateChanged(bool)));
+    connect(edit, &QPlainTextEdit::undoAvailable,
+            this, &DesignDocument::undoAvailable);
+    connect(edit, &QPlainTextEdit::redoAvailable,
+            this, &DesignDocument::redoAvailable);
+    connect(edit, &QPlainTextEdit::modificationChanged,
+            this, &DesignDocument::dirtyStateChanged);
 
     m_documentTextModifier.reset(new BaseTextEditModifier(dynamic_cast<TextEditor::TextEditorWidget*>(plainTextEdit())));
 
@@ -375,6 +373,7 @@ void DesignDocument::deleteSelected()
                 QmlObjectNode(node).destroy();
         }
 
+        transaction.commit();
     } catch (const RewritingException &e) {
         e.showException();
     }
@@ -538,6 +537,7 @@ void DesignDocument::paste()
             }
 
             view.setSelectedModelNodes(pastedNodeList);
+            transaction.commit();
         } catch (const RewritingException &e) {
             qWarning() << e.description(); //silent error
         }
@@ -576,6 +576,7 @@ void DesignDocument::paste()
             NodeMetaInfo::clearCache();
 
             view.setSelectedModelNodes(QList<ModelNode>() << pastedNode);
+            transaction.commit();
         } catch (const RewritingException &e) {
             qWarning() << e.description(); //silent error
         }

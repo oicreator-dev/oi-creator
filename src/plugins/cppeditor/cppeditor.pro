@@ -17,9 +17,11 @@ HEADERS += \
     cppfunctiondecldeflink.h \
     cpphighlighter.h \
     cpphoverhandler.h \
+    cppparsecontext.h \
     cppincludehierarchy.h \
     cppinsertvirtualmethods.h \
     cpplocalrenaming.h \
+    cppminimizableinfobars.h \
     cppoutline.h \
     cpppreprocessordialog.h \
     cppquickfix.h \
@@ -45,9 +47,11 @@ SOURCES += \
     cppfunctiondecldeflink.cpp \
     cpphighlighter.cpp \
     cpphoverhandler.cpp \
+    cppparsecontext.cpp \
     cppincludehierarchy.cpp \
     cppinsertvirtualmethods.cpp \
     cpplocalrenaming.cpp \
+    cppminimizableinfobars.cpp \
     cppoutline.cpp \
     cpppreprocessordialog.cpp \
     cppquickfix.cpp \

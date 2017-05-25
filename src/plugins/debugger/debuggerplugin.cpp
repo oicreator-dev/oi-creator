@@ -39,7 +39,6 @@
 #include "debuggermainwindow.h"
 #include "debuggerrunconfigurationaspect.h"
 #include "debuggerruncontrol.h"
-#include "debuggeroptionspage.h"
 #include "debuggerkitinformation.h"
 #include "memoryagent.h"
 #include "breakhandler.h"
@@ -88,6 +87,7 @@
 #include <coreplugin/rightpane.h>
 
 #include <cppeditor/cppeditorconstants.h>
+#include <qmljseditor/qmljseditorconstants.h>
 #include <cpptools/cppmodelmanager.h>
 
 #include <projectexplorer/buildconfiguration.h>
@@ -117,12 +117,12 @@
 #include <utils/checkablemessagebox.h>
 #include <utils/fancymainwindow.h>
 #include <utils/hostosinfo.h>
-#include <utils/mimetypes/mimedatabase.h>
 #include <utils/proxyaction.h>
 #include <utils/qtcassert.h>
 #include <utils/savedaction.h>
 #include <utils/statuslabel.h>
 #include <utils/styledbar.h>
+#include <utils/temporarydirectory.h>
 #include <utils/utilsicons.h>
 #include <utils/winutils.h>
 
@@ -581,7 +581,7 @@ static QWidget *addSearch(BaseTreeView *treeView, const QString &title,
     return widget;
 }
 
-static std::function<bool(const Kit *)> cdbMatcher(char wordWidth = 0)
+static Kit::Predicate cdbPredicate(char wordWidth = 0)
 {
     return [wordWidth](const Kit *k) -> bool {
         if (DebuggerKitInformation::engineType(k) != CdbEngineType
@@ -589,7 +589,7 @@ static std::function<bool(const Kit *)> cdbMatcher(char wordWidth = 0)
             return false;
         }
         if (wordWidth)
-            ToolChainKitInformation::targetAbi(k).wordWidth();
+            return ToolChainKitInformation::targetAbi(k).wordWidth() == wordWidth;
         return true;
     };
 }
@@ -599,10 +599,10 @@ static std::function<bool(const Kit *)> cdbMatcher(char wordWidth = 0)
 static Kit *findUniversalCdbKit()
 {
     if (Utils::is64BitWindowsSystem()) {
-        if (Kit *cdb64Kit = KitManager::find(KitMatcher(cdbMatcher(64))))
+        if (Kit *cdb64Kit = KitManager::kit(cdbPredicate(64)))
             return cdb64Kit;
     }
-    return KitManager::find(KitMatcher(cdbMatcher()));
+    return KitManager::kit(cdbPredicate());
 }
 
 ///////////////////////////////////////////////////////////////////////
@@ -919,8 +919,12 @@ public:
         else
             exp = fixCppExpression(exp);
         exp = exp.trimmed();
-        if (exp.isEmpty())
+        if (exp.isEmpty()) {
+            // Happens e.g. when trying to evaluate 'char' or 'return'.
+            AsynchronousMessageBox::warning(tr("Warning"),
+                tr("Select a valid expression to evaluate."));
             return;
+        }
         currentEngine()->watchHandler()->watchVariable(exp);
     }
 
@@ -1009,8 +1013,8 @@ public:
     QAction *m_jumpToLineAction = 0; // In the Debug menu.
     QAction *m_returnFromFunctionAction = 0;
     QAction *m_nextAction = 0;
-    QAction *m_watchAction1 = 0; // In the Debug menu.
-    QAction *m_watchAction2 = 0; // In the text editor context menu.
+    QAction *m_watchAction = 0;
+    Command *m_watchCommand = 0;
     QAction *m_breakAction = 0;
     QAction *m_reverseDirectionAction = 0;
     QAction *m_frameUpAction = 0;
@@ -1124,17 +1128,17 @@ static Kit *guessKitFromParameters(const DebuggerRunParameters &rp)
 
     if (!abis.isEmpty()) {
         // Try exact abis.
-        kit = KitManager::find(KitMatcher([abis](const Kit *k) -> bool {
+        kit = KitManager::kit([abis](const Kit *k) {
             const Abi tcAbi = ToolChainKitInformation::targetAbi(k);
             return abis.contains(tcAbi) && !DebuggerKitInformation::configurationErrors(k);
-        }));
+        });
         if (!kit) {
             // Or something compatible.
-            kit = KitManager::find(KitMatcher([abis](const Kit *k) -> bool {
+            kit = KitManager::kit([abis](const Kit *k) {
                 const Abi tcAbi = ToolChainKitInformation::targetAbi(k);
                 return !DebuggerKitInformation::configurationErrors(k)
                         && Utils::contains(abis, [tcAbi](const Abi &a) { return a.isCompatibleWith(tcAbi); });
-            }));
+            });
         }
     }
 
@@ -1162,9 +1166,9 @@ bool DebuggerPluginPrivate::parseArgument(QStringList::const_iterator &it,
         if (pid) {
             rp.startMode = AttachExternal;
             rp.closeMode = DetachAtClose;
-            rp.attachPID = pid;
-            rp.displayName = tr("Process %1").arg(rp.attachPID);
-            rp.startMessage = tr("Attaching to local process %1.").arg(rp.attachPID);
+            rp.attachPID = ProcessHandle(pid);
+            rp.displayName = tr("Process %1").arg(rp.attachPID.pid());
+            rp.startMessage = tr("Attaching to local process %1.").arg(rp.attachPID.pid());
         } else {
             rp.startMode = StartExternal;
             QStringList args = it->split(QLatin1Char(','));
@@ -1195,7 +1199,7 @@ bool DebuggerPluginPrivate::parseArgument(QStringList::const_iterator &it,
                 } else if (key == QLatin1String("terminal")) {
                     rp.useTerminal = bool(val.toInt());
                 } else if (key == QLatin1String("kit")) {
-                    kit = KitManager::find(Id::fromString(val));
+                    kit = KitManager::kit(Id::fromString(val));
                 }
             }
         }
@@ -1226,10 +1230,10 @@ bool DebuggerPluginPrivate::parseArgument(QStringList::const_iterator &it,
         DebuggerRunParameters rp;
         rp.startMode = AttachCrashedExternal;
         rp.crashParameter = it->section(QLatin1Char(':'), 0, 0);
-        rp.attachPID = it->section(QLatin1Char(':'), 1, 1).toULongLong();
-        rp.displayName = tr("Crashed process %1").arg(rp.attachPID);
-        rp.startMessage = tr("Attaching to crashed process %1").arg(rp.attachPID);
-        if (!rp.attachPID) {
+        rp.attachPID = ProcessHandle(it->section(QLatin1Char(':'), 1, 1).toULongLong());
+        rp.displayName = tr("Crashed process %1").arg(rp.attachPID.pid());
+        rp.startMessage = tr("Attaching to crashed process %1").arg(rp.attachPID.pid());
+        if (!rp.attachPID.isValid()) {
             *errorMessage = DebuggerPlugin::tr("The parameter \"%1\" of option \"%2\" "
                 "does not match the pattern <handle>:<pid>.").arg(*it, option);
             return false;
@@ -1269,8 +1273,6 @@ bool DebuggerPluginPrivate::initialize(const QStringList &arguments,
     QString *errorMessage)
 {
     Q_UNUSED(errorMessage);
-    Utils::MimeDatabase::addMimeTypes(QLatin1String(":/debugger/Debugger.mimetypes.xml"));
-
     m_arguments = arguments;
     if (!m_arguments.isEmpty())
         connect(ProjectExplorerPlugin::instance(), &ProjectExplorerPlugin::finishedInitialization,
@@ -1325,7 +1327,7 @@ bool DebuggerPluginPrivate::initialize(const QStringList &arguments,
     connect(ICore::instance(), &ICore::coreAboutToClose, this, &DebuggerPluginPrivate::coreShutdown);
 
     const Context cppDebuggercontext(C_CPPDEBUGGER);
-    const Context cppeditorcontext(CppEditor::Constants::CPPEDITOR_ID);
+    const Context qmljsDebuggercontext(C_QMLDEBUGGER);
 
     m_busy = false;
 
@@ -1396,6 +1398,7 @@ bool DebuggerPluginPrivate::initialize(const QStringList &arguments,
     m_snapshotHandler = new SnapshotHandler;
     m_snapshotView = new SnapshotTreeView(m_snapshotHandler);
     m_snapshotView->setSettings(settings, "Debugger.SnapshotView");
+    m_snapshotView->setIconSize(QSize(10, 10));
     m_snapshotView->setModel(m_snapshotHandler->model());
     m_snapshotWindow = addSearch(m_snapshotView, tr("Snapshots"), DOCKWIDGET_SNAPSHOTS);
 
@@ -1457,10 +1460,7 @@ bool DebuggerPluginPrivate::initialize(const QStringList &arguments,
 
     m_breakAction = new QAction(tr("Toggle Breakpoint"), this);
 
-    act = m_watchAction1 = new QAction(tr("Add Expression Evaluator"), this);
-    connect(act, &QAction::triggered, this, &DebuggerPluginPrivate::handleAddToWatchWindow);
-
-    act = m_watchAction2 = new QAction(tr("Add Expression Evaluator"), this);
+    act = m_watchAction = new QAction(tr("Add Expression Evaluator"), this);
     connect(act, &QAction::triggered, this, &DebuggerPluginPrivate::handleAddToWatchWindow);
 
     //act = m_snapshotAction = new QAction(tr("Create Snapshot"), this);
@@ -1741,27 +1741,10 @@ bool DebuggerPluginPrivate::initialize(const QStringList &arguments,
 
     debugMenu->addSeparator();
 
-    // Don't add '1' to the string as it shows up in the shortcut dialog.
-    cmd = ActionManager::registerAction(m_watchAction1,
-        "Debugger.AddToWatch", cppeditorcontext);
+    cmd = m_watchCommand = ActionManager::registerAction(m_watchAction, "Debugger.AddToWatch",
+            Context(CppEditor::Constants::CPPEDITOR_ID,  QmlJSEditor::Constants::C_QMLJSEDITOR_ID));
     //cmd->setDefaultKeySequence(QKeySequence(tr("Ctrl+D,Ctrl+W")));
     debugMenu->addAction(cmd);
-
-    // If the CppEditor plugin is there, we want to add something to
-    // the editor context menu.
-    if (ActionContainer *editorContextMenu =
-            ActionManager::actionContainer(CppEditor::Constants::M_CONTEXT)) {
-        cmd = editorContextMenu->addSeparator(cppDebuggercontext);
-        cmd->setAttribute(Command::CA_Hide);
-
-        cmd = ActionManager::registerAction(m_watchAction2,
-            "Debugger.AddToWatch2", cppDebuggercontext);
-        cmd->action()->setEnabled(true);
-        editorContextMenu->addAction(cmd);
-        cmd->setAttribute(Command::CA_Hide);
-        cmd->setAttribute(Command::CA_NonConfigurable);
-        // Debugger.AddToWatch is enough.
-    }
 
     QList<IOptionsPage *> engineOptionPages;
     addGdbOptionPages(&engineOptionPages);
@@ -1770,7 +1753,6 @@ bool DebuggerPluginPrivate::initialize(const QStringList &arguments,
     foreach (IOptionsPage *op, engineOptionPages)
         m_plugin->addAutoReleasedObject(op);
     m_plugin->addAutoReleasedObject(new LocalsAndExpressionsOptionsPage);
-    m_plugin->addAutoReleasedObject(new DebuggerOptionsPage);
 
     connect(ModeManager::instance(), &ModeManager::currentModeChanged,
         this, &DebuggerPluginPrivate::onModeChanged);
@@ -1863,22 +1845,22 @@ bool DebuggerPluginPrivate::initialize(const QStringList &arguments,
 //    qmlToolbar.addWidget(new StyledSeparator);
 
     auto createBasePerspective = [this] { return new Perspective({}, {
-        { DOCKWIDGET_STACK, m_stackWindow, {}, Perspective::SplitVertical },
-        { DOCKWIDGET_BREAK, m_breakWindow, DOCKWIDGET_STACK, Perspective::SplitHorizontal },
-        { DOCKWIDGET_THREADS, m_threadsWindow, DOCKWIDGET_BREAK, Perspective::AddToTab, false },
-        { DOCKWIDGET_MODULES, m_modulesWindow, DOCKWIDGET_THREADS, Perspective::AddToTab, false },
-        { DOCKWIDGET_SOURCE_FILES, m_sourceFilesWindow, DOCKWIDGET_MODULES, Perspective::AddToTab, false },
-        { DOCKWIDGET_SNAPSHOTS, m_snapshotWindow, DOCKWIDGET_SOURCE_FILES, Perspective::AddToTab, false },
-        { DOCKWIDGET_WATCHERS, m_localsAndExpressionsWindow, {}, Perspective::AddToTab, true,
-          Qt::RightDockWidgetArea },
-        { DOCKWIDGET_OUTPUT, m_logWindow, {}, Perspective::AddToTab, false, Qt::TopDockWidgetArea },
-        { DOCKWIDGET_BREAK, 0, {}, Perspective::Raise }
+        {DOCKWIDGET_STACK, m_stackWindow, {}, Perspective::SplitVertical},
+        {DOCKWIDGET_BREAK, m_breakWindow, DOCKWIDGET_STACK, Perspective::SplitHorizontal},
+        {DOCKWIDGET_THREADS, m_threadsWindow, DOCKWIDGET_BREAK, Perspective::AddToTab, false},
+        {DOCKWIDGET_MODULES, m_modulesWindow, DOCKWIDGET_THREADS, Perspective::AddToTab, false},
+        {DOCKWIDGET_SOURCE_FILES, m_sourceFilesWindow, DOCKWIDGET_MODULES, Perspective::AddToTab, false},
+        {DOCKWIDGET_SNAPSHOTS, m_snapshotWindow, DOCKWIDGET_SOURCE_FILES, Perspective::AddToTab, false},
+        {DOCKWIDGET_WATCHERS, m_localsAndExpressionsWindow, {}, Perspective::AddToTab, true,
+         Qt::RightDockWidgetArea},
+        {DOCKWIDGET_OUTPUT, m_logWindow, {}, Perspective::AddToTab, false, Qt::TopDockWidgetArea},
+        {DOCKWIDGET_BREAK, 0, {}, Perspective::Raise}
     }); };
 
     Perspective *cppPerspective = createBasePerspective();
     cppPerspective->setName(tr("Debugger"));
-    cppPerspective->addOperation({ DOCKWIDGET_REGISTER, m_registerWindow, DOCKWIDGET_SNAPSHOTS,
-                                  Perspective::AddToTab, false });
+    cppPerspective->addOperation({DOCKWIDGET_REGISTER, m_registerWindow, DOCKWIDGET_SNAPSHOTS,
+                                  Perspective::AddToTab, false});
 
     Debugger::registerToolbar(CppPerspectiveId, toolbar);
     Debugger::registerPerspective(CppPerspectiveId, cppPerspective);
@@ -1933,12 +1915,13 @@ void DebuggerPluginPrivate::onCurrentProjectChanged(Project *project)
     for (int i = 0, n = m_snapshotHandler->size(); i != n; ++i) {
         // Run controls might be deleted during exit.
         if (DebuggerEngine *engine = m_snapshotHandler->at(i)) {
-            DebuggerRunControl *runControl = engine->runControl();
-            RunConfiguration *rc = runControl->runConfiguration();
-            if (rc == activeRc) {
-                m_snapshotHandler->setCurrentIndex(i);
-                updateState(engine);
-                return;
+            if (DebuggerRunControl *runControl = engine->runControl()) {
+                RunConfiguration *rc = runControl->runConfiguration();
+                if (rc == activeRc) {
+                    m_snapshotHandler->setCurrentIndex(i);
+                    updateState(engine);
+                    return;
+                }
             }
         }
     }
@@ -2127,7 +2110,7 @@ DebuggerRunControl *DebuggerPluginPrivate::attachToRunningProcess(Kit *kit,
     }
 
     DebuggerRunParameters rp;
-    rp.attachPID = process.pid;
+    rp.attachPID = ProcessHandle(process.pid);
     rp.displayName = tr("Process %1").arg(process.pid);
     rp.inferior.executable = process.exe;
     rp.startMode = AttachExternal;
@@ -2139,8 +2122,8 @@ DebuggerRunControl *DebuggerPluginPrivate::attachToRunningProcess(Kit *kit,
 void DebuggerPlugin::attachExternalApplication(RunControl *rc)
 {
     DebuggerRunParameters rp;
-    rp.attachPID = rc->applicationProcessHandle().pid();
-    rp.displayName = tr("Process %1").arg(rp.attachPID);
+    rp.attachPID = rc->applicationProcessHandle();
+    rp.displayName = tr("Process %1").arg(rp.attachPID.pid());
     rp.startMode = AttachExternal;
     rp.closeMode = DetachAtClose;
     rp.toolChainAbi = rc->abi();
@@ -2157,16 +2140,16 @@ void DebuggerPlugin::getEnginesState(QByteArray *json) const
 {
     QTC_ASSERT(json, return);
     QVariantMap result {
-        { "version", 1 }
+        {"version", 1}
     };
     QVariantMap states;
 
     for (int i = 0; i < dd->m_snapshotHandler->size(); ++i) {
         const DebuggerEngine *engine = dd->m_snapshotHandler->at(i);
         states[QString::number(i)] = QVariantMap({
-                   { "current", dd->m_snapshotHandler->currentIndex() == i },
-                   { "pid", engine->inferiorPid() },
-                   { "state", engine->state() }
+                   {"current", dd->m_snapshotHandler->currentIndex() == i},
+                   {"pid", engine->inferiorPid()},
+                   {"state", engine->state()}
         });
     }
 
@@ -2553,8 +2536,7 @@ void DebuggerPluginPrivate::setInitialState()
     m_attachToUnstartedApplication->setEnabled(true);
     m_detachAction->setEnabled(false);
 
-    m_watchAction1->setEnabled(true);
-    m_watchAction2->setEnabled(true);
+    m_watchAction->setEnabled(true);
     m_breakAction->setEnabled(false);
     //m_snapshotAction->setEnabled(false);
     m_operateByInstructionAction->setEnabled(false);
@@ -2689,8 +2671,7 @@ void DebuggerPluginPrivate::updateState(DebuggerEngine *engine)
                 && boolSetting(EnableReverseDebugging);
     m_reverseDirectionAction->setEnabled(canReverse);
 
-    m_watchAction1->setEnabled(true);
-    m_watchAction2->setEnabled(true);
+    m_watchAction->setEnabled(true);
     m_breakAction->setEnabled(true);
 
     const bool canOperateByInstruction = engine->hasCapability(OperateByInstructionCapability)
@@ -2769,7 +2750,7 @@ void DebuggerPluginPrivate::updateDebugWithoutDeployMenu()
 void DebuggerPluginPrivate::dumpLog()
 {
     QString fileName = QFileDialog::getSaveFileName(ICore::mainWindow(),
-        tr("Save Debugger Log"), QDir::tempPath());
+        tr("Save Debugger Log"), Utils::TemporaryDirectory::masterDirectoryPath());
     if (fileName.isEmpty())
         return;
     FileSaver saver(fileName);
@@ -2945,8 +2926,8 @@ static QString formatStartParameters(DebuggerRunParameters &sp)
         str << "Debugger: " << QDir::toNativeSeparators(cmd) << '\n';
     if (!sp.coreFile.isEmpty())
         str << "Core: " << QDir::toNativeSeparators(sp.coreFile) << '\n';
-    if (sp.attachPID > 0)
-        str << "PID: " << sp.attachPID << ' ' << sp.crashParameter << '\n';
+    if (sp.attachPID.isValid())
+        str << "PID: " << sp.attachPID.pid() << ' ' << sp.crashParameter << '\n';
     if (!sp.projectSourceDirectory.isEmpty()) {
         str << "Project: " << QDir::toNativeSeparators(sp.projectSourceDirectory);
         str << "Addtional Search Directories:"
@@ -3033,6 +3014,19 @@ bool isReverseDebugging()
 
 void DebuggerPluginPrivate::extensionsInitialized()
 {
+    // If the CppEditor or QmlJS editor plugin is there, we want to add something to
+    // the editor context menu.
+    for (Id menuId : { CppEditor::Constants::M_CONTEXT, QmlJSEditor::Constants::M_CONTEXT }) {
+        if (ActionContainer *editorContextMenu = ActionManager::actionContainer(menuId)) {
+            auto cmd = editorContextMenu->addSeparator(m_watchCommand->context());
+            cmd->setAttribute(Command::CA_Hide);
+            cmd = m_watchCommand;
+            cmd->action()->setEnabled(true);
+            editorContextMenu->addAction(cmd);
+            cmd->setAttribute(Command::CA_Hide);
+            cmd->setAttribute(Command::CA_NonConfigurable);
+        }
+    }
 }
 
 DebuggerEngine *currentEngine()
@@ -3154,6 +3148,7 @@ void updateWatchersWindow(bool showWatch, bool showReturn)
 {
     dd->m_watchersWindow->setVisible(showWatch);
     dd->m_returnWindow->setVisible(showReturn);
+    dd->m_localsView->resizeColumns();
 }
 
 bool hasSnapshots()
@@ -3290,7 +3285,6 @@ bool DebuggerPlugin::initialize(const QStringList &arguments, QString *errorMess
     mstart->addSeparator(Constants::G_SPECIAL);
 
     addAutoReleasedObject(new DebuggerItemManager);
-    DebuggerItemManager::restoreDebuggers();
 
     KitManager::registerKitInformation(new DebuggerKitInformation);
 
@@ -3770,67 +3764,67 @@ void DebuggerUnitTests::testDebuggerMatching_data()
             << QString::fromLatin1("x86-linux-generic-elf-32bit")
             << int(DebuggerItem::DoesNotMatch);
     QTest::newRow("Invalid target")
-            << (QStringList() << QLatin1String("x86-linux-generic-elf-32bit"))
+            << QStringList("x86-linux-generic-elf-32bit")
             << QString()
             << int(DebuggerItem::DoesNotMatch);
 
     QTest::newRow("Fuzzy match 1")
-            << (QStringList() << QLatin1String("unknown-unknown-unknown-unknown-0bit"))
+            << QStringList("unknown-unknown-unknown-unknown-0bit")
             << QString::fromLatin1("x86-linux-generic-elf-32bit")
             << int(DebuggerItem::MatchesWell); // Is this the expected behavior?
     QTest::newRow("Fuzzy match 2")
-            << (QStringList() << QLatin1String("unknown-unknown-unknown-unknown-0bit"))
+            << QStringList("unknown-unknown-unknown-unknown-0bit")
             << QString::fromLatin1("arm-windows-msys-pe-64bit")
             << int(DebuggerItem::MatchesWell); // Is this the expected behavior?
 
     QTest::newRow("Architecture mismatch")
-            << (QStringList() << QLatin1String("x86-linux-generic-elf-32bit"))
+            << QStringList("x86-linux-generic-elf-32bit")
             << QString::fromLatin1("arm-linux-generic-elf-32bit")
             << int(DebuggerItem::DoesNotMatch);
     QTest::newRow("OS mismatch")
-            << (QStringList() << QLatin1String("x86-linux-generic-elf-32bit"))
+            << QStringList("x86-linux-generic-elf-32bit")
             << QString::fromLatin1("x86-macosx-generic-elf-32bit")
             << int(DebuggerItem::DoesNotMatch);
     QTest::newRow("Format mismatch")
-            << (QStringList() << QLatin1String("x86-linux-generic-elf-32bit"))
+            << QStringList("x86-linux-generic-elf-32bit")
             << QString::fromLatin1("x86-linux-generic-pe-32bit")
             << int(DebuggerItem::DoesNotMatch);
 
     QTest::newRow("Linux perfect match")
-            << (QStringList() << QLatin1String("x86-linux-generic-elf-32bit"))
+            << QStringList("x86-linux-generic-elf-32bit")
             << QString::fromLatin1("x86-linux-generic-elf-32bit")
             << int(DebuggerItem::MatchesWell);
     QTest::newRow("Linux match")
-            << (QStringList() << QLatin1String("x86-linux-generic-elf-64bit"))
+            << QStringList("x86-linux-generic-elf-64bit")
             << QString::fromLatin1("x86-linux-generic-elf-32bit")
             << int(DebuggerItem::MatchesSomewhat);
 
     QTest::newRow("Windows perfect match 1")
-            << (QStringList() << QLatin1String("x86-windows-msvc2013-pe-64bit"))
+            << QStringList("x86-windows-msvc2013-pe-64bit")
             << QString::fromLatin1("x86-windows-msvc2013-pe-64bit")
             << int(DebuggerItem::MatchesWell);
     QTest::newRow("Windows perfect match 2")
-            << (QStringList() << QLatin1String("x86-windows-msvc2013-pe-64bit"))
+            << QStringList("x86-windows-msvc2013-pe-64bit")
             << QString::fromLatin1("x86-windows-msvc2012-pe-64bit")
             << int(DebuggerItem::MatchesWell);
     QTest::newRow("Windows match 1")
-            << (QStringList() << QLatin1String("x86-windows-msvc2013-pe-64bit"))
+            << QStringList("x86-windows-msvc2013-pe-64bit")
             << QString::fromLatin1("x86-windows-msvc2013-pe-32bit")
             << int(DebuggerItem::MatchesSomewhat);
     QTest::newRow("Windows match 2")
-            << (QStringList() << QLatin1String("x86-windows-msvc2013-pe-64bit"))
+            << QStringList("x86-windows-msvc2013-pe-64bit")
             << QString::fromLatin1("x86-windows-msvc2012-pe-32bit")
             << int(DebuggerItem::MatchesSomewhat);
     QTest::newRow("Windows mismatch on word size")
-            << (QStringList() << QLatin1String("x86-windows-msvc2013-pe-32bit"))
+            << QStringList("x86-windows-msvc2013-pe-32bit")
             << QString::fromLatin1("x86-windows-msvc2013-pe-64bit")
             << int(DebuggerItem::DoesNotMatch);
     QTest::newRow("Windows mismatch on osflavor 1")
-            << (QStringList() << QLatin1String("x86-windows-msvc2013-pe-32bit"))
+            << QStringList("x86-windows-msvc2013-pe-32bit")
             << QString::fromLatin1("x86-windows-msys-pe-64bit")
             << int(DebuggerItem::DoesNotMatch);
     QTest::newRow("Windows mismatch on osflavor 2")
-            << (QStringList() << QLatin1String("x86-windows-msys-pe-32bit"))
+            << QStringList("x86-windows-msys-pe-32bit")
             << QString::fromLatin1("x86-windows-msvc2010-pe-64bit")
             << int(DebuggerItem::DoesNotMatch);
 }
@@ -3860,7 +3854,7 @@ void DebuggerUnitTests::testDebuggerMatching()
 
 QList<QObject *> DebuggerPlugin::createTestObjects() const
 {
-    return { new DebuggerUnitTests };
+    return {new DebuggerUnitTests};
 }
 
 #else // ^-- if WITH_TESTS else --v

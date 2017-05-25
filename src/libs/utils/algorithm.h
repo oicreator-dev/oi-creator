@@ -140,8 +140,7 @@ typename T::value_type findOrDefault(const T &container, R (S::*function)() cons
 // find helpers
 //////////////////
 template<typename R, typename S, typename T>
-auto equal(R (S::*function)() const, T value)
-    -> decltype(std::bind<bool>(std::equal_to<T>(), value, std::bind(function, std::placeholders::_1)))
+decltype(auto) equal(R (S::*function)() const, T value)
 {
     // This should use std::equal_to<> instead of std::eqaul_to<T>,
     // but that's not supported everywhere yet, since it is C++14
@@ -149,8 +148,7 @@ auto equal(R (S::*function)() const, T value)
 }
 
 template<typename R, typename S, typename T>
-auto equal(R S::*member, T value)
-    -> decltype(std::bind<bool>(std::equal_to<T>(), value, std::bind(member, std::placeholders::_1)))
+decltype(auto) equal(R S::*member, T value)
 {
     return std::bind<bool>(std::equal_to<T>(), value, std::bind(member, std::placeholders::_1));
 }
@@ -207,13 +205,6 @@ inserter(QSet<X> &container)
     return QSetInsertIterator<QSet<X>>(container);
 }
 
-// decay_t is C++14, so provide it here, remove once we require C++14
-template<typename T>
-using decay_t = typename std::decay<T>::type;
-
-template<typename T>
-using result_of_t = typename std::result_of<T>::type;
-
 // abstraction to treat Container<T> and QStringList similarly
 template<typename T>
 struct ContainerType
@@ -226,10 +217,10 @@ template<template<typename> class T_Container, typename T_Type>
 struct ContainerType<T_Container<T_Type>>
 {
     template<class F, template<typename> class C = T_Container>
-    using ResultOfTransform = C<decay_t<result_of_t<F (T_Type)>>>;
+    using ResultOfTransform = C<std::decay_t<std::result_of_t<F (T_Type)>>>;
 
     template<class R>
-    using ResultOfTransformPMF = T_Container<decay_t<R>>;
+    using ResultOfTransformPMF = T_Container<std::decay_t<R>>;
 };
 
 // specialization for QStringList
@@ -249,6 +240,7 @@ struct TransformImpl {
     static C call(const SC &container, F function)
     {
         C result;
+        result.reserve(container.size());
         std::transform(container.begin(), container.end(),
                        inserter(result),
                        function);
@@ -269,8 +261,7 @@ struct TransformImpl {
 template<typename C, // container
          typename F>
 Q_REQUIRED_RESULT
-auto transform(const C &container, F function)
--> typename ContainerType<C>::template ResultOfTransform<F>
+decltype(auto) transform(const C &container, F function)
 {
     return TransformImpl<
                 typename ContainerType<C>::template ResultOfTransform<F>,
@@ -283,8 +274,7 @@ template<typename C,
         typename R,
         typename S>
 Q_REQUIRED_RESULT
-auto transform(const C &container, R (S::*p)() const)
-    ->typename ContainerType<C>::template ResultOfTransformPMF<R>
+decltype(auto) transform(const C &container, R (S::*p)() const)
 {
     return TransformImpl<
                 typename ContainerType<C>::template ResultOfTransformPMF<R>,
@@ -292,13 +282,21 @@ auto transform(const C &container, R (S::*p)() const)
             >::call(container, p);
 }
 
+template<typename C,
+         typename R,
+         typename S>
+Q_REQUIRED_RESULT
+decltype(auto) transform(const C &container, R S::*member)
+{
+    return transform(container, std::mem_fn(member));
+}
+
 // different container types for input and output, e.g. transforming a QList into a QSet
 template<template<typename> class C, // result container type
          typename SC, // input container type
          typename F> // function type
 Q_REQUIRED_RESULT
-auto transform(const SC &container, F function)
-     -> typename ContainerType<SC>::template ResultOfTransform<F, C>
+decltype(auto) transform(const SC &container, F function)
 {
     return TransformImpl<
                 typename ContainerType<SC>::template ResultOfTransform<F, C>,
@@ -313,11 +311,10 @@ template<template<typename> class C, // result container type
          typename R,
          typename S>
 Q_REQUIRED_RESULT
-auto transform(const SC &container, R (S::*p)() const)
-     -> C<decay_t<R>>
+decltype(auto) transform(const SC &container, R (S::*p)() const)
 {
     return TransformImpl<
-                C<decay_t<R>>,
+                C<std::decay_t<R>>,
                 SC
             >::call(container, p);
 }
@@ -362,7 +359,7 @@ std::tuple<C, C> partition(const C &container, F predicate)
     C miss;
     auto hitIns = inserter(hit);
     auto missIns = inserter(miss);
-    foreach (auto i, container) {
+    for (auto i : container) {
         if (predicate(i))
             hitIns = i;
         else

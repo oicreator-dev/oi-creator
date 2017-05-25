@@ -30,64 +30,36 @@
 #include "toolchain.h"
 #include "abi.h"
 #include "buildconfiguration.h"
+#include "environmentaspect.h"
 #include "kitinformation.h"
+#include "runnables.h"
+
 #include <extensionsystem/pluginmanager.h>
 
-#include <utils/outputformatter.h>
+#include <utils/algorithm.h>
 #include <utils/checkablemessagebox.h>
+#include <utils/outputformatter.h>
+#include <utils/qtcassert.h>
+#include <utils/utilsicons.h>
 
 #include <coreplugin/icore.h>
 #include <coreplugin/icontext.h>
 
-#include <QTimer>
+#include <QDir>
 #include <QPushButton>
+#include <QTimer>
 
 #ifdef Q_OS_OSX
 #include <ApplicationServices/ApplicationServices.h>
 #endif
 
+#if defined (WITH_JOURNALD)
+#include "journaldwatcher.h"
+#endif
+
+using namespace Utils;
+
 namespace ProjectExplorer {
-
-/*!
-    \class ProjectExplorer::ProcessHandle
-    \brief The ProcessHandle class is a helper class to describe a process.
-
-    Encapsulates parameters of a running process, local (PID) or remote (to be
-    done, address, port, and so on).
-*/
-
-ProcessHandle::ProcessHandle(quint64 pid) :
-    m_pid(pid)
-{
-}
-
-bool ProcessHandle::isValid() const
-{
-    return m_pid != 0;
-}
-
-void ProcessHandle::setPid(quint64 pid)
-{
-    m_pid = pid;
-}
-
-quint64 ProcessHandle::pid() const
-{
-    return m_pid;
-}
-
-QString ProcessHandle::toString() const
-{
-    if (m_pid)
-        return RunControl::tr("PID %1").arg(m_pid);
-    //: Invalid process handle.
-    return RunControl::tr("Invalid");
-}
-
-bool ProcessHandle::equals(const ProcessHandle &rhs) const
-{
-    return m_pid == rhs.m_pid;
-}
 
 ///////////////////////////////////////////////////////////////////////
 //
@@ -204,16 +176,16 @@ void IRunConfigurationAspect::resetProjectToGlobalSettings()
 */
 
 RunConfiguration::RunConfiguration(Target *target, Core::Id id) :
-    ProjectConfiguration(target, id),
-    m_aspectsInitialized(false)
+    ProjectConfiguration(target, id)
 {
     Q_ASSERT(target);
     ctor();
+
+    addExtraAspects();
 }
 
 RunConfiguration::RunConfiguration(Target *target, RunConfiguration *source) :
-    ProjectConfiguration(target, source),
-    m_aspectsInitialized(true)
+    ProjectConfiguration(target, source)
 {
     Q_ASSERT(target);
     ctor();
@@ -231,12 +203,8 @@ RunConfiguration::~RunConfiguration()
 
 void RunConfiguration::addExtraAspects()
 {
-    if (m_aspectsInitialized)
-        return;
-
     foreach (IRunControlFactory *factory, ExtensionSystem::PluginManager::getObjects<IRunControlFactory>())
         addExtraAspect(factory->createRunConfigurationAspect(this));
-    m_aspectsInitialized = true;
 }
 
 void RunConfiguration::addExtraAspect(IRunConfigurationAspect *aspect)
@@ -256,6 +224,11 @@ void RunConfiguration::ctor()
     expander->registerSubProvider([this]() -> Utils::MacroExpander * {
         BuildConfiguration *bc = target()->activeBuildConfiguration();
         return bc ? bc->macroExpander() : target()->macroExpander();
+    });
+    expander->registerPrefix("CurrentRun:Env", tr("Variables in the current run environment"),
+                             [this](const QString &var) {
+        const auto envAspect = extraAspect<EnvironmentAspect>();
+        return envAspect ? envAspect->environment().value(var) : QString();
     });
     expander->registerVariable(Constants::VAR_CURRENTRUN_NAME,
             QCoreApplication::translate("ProjectExplorer", "The currently active run configuration's name."),
@@ -318,7 +291,7 @@ Abi RunConfiguration::abi() const
     BuildConfiguration *bc = target()->activeBuildConfiguration();
     if (!bc)
         return Abi::hostAbi();
-    ToolChain *tc = ToolChainKitInformation::toolChain(target()->kit(), ToolChain::Language::Cxx);
+    ToolChain *tc = ToolChainKitInformation::toolChain(target()->kit(), Constants::CXX_LANGUAGE_ID);
     if (!tc)
         return Abi::hostAbi();
     return tc->targetAbi();
@@ -326,8 +299,6 @@ Abi RunConfiguration::abi() const
 
 bool RunConfiguration::fromMap(const QVariantMap &map)
 {
-    addExtraAspects();
-
     foreach (IRunConfigurationAspect *aspect, m_aspects)
         aspect->fromMap(map);
 
@@ -354,16 +325,12 @@ bool RunConfiguration::fromMap(const QVariantMap &map)
 
 QList<IRunConfigurationAspect *> RunConfiguration::extraAspects() const
 {
-    QTC_ASSERT(m_aspectsInitialized, return QList<IRunConfigurationAspect *>());
     return m_aspects;
 }
+
 IRunConfigurationAspect *RunConfiguration::extraAspect(Core::Id id) const
 {
-    QTC_ASSERT(m_aspectsInitialized, return nullptr);
-    foreach (IRunConfigurationAspect *aspect, m_aspects)
-        if (aspect->id() == id)
-            return aspect;
-    return nullptr;
+    return Utils::findOrDefault(m_aspects, Utils::equal(&IRunConfigurationAspect::id, id));
 }
 
 /*!
@@ -443,7 +410,6 @@ RunConfiguration *IRunConfigurationFactory::create(Target *parent, Core::Id id)
     RunConfiguration *rc = doCreate(parent, id);
     if (!rc)
         return nullptr;
-    rc->addExtraAspects();
     return rc;
 }
 
@@ -549,10 +515,6 @@ public:
             device = DeviceKitInformation::device(runConfiguration->target()->kit());
             project = runConfiguration->target()->project();
         }
-
-        // We need to ensure that there's always a OutputFormatter
-        if (!outputFormatter)
-            outputFormatter = new Utils::OutputFormatter();
     }
 
     ~RunControlPrivate()
@@ -571,11 +533,12 @@ public:
     Utils::OutputFormatter *outputFormatter = nullptr;
 
     // A handle to the actual application process.
-    ProcessHandle applicationProcessHandle;
+    Utils::ProcessHandle applicationProcessHandle;
+
+    bool isRunning = false;
 
 #ifdef Q_OS_OSX
-    //these two are used to bring apps in the foreground on Mac
-    qint64 internalPid;
+    // This is used to bring apps in the foreground on Mac
     int foregroundCount;
 #endif
 };
@@ -584,14 +547,35 @@ public:
 
 RunControl::RunControl(RunConfiguration *runConfiguration, Core::Id mode) :
     d(new Internal::RunControlPrivate(runConfiguration, mode))
-{ }
+{
+#ifdef WITH_JOURNALD
+    JournaldWatcher::instance()->subscribe(this, [this](const JournaldWatcher::LogEntry &entry) {
+        if (entry.value("_MACHINE_ID") != JournaldWatcher::instance()->machineId())
+            return;
+
+        const QByteArray pid = entry.value("_PID");
+        if (pid.isEmpty())
+            return;
+
+        const qint64 pidNum = static_cast<qint64>(QString::fromLatin1(pid).toInt());
+        if (pidNum != d->applicationProcessHandle.pid())
+            return;
+
+        const QString message = QString::fromUtf8(entry.value("MESSAGE")) + "\n";
+        appendMessageRequested(this, message, Utils::OutputFormat::LogMessageFormat);
+    });
+#endif
+}
 
 RunControl::~RunControl()
 {
+#ifdef WITH_JOURNALD
+    JournaldWatcher::instance()->unsubscribe(this);
+#endif
     delete d;
 }
 
-Utils::OutputFormatter *RunControl::outputFormatter()
+Utils::OutputFormatter *RunControl::outputFormatter() const
 {
     return d->outputFormatter;
 }
@@ -671,6 +655,13 @@ bool RunControl::canReUseOutputPane(const RunControl *other) const
     return d->runnable.canReUseOutputPane(other->d->runnable);
 }
 
+/*!
+    A handle to the application process.
+
+    This is typically a process id, but should be treated as
+    opaque handle to the process controled by this \c RunControl.
+*/
+
 ProcessHandle RunControl::applicationProcessHandle() const
 {
     return d->applicationProcessHandle;
@@ -680,7 +671,7 @@ void RunControl::setApplicationProcessHandle(const ProcessHandle &handle)
 {
     if (d->applicationProcessHandle != handle) {
         d->applicationProcessHandle = handle;
-        emit applicationProcessHandleChanged();
+        emit applicationProcessHandleChanged(QPrivateSignal());
     }
 }
 
@@ -699,8 +690,13 @@ bool RunControl::promptToStop(bool *optionalPrompt) const
     const QString msg = tr("<html><head/><body><center><i>%1</i> is still running.<center/>"
                            "<center>Force it to quit?</center></body></html>").arg(displayName());
     return showPromptToStopDialog(tr("Application Still Running"), msg,
-                                  tr("Force Quit"), tr("Keep Running"),
+                                  tr("Force &Quit"), tr("&Keep Running"),
                                   optionalPrompt);
+}
+
+bool RunControl::isRunning() const
+{
+    return d->isRunning;
 }
 
 /*!
@@ -739,29 +735,46 @@ bool RunControl::showPromptToStopDialog(const QString &title,
     return close;
 }
 
-void RunControl::bringApplicationToForeground(qint64 pid)
+/*!
+    Brings the application determined by this RunControl's \c applicationProcessHandle
+    to the foreground.
+
+    The default implementation raises the application on Mac, and does
+    nothing elsewhere.
+*/
+void RunControl::bringApplicationToForeground()
 {
 #ifdef Q_OS_OSX
-    d->internalPid = pid;
     d->foregroundCount = 0;
     bringApplicationToForegroundInternal();
-#else
-    Q_UNUSED(pid)
 #endif
+}
+
+void RunControl::reportApplicationStart()
+{
+    d->isRunning = true;
+    emit started(QPrivateSignal());
+}
+
+void RunControl::reportApplicationStop()
+{
+    d->isRunning = false;
+    QTC_CHECK(d->applicationProcessHandle.isValid());
+    setApplicationProcessHandle(Utils::ProcessHandle());
+    emit finished(QPrivateSignal());
 }
 
 void RunControl::bringApplicationToForegroundInternal()
 {
 #ifdef Q_OS_OSX
     ProcessSerialNumber psn;
-    GetProcessForPID(d->internalPid, &psn);
+    GetProcessForPID(d->applicationProcessHandle.pid(), &psn);
     if (SetFrontProcess(&psn) == procNotFound && d->foregroundCount < 15) {
         // somehow the mac/carbon api says
         // "-600 no eligible process with specified process id"
         // if we call SetFrontProcess too early
         ++d->foregroundCount;
         QTimer::singleShot(200, this, &RunControl::bringApplicationToForegroundInternal);
-        return;
     }
 #endif
 }
@@ -774,6 +787,91 @@ void RunControl::appendMessage(const QString &msg, Utils::OutputFormat format)
 bool Runnable::canReUseOutputPane(const Runnable &other) const
 {
     return d ? d->canReUseOutputPane(other.d) : (other.d.get() == 0);
+}
+
+
+// SimpleRunControlPrivate
+
+namespace Internal {
+
+class SimpleRunControlPrivate
+{
+public:
+    ApplicationLauncher m_launcher;
+};
+
+} // Internal
+
+SimpleRunControl::SimpleRunControl(RunConfiguration *runConfiguration, Core::Id mode)
+    : RunControl(runConfiguration, mode), d(new Internal::SimpleRunControlPrivate)
+{
+    setRunnable(runConfiguration->runnable());
+    setIcon(Utils::Icons::RUN_SMALL_TOOLBAR);
+}
+
+SimpleRunControl::~SimpleRunControl()
+{
+    delete d;
+}
+
+ApplicationLauncher &SimpleRunControl::applicationLauncher()
+{
+    return d->m_launcher;
+}
+
+void SimpleRunControl::start()
+{
+    reportApplicationStart();
+    d->m_launcher.disconnect(this);
+
+    connect(&d->m_launcher, &ApplicationLauncher::appendMessage,
+            this, static_cast<void(RunControl::*)(const QString &, Utils::OutputFormat)>(&RunControl::appendMessage));
+    connect(&d->m_launcher, &ApplicationLauncher::processStarted,
+            this, &SimpleRunControl::onProcessStarted);
+    connect(&d->m_launcher, &ApplicationLauncher::processExited,
+            this, &SimpleRunControl::onProcessFinished);
+
+    QTC_ASSERT(runnable().is<StandardRunnable>(), return);
+    auto r = runnable().as<StandardRunnable>();
+    if (r.executable.isEmpty()) {
+        appendMessage(RunControl::tr("No executable specified.") + QLatin1Char('\n'), Utils::ErrorMessageFormat);
+        reportApplicationStop();
+    }  else if (!QFileInfo::exists(r.executable)) {
+        appendMessage(RunControl::tr("Executable %1 does not exist.")
+                      .arg(QDir::toNativeSeparators(r.executable)) + QLatin1Char('\n'),
+                      Utils::ErrorMessageFormat);
+        reportApplicationStop();
+    } else {
+        QString msg = RunControl::tr("Starting %1...").arg(QDir::toNativeSeparators(r.executable)) + QLatin1Char('\n');
+        appendMessage(msg, Utils::NormalMessageFormat);
+        d->m_launcher.start(r);
+        setApplicationProcessHandle(d->m_launcher.applicationPID());
+    }
+}
+
+RunControl::StopResult SimpleRunControl::stop()
+{
+    d->m_launcher.stop();
+    return StoppedSynchronously;
+}
+
+void SimpleRunControl::onProcessStarted()
+{
+    // Console processes only know their pid after being started
+    setApplicationProcessHandle(d->m_launcher.applicationPID());
+    bringApplicationToForeground();
+}
+
+void SimpleRunControl::onProcessFinished(int exitCode, QProcess::ExitStatus status)
+{
+    QString msg;
+    QString exe = runnable().as<StandardRunnable>().executable;
+    if (status == QProcess::CrashExit)
+        msg = tr("%1 crashed.").arg(QDir::toNativeSeparators(exe));
+    else
+        msg = tr("%1 exited with code %2").arg(QDir::toNativeSeparators(exe)).arg(exitCode);
+    appendMessage(msg + QLatin1Char('\n'), Utils::NormalMessageFormat);
+    reportApplicationStop();
 }
 
 } // namespace ProjectExplorer

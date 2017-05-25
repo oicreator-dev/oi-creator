@@ -110,7 +110,7 @@ public:
 };
 
 // See cpp file for documentation.
-class PROJECTEXPLORER_EXPORT IDevice
+class PROJECTEXPLORER_EXPORT IDevice : public QEnableSharedFromThis<IDevice>
 {
 public:
     typedef QSharedPointer<IDevice> Ptr;
@@ -167,9 +167,6 @@ public:
     void setDeviceState(const DeviceState state);
     QString deviceStateToString() const;
 
-    void setDeviceIcon(const QList<Utils::Icon> &deviceIcon);
-    QIcon deviceIcon() const;
-
     virtual void fromMap(const QVariantMap &map);
     virtual QVariantMap toMap() const;
     virtual Ptr clone() const = 0;
@@ -198,9 +195,6 @@ protected:
     IDevice();
     IDevice(Core::Id type, Origin origin, MachineType machineType, Core::Id id = Core::Id());
     IDevice(const IDevice &other);
-
-    Ptr sharedFromThis();
-    ConstPtr sharedFromThis() const;
 
 private:
     IDevice &operator=(const IDevice &); // Unimplemented.

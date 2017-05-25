@@ -409,6 +409,17 @@ void ModelNode::setParentProperty(NodeAbstractProperty parent)
     parent.reparentHere(*this);
 }
 
+void ModelNode::changeType(const TypeName &typeName, int majorVersion, int minorVersion)
+{
+    if (!isValid()) {
+        Q_ASSERT_X(isValid(), Q_FUNC_INFO, "model node is invalid");
+        throw InvalidModelNodeException(__LINE__, __FUNCTION__, __FILE__);
+    }
+
+    model()->d->changeNodeType(internalNode(), typeName, majorVersion, minorVersion);
+
+}
+
 void ModelNode::setParentProperty(const ModelNode &newParentNode, const PropertyName &propertyName)
 {
     setParentProperty(newParentNode.nodeAbstractProperty(propertyName));
@@ -860,10 +871,9 @@ bool ModelNode::isSelected() const
 */
 bool ModelNode::isRootNode() const
 {
-    if (!isValid()) {
-        Q_ASSERT_X(isValid(), Q_FUNC_INFO, "model node is invalid");
-        throw InvalidModelNodeException(__LINE__, __FUNCTION__, __FILE__);
-    }
+    if (!isValid())
+        return false;
+
     return view()->rootModelNode() == *this;
 }
 

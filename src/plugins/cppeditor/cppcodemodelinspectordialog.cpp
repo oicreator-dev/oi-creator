@@ -201,6 +201,162 @@ void FilterableView::clearFilter()
     lineEdit->clear();
 }
 
+// --- ProjectFilesModel --------------------------------------------------------------------------
+
+class ProjectFilesModel : public QAbstractListModel
+{
+    Q_OBJECT
+public:
+    ProjectFilesModel(QObject *parent);
+    void configure(const ProjectFiles &files);
+    void clear();
+
+    enum Columns { FileKindColumn, FilePathColumn, ColumnCount };
+
+    int rowCount(const QModelIndex &parent = QModelIndex()) const;
+    int columnCount(const QModelIndex &parent = QModelIndex()) const;
+    QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const;
+    QVariant headerData(int section, Qt::Orientation orientation, int role) const;
+
+private:
+    ProjectFiles m_files;
+};
+
+ProjectFilesModel::ProjectFilesModel(QObject *parent) : QAbstractListModel(parent)
+{
+}
+
+void ProjectFilesModel::configure(const ProjectFiles &files)
+{
+    emit layoutAboutToBeChanged();
+    m_files = files;
+    emit layoutChanged();
+}
+
+void ProjectFilesModel::clear()
+{
+    emit layoutAboutToBeChanged();
+    m_files.clear();
+    emit layoutChanged();
+}
+
+int ProjectFilesModel::rowCount(const QModelIndex &/*parent*/) const
+{
+    return m_files.size();
+}
+
+int ProjectFilesModel::columnCount(const QModelIndex &/*parent*/) const
+{
+    return ProjectFilesModel::ColumnCount;
+}
+
+QVariant ProjectFilesModel::data(const QModelIndex &index, int role) const
+{
+    if (role == Qt::DisplayRole) {
+        const int row = index.row();
+        const int column = index.column();
+        if (column == FileKindColumn) {
+            return CMI::Utils::toString(m_files.at(row).kind);
+        } else if (column == FilePathColumn) {
+            return m_files.at(row).path;
+        }
+    }
+    return QVariant();
+}
+
+QVariant ProjectFilesModel::headerData(int section, Qt::Orientation orientation, int role) const
+{
+    if (orientation == Qt::Horizontal && role == Qt::DisplayRole) {
+        switch (section) {
+        case FileKindColumn:
+            return QLatin1String("File Kind");
+        case FilePathColumn:
+            return QLatin1String("File Path");
+        default:
+            return QVariant();
+        }
+    }
+    return QVariant();
+}
+
+// --- ProjectHeaderPathModel --------------------------------------------------------------------
+
+class ProjectHeaderPathsModel : public QAbstractListModel
+{
+    Q_OBJECT
+public:
+    ProjectHeaderPathsModel(QObject *parent);
+    void configure(const ProjectPartHeaderPaths &paths);
+    void clear();
+
+    enum Columns { TypeColumn, PathColumn, ColumnCount };
+
+    int rowCount(const QModelIndex &parent = QModelIndex()) const;
+    int columnCount(const QModelIndex &parent = QModelIndex()) const;
+    QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const;
+    QVariant headerData(int section, Qt::Orientation orientation, int role) const;
+
+private:
+    ProjectPartHeaderPaths m_paths;
+};
+
+ProjectHeaderPathsModel::ProjectHeaderPathsModel(QObject *parent) : QAbstractListModel(parent)
+{
+}
+
+void ProjectHeaderPathsModel::configure(const ProjectPartHeaderPaths &paths)
+{
+    emit layoutAboutToBeChanged();
+    m_paths = paths;
+    emit layoutChanged();
+}
+
+void ProjectHeaderPathsModel::clear()
+{
+    emit layoutAboutToBeChanged();
+    m_paths.clear();
+    emit layoutChanged();
+}
+
+int ProjectHeaderPathsModel::rowCount(const QModelIndex &/*parent*/) const
+{
+    return m_paths.size();
+}
+
+int ProjectHeaderPathsModel::columnCount(const QModelIndex &/*parent*/) const
+{
+    return ProjectFilesModel::ColumnCount;
+}
+
+QVariant ProjectHeaderPathsModel::data(const QModelIndex &index, int role) const
+{
+    if (role == Qt::DisplayRole) {
+        const int row = index.row();
+        const int column = index.column();
+        if (column == TypeColumn) {
+            return CMI::Utils::toString(m_paths.at(row).type);
+        } else if (column == PathColumn) {
+            return m_paths.at(row).path;
+        }
+    }
+    return QVariant();
+}
+
+QVariant ProjectHeaderPathsModel::headerData(int section, Qt::Orientation orientation, int role) const
+{
+    if (orientation == Qt::Horizontal && role == Qt::DisplayRole) {
+        switch (section) {
+        case TypeColumn:
+            return QLatin1String("Type");
+        case PathColumn:
+            return QLatin1String("Path");
+        default:
+            return QVariant();
+        }
+    }
+    return QVariant();
+}
+
 // --- KeyValueModel ------------------------------------------------------------------------------
 
 class KeyValueModel : public QAbstractListModel
@@ -1023,6 +1179,11 @@ QVariant ProjectPartsModel::data(const QModelIndex &index, int role) const
             return m_projectPartsList.at(row)->displayName;
         else if (column == PartFilePathColumn)
             return QDir::toNativeSeparators(m_projectPartsList.at(row)->projectFile);
+    } else if (role == Qt::ForegroundRole) {
+        if (!m_projectPartsList.at(row)->selectedForBuilding) {
+            return QApplication::palette().color(QPalette::ColorGroup::Disabled,
+                                                 QPalette::ColorRole::Text);
+        }
     } else if (role == Qt::UserRole) {
         return m_projectPartsList.at(row)->id();
     }
@@ -1175,6 +1336,8 @@ CppCodeModelInspectorDialog::CppCodeModelInspectorDialog(QWidget *parent)
     , m_projectPartsModel(new ProjectPartsModel(this))
     , m_proxyProjectPartsModel(new QSortFilterProxyModel(this))
     , m_partGenericInfoModel(new KeyValueModel(this))
+    , m_projectFilesModel(new ProjectFilesModel(this))
+    , m_projectHeaderPathsModel(new ProjectHeaderPathsModel(this))
     , m_workingCopyView(new FilterableView(this))
     , m_workingCopyModel(new WorkingCopyModel(this))
     , m_proxyWorkingCopyModel(new QSortFilterProxyModel(this))
@@ -1201,6 +1364,8 @@ CppCodeModelInspectorDialog::CppCodeModelInspectorDialog(QWidget *parent)
     m_proxyProjectPartsModel->setFilterKeyColumn(ProjectPartsModel::PartFilePathColumn);
     m_projectPartsView->setModel(m_proxyProjectPartsModel);
     m_ui->partGeneralView->setModel(m_partGenericInfoModel);
+    m_ui->projectFilesView->setModel(m_projectFilesModel);
+    m_ui->projectHeaderPathsView->setModel(m_projectHeaderPathsModel);
 
     m_proxyWorkingCopyModel->setSourceModel(m_workingCopyModel);
     m_proxyWorkingCopyModel->setFilterKeyColumn(WorkingCopyModel::FilePathColumn);
@@ -1415,7 +1580,7 @@ void CppCodeModelInspectorDialog::refresh()
 
     // Project Parts
     const ProjectPart::Ptr editorsProjectPart = cppEditorDocument
-        ? cppEditorDocument->processor()->parser()->projectPart()
+        ? cppEditorDocument->processor()->parser()->projectPartInfo().projectPart
         : ProjectPart::Ptr();
 
     const QList<ProjectInfo> projectInfos = cmmi->projectInfos();
@@ -1584,15 +1749,15 @@ static QString partTabName(int tabIndex, int numberOfEntries = -1)
 void CppCodeModelInspectorDialog::clearProjectPartData()
 {
     m_partGenericInfoModel->clear();
+    m_projectFilesModel->clear();
+    m_projectHeaderPathsModel->clear();
 
-    m_ui->partProjectFilesEdit->clear();
     m_ui->projectPartTab->setTabText(ProjectPartFilesTab, partTabName(ProjectPartFilesTab));
 
     m_ui->partToolchainDefinesEdit->clear();
     m_ui->partProjectDefinesEdit->clear();
     m_ui->projectPartTab->setTabText(ProjectPartDefinesTab, partTabName(ProjectPartDefinesTab));
 
-    m_ui->partHeaderPathsEdit->clear();
     m_ui->projectPartTab->setTabText(ProjectPartHeaderPathsTab,
                                      partTabName(ProjectPartHeaderPathsTab));
 
@@ -1612,12 +1777,21 @@ void CppCodeModelInspectorDialog::updateProjectPartData(const ProjectPart::Ptr &
         projectName = project->displayName();
         projectFilePath = project->projectFilePath().toUserOutput();
     }
+    const QString callGroupId = part->callGroupId.isEmpty() ? QString::fromLatin1("<None>")
+                                                            : part->callGroupId;
+    const QString buildSystemTarget
+            = part->buildSystemTarget.isEmpty() ? QString::fromLatin1("<None>")
+                                                : part->buildSystemTarget;
+
     KeyValueModel::Table table = KeyValueModel::Table()
         << qMakePair(QString::fromLatin1("Project Part Name"), part->displayName)
-        << qMakePair(QString::fromLatin1("Project Part File"),
-                     QDir::toNativeSeparators(part->projectFile))
+        << qMakePair(QString::fromLatin1("Project Part File"), part->projectFileLocation())
         << qMakePair(QString::fromLatin1("Project Name"), projectName)
         << qMakePair(QString::fromLatin1("Project File"), projectFilePath)
+        << qMakePair(QString::fromLatin1("Buildsystem Target"), buildSystemTarget)
+        << qMakePair(QString::fromLatin1("Callgroup Id"), callGroupId)
+        << qMakePair(QString::fromLatin1("Selected For Building"),
+                     CMI::Utils::toString(part->selectedForBuilding))
         << qMakePair(QString::fromLatin1("Language Version"),
                      CMI::Utils::toString(part->languageVersion))
         << qMakePair(QString::fromLatin1("Language Extensions"),
@@ -1632,7 +1806,7 @@ void CppCodeModelInspectorDialog::updateProjectPartData(const ProjectPart::Ptr &
     resizeColumns<KeyValueModel>(m_ui->partGeneralView);
 
     // Project Files
-    m_ui->partProjectFilesEdit->setPlainText(CMI::Utils::toString(part->files));
+    m_projectFilesModel->configure(part->files);
     m_ui->projectPartTab->setTabText(ProjectPartFilesTab,
         partTabName(ProjectPartFilesTab, part->files.size()));
 
@@ -1650,7 +1824,7 @@ void CppCodeModelInspectorDialog::updateProjectPartData(const ProjectPart::Ptr &
         partTabName(ProjectPartDefinesTab, numberOfDefines));
 
     // Header Paths
-    m_ui->partHeaderPathsEdit->setPlainText(CMI::Utils::pathListToString(part->headerPaths));
+    m_projectHeaderPathsModel->configure(part->headerPaths);
     m_ui->projectPartTab->setTabText(ProjectPartHeaderPathsTab,
         partTabName(ProjectPartHeaderPathsTab, part->headerPaths.size()));
 

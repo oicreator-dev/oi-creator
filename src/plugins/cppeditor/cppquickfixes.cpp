@@ -195,6 +195,13 @@ inline bool isQtStringTranslation(const QByteArray &id)
     return id == "tr" || id == "trUtf8" || id == "translate" || id == "QT_TRANSLATE_NOOP";
 }
 
+inline bool isQtFuzzyComparable(const QString &typeName)
+{
+    return typeName == QLatin1String("double")
+        || typeName == QLatin1String("float")
+        || typeName == QLatin1String("qreal");
+}
+
 Class *isMemberFunction(const LookupContext &context, Function *function)
 {
     QTC_ASSERT(function, return 0);
@@ -2446,8 +2453,6 @@ void InsertDeclFromDef::match(const CppQuickFixInterface &interface, QuickFixOpe
             if (DeclaratorIdAST *declId = node->asDeclaratorId()) {
                 if (file->isCursorOn(declId)) {
                     if (FunctionDefinitionAST *candidate = path.at(idx - 2)->asFunctionDefinition()) {
-                        if (funDef)
-                            return;
                         funDef = candidate;
                         break;
                     }
@@ -3850,7 +3855,7 @@ public:
                 result.file = refactoring.file(declFileName);
                 ASTPath astPath(result.file->cppDocument());
                 const QList<AST *> path = astPath(s->line(), s->column());
-                SimpleDeclarationAST *simpleDecl;
+                SimpleDeclarationAST *simpleDecl = nullptr;
                 for (int idx = 0; idx < path.size(); ++idx) {
                     AST *node = path.at(idx);
                     simpleDecl = node->asSimpleDeclaration();
@@ -4429,7 +4434,7 @@ public:
         , m_signalName(signalName)
         , m_storageName(storageName)
     {
-        setDescription(QuickFixFactory::tr("Generate Missing Q_PROPERTY Members..."));
+        setDescription(QuickFixFactory::tr("Generate Missing Q_PROPERTY Members"));
     }
 
     void perform()
@@ -4463,9 +4468,14 @@ public:
             if (m_signalName.isEmpty()) {
                 setter << m_storageName <<  " = " << baseName << ";\n}\n";
             } else {
-                setter << "if (" << m_storageName << " == " << baseName << ")\nreturn;\n\n"
-                       << m_storageName << " = " << baseName << ";\nemit " << m_signalName
-                       << '(' << baseName << ");\n}\n";
+                if (isQtFuzzyComparable(typeName)) {
+                    setter << "qWarning(\"Floating point comparison needs context sanity check\");\n";
+                    setter << "if (qFuzzyCompare(" << m_storageName << ", " << baseName << "))\nreturn;\n\n";
+                }
+                else
+                    setter << "if (" << m_storageName << " == " << baseName << ")\nreturn;\n\n";
+                setter << m_storageName << " = " << baseName << ";\nemit " << m_signalName
+                       << '(' << m_storageName << ");\n}\n";
             }
             InsertionLocation setterLoc = locator.methodDeclarationInClass(file->fileName(), m_class, InsertionPointLocator::PublicSlot);
             QTC_ASSERT(setterLoc.isValid(), return);
@@ -4890,7 +4900,7 @@ void MoveAllFuncDefOutside::match(const CppQuickFixInterface &interface, QuickFi
         return;
 
     // Determine if cursor is on a class which is not a base class
-    ClassSpecifierAST *classAST = Q_NULLPTR;
+    ClassSpecifierAST *classAST = nullptr;
     if (SimpleNameAST *nameAST = path.at(pathSize - 1)->asSimpleName()) {
         if (!interface.isCursorOn(nameAST))
             return;

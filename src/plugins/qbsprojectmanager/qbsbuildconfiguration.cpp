@@ -28,7 +28,6 @@
 #include "qbsbuildconfigurationwidget.h"
 #include "qbsbuildstep.h"
 #include "qbscleanstep.h"
-#include "qbsinstallstep.h"
 #include "qbsproject.h"
 #include "qbsprojectmanagerconstants.h"
 #include "qbsprojectmanagersettings.h"
@@ -134,7 +133,7 @@ Internal::QbsProject *QbsBuildConfiguration::project() const
 
 IOutputParser *QbsBuildConfiguration::createOutputParser() const
 {
-    ToolChain *tc = ToolChainKitInformation::toolChain(target()->kit(), ToolChain::Language::Cxx);
+    ToolChain *tc = ToolChainKitInformation::toolChain(target()->kit(), ProjectExplorer::Constants::CXX_LANGUAGE_ID);
     return tc ? tc->outputParser() : 0;
 }
 
@@ -200,38 +199,39 @@ void QbsBuildConfiguration::emitBuildTypeChanged()
     emit buildTypeChanged();
 }
 
+QString QbsBuildConfiguration::configurationName() const
+{
+    const QString profileName = QbsManager::instance()->profileForKit(target()->kit());
+    const QString buildVariant = qbsConfiguration()
+            .value(QLatin1String(Constants::QBS_CONFIG_VARIANT_KEY)).toString();
+    return profileName + QLatin1Char('-') + buildVariant;
+}
+
 class StepProxy
 {
 public:
     StepProxy(const BuildStep *buildStep)
         : m_qbsBuildStep(qobject_cast<const QbsBuildStep *>(buildStep))
         , m_qbsCleanStep(qobject_cast<const QbsCleanStep *>(buildStep))
-        , m_qbsInstallStep(qobject_cast<const QbsInstallStep *>(buildStep))
     {
     }
 
     QString command() const {
         if (m_qbsBuildStep)
             return QLatin1String("build");
-        if (m_qbsCleanStep)
-            return QLatin1String("clean");
-        return QLatin1String("install");
+        return QLatin1String("clean");
     }
 
     bool dryRun() const {
         if (m_qbsBuildStep)
             return false;
-        if (m_qbsCleanStep)
-            return m_qbsCleanStep->dryRun();
-        return m_qbsInstallStep->dryRun();
+        return m_qbsCleanStep->dryRun();
     }
 
     bool keepGoing() const {
         if (m_qbsBuildStep)
             return m_qbsBuildStep->keepGoing();
-        if (m_qbsCleanStep)
-            return m_qbsCleanStep->keepGoing();
-        return m_qbsInstallStep->keepGoing();
+        return m_qbsCleanStep->keepGoing();
     }
 
     bool showCommandLines() const {
@@ -245,8 +245,6 @@ public:
     bool cleanInstallRoot() const {
         if (m_qbsBuildStep)
             return m_qbsBuildStep->cleanInstallRoot();
-        if (m_qbsInstallStep)
-            return m_qbsInstallStep->removeFirst();
         return false;
     }
 
@@ -254,17 +252,18 @@ public:
         return m_qbsBuildStep ? m_qbsBuildStep->maxJobs() : 0;
     }
 
-    QString installRoot() const {
-        return m_qbsInstallStep ? m_qbsInstallStep->absoluteInstallRoot() : QString();
+    Utils::FileName installRoot() const {
+        if (m_qbsBuildStep && m_qbsBuildStep->hasCustomInstallRoot())
+            return m_qbsBuildStep->installRoot();
+        return Utils::FileName();
     }
 
 private:
     const QbsBuildStep * const m_qbsBuildStep;
     const QbsCleanStep * const m_qbsCleanStep;
-    const QbsInstallStep * const m_qbsInstallStep;
 };
 
-QString QbsBuildConfiguration::equivalentCommandLine(const BuildStep *buildStep)
+QString QbsBuildConfiguration::equivalentCommandLine(const BuildStep *buildStep) const
 {
     QString commandLine;
     const QString qbsInstallDir = QString::fromLocal8Bit(qgetenv("QBS_INSTALL_DIR"));
@@ -274,49 +273,40 @@ QString QbsBuildConfiguration::equivalentCommandLine(const BuildStep *buildStep)
     Utils::QtcProcess::addArg(&commandLine, QDir::toNativeSeparators(qbsFilePath));
     const StepProxy stepProxy(buildStep);
     Utils::QtcProcess::addArg(&commandLine, stepProxy.command());
-    const QbsBuildConfiguration * const buildConfig = qobject_cast<QbsBuildConfiguration *>(
-                buildStep->project()->activeTarget()->activeBuildConfiguration());
-    if (buildConfig) {
-        const QString buildDir = buildConfig->buildDirectory().toUserOutput();
-        Utils::QtcProcess::addArgs(&commandLine, QStringList() << QLatin1String("-d") << buildDir);
-    }
-    Utils::QtcProcess::addArgs(&commandLine, QStringList() << QLatin1String("-f")
+    const QString buildDir = buildDirectory().toUserOutput();
+    Utils::QtcProcess::addArgs(&commandLine, QStringList({"-d", buildDir}));
+    Utils::QtcProcess::addArgs(&commandLine, QStringList("-f")
                                << buildStep->project()->projectFilePath().toUserOutput());
     if (QbsProjectManagerSettings::useCreatorSettingsDirForQbs()) {
-        Utils::QtcProcess::addArgs(&commandLine, QStringList() << QLatin1String("--settings-dir")
-                << QDir::toNativeSeparators(QbsProjectManagerSettings::qbsSettingsBaseDir()));
+        Utils::QtcProcess::addArgs(&commandLine, QStringList({"--settings-dir",
+                QDir::toNativeSeparators(QbsProjectManagerSettings::qbsSettingsBaseDir())}));
     }
     if (stepProxy.dryRun())
         Utils::QtcProcess::addArg(&commandLine, QLatin1String("--dry-run"));
     if (stepProxy.keepGoing())
         Utils::QtcProcess::addArg(&commandLine, QLatin1String("--keep-going"));
     if (stepProxy.showCommandLines())
-        Utils::QtcProcess::addArgs(&commandLine, QStringList()
-                                   << QLatin1String("--command-echo-mode")
-                                   << QLatin1String("command-line"));
+        Utils::QtcProcess::addArgs(&commandLine, QStringList({"--command-echo-mode",
+                                                              "command-line"}));
     if (stepProxy.noInstall())
         Utils::QtcProcess::addArg(&commandLine, QLatin1String("--no-install"));
     if (stepProxy.cleanInstallRoot())
         Utils::QtcProcess::addArg(&commandLine, QLatin1String("--clean-install-root"));
     const int jobCount = stepProxy.jobCount();
     if (jobCount > 0) {
-        Utils::QtcProcess::addArgs(&commandLine, QStringList() << QLatin1String("--jobs")
-                                   << QString::number(jobCount));
+        Utils::QtcProcess::addArgs(&commandLine, QStringList({"--jobs",
+                                                              QString::number(jobCount)}));
     }
-    const QString installRoot = stepProxy.installRoot();
-    if (!installRoot.isEmpty()) {
-        Utils::QtcProcess::addArgs(&commandLine, QStringList() << QLatin1String("--install-root")
-                                   << installRoot);
-    }
-
     const QString profileName = QbsManager::instance()->profileForKit(buildStep->target()->kit());
-    if (buildConfig) {
-        const QString buildVariant = buildConfig->qbsConfiguration()
-                .value(QLatin1String(Constants::QBS_CONFIG_VARIANT_KEY)).toString();
-        const QString configName = profileName + QLatin1Char('-') + buildVariant;
-        Utils::QtcProcess::addArg(&commandLine, configName);
-        Utils::QtcProcess::addArg(&commandLine, QLatin1String(Constants::QBS_CONFIG_VARIANT_KEY)
+    const QString buildVariant = qbsConfiguration()
+            .value(QLatin1String(Constants::QBS_CONFIG_VARIANT_KEY)).toString();
+    Utils::QtcProcess::addArg(&commandLine, configurationName());
+    Utils::QtcProcess::addArg(&commandLine, QLatin1String(Constants::QBS_CONFIG_VARIANT_KEY)
                                   + QLatin1Char(':') + buildVariant);
+    const Utils::FileName installRoot = stepProxy.installRoot();
+    if (!installRoot.isEmpty()) {
+        Utils::QtcProcess::addArg(&commandLine, QLatin1String(Constants::QBS_INSTALL_ROOT_KEY)
+                                  + QLatin1Char(':') + installRoot.toUserOutput());
     }
     Utils::QtcProcess::addArg(&commandLine, QLatin1String("profile:") + profileName);
 
@@ -387,8 +377,7 @@ QList<BuildInfo *> QbsBuildConfigurationFactory::availableBuilds(const Target *p
 
 int QbsBuildConfigurationFactory::priority(const Kit *k, const QString &projectPath) const
 {
-    Utils::MimeDatabase mdb;
-    if (k && mdb.mimeTypeForFile(projectPath).matchesName(QLatin1String(Constants::MIME_TYPE)))
+    if (k && Utils::mimeTypeForFile(projectPath).matchesName(Constants::MIME_TYPE))
         return 0;
     return -1;
 }

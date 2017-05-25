@@ -74,12 +74,12 @@ NavigatorView::NavigatorView(QObject* parent) :
 
     m_widget->setTreeModel(m_treeModel.data());
 
-    connect(treeWidget()->selectionModel(), SIGNAL(selectionChanged(QItemSelection,QItemSelection)), this, SLOT(changeSelection(QItemSelection,QItemSelection)));
+    connect(treeWidget()->selectionModel(), &QItemSelectionModel::selectionChanged, this, &NavigatorView::changeSelection);
 
-    connect(m_widget.data(), SIGNAL(leftButtonClicked()), this, SLOT(leftButtonClicked()));
-    connect(m_widget.data(), SIGNAL(rightButtonClicked()), this, SLOT(rightButtonClicked()));
-    connect(m_widget.data(), SIGNAL(downButtonClicked()), this, SLOT(downButtonClicked()));
-    connect(m_widget.data(), SIGNAL(upButtonClicked()), this, SLOT(upButtonClicked()));
+    connect(m_widget.data(), &NavigatorWidget::leftButtonClicked, this, &NavigatorView::leftButtonClicked);
+    connect(m_widget.data(), &NavigatorWidget::rightButtonClicked, this, &NavigatorView::rightButtonClicked);
+    connect(m_widget.data(), &NavigatorWidget::downButtonClicked, this, &NavigatorView::downButtonClicked);
+    connect(m_widget.data(), &NavigatorWidget::upButtonClicked, this, &NavigatorView::upButtonClicked);
 
     treeWidget()->setIndentation(treeWidget()->indentation() * 0.5);
 
@@ -238,6 +238,12 @@ void NavigatorView::rootNodeTypeChanged(const QString & /*type*/, int /*majorVer
         m_treeModel->updateItemRow(rootModelNode());
 }
 
+void NavigatorView::nodeTypeChanged(const ModelNode &node, const TypeName &, int , int)
+{
+    if (m_treeModel->isInTree(node))
+        m_treeModel->updateItemRow(node);
+}
+
 void NavigatorView::auxiliaryDataChanged(const ModelNode &modelNode, const PropertyName & name, const QVariant & /*data*/)
 {
     if (name == "invisible" && m_treeModel->isInTree(modelNode))
@@ -254,25 +260,28 @@ void NavigatorView::auxiliaryDataChanged(const ModelNode &modelNode, const Prope
     }
 }
 
-void NavigatorView::instanceErrorChange(const QVector<ModelNode> &errorNodeList)
+void NavigatorView::instanceErrorChanged(const QVector<ModelNode> &errorNodeList)
 {
     foreach (const ModelNode &currentModelNode, errorNodeList)
         m_treeModel->updateItemRow(currentModelNode);
 }
 
-void NavigatorView::nodeOrderChanged(const NodeListProperty &listProperty, const ModelNode &node, int /*oldIndex*/)
+void NavigatorView::nodeOrderChanged(const NodeListProperty & /*listProperty*/, const ModelNode &node, int /*oldIndex*/)
 {
+    bool blocked = blockSelectionChangedSignal(true);
+
     if (m_treeModel->isInTree(node)) {
-        m_treeModel->removeSubTree(listProperty.parentModelNode());
+        m_treeModel->removeSubTree(rootModelNode());
+        m_treeModel->addSubTree(rootModelNode());
 
-        if (node.isInHierarchy())
-            m_treeModel->addSubTree(listProperty.parentModelNode());
-
-        if (listProperty.parentModelNode().isValid()) {
-            QModelIndex index = m_treeModel->indexForNode(listProperty.parentModelNode());
-            treeWidget()->expand(index);
-        }
+        QModelIndex index = m_treeModel->indexForNode(rootModelNode());
+        treeWidget()->expand(index);
     }
+
+    // make sure selection is in sync again
+    updateItemSelection();
+
+    blockSelectionChangedSignal(blocked);
 }
 
 void NavigatorView::changeToComponent(const QModelIndex &index)

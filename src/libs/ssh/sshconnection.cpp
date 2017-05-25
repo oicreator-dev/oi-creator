@@ -199,7 +199,7 @@ int SshConnection::closeAllChannels()
 {
     try {
         return d->m_channelManager->closeAllChannels(Internal::SshChannelManager::CloseAllRegular);
-    } catch (const Botan::Exception &e) {
+    } catch (const std::exception &e) {
         qCWarning(Internal::sshLog, "%s: %s", Q_FUNC_INFO, e.what());
         return -1;
     }
@@ -344,7 +344,7 @@ void SshConnectionPrivate::handleIncomingData()
     } catch (const SshClientException &e) {
         closeConnection(SSH_DISCONNECT_BY_APPLICATION, e.error, "",
             e.errorString);
-    } catch (const Botan::Exception &e) {
+    } catch (const std::exception &e) {
         closeConnection(SSH_DISCONNECT_BY_APPLICATION, SshInternalError, "",
             tr("Botan library exception: %1").arg(QString::fromLatin1(e.what())));
     }
@@ -802,7 +802,7 @@ void SshConnectionPrivate::closeConnection(SshErrorCode sshError,
     try {
         m_channelManager->closeAllChannels(SshChannelManager::CloseAllAndReset);
         m_sendFacility.sendDisconnectPacket(sshError, serverErrorString);
-    } catch (const Botan::Exception &) {}  // Nothing sensible to be done here.
+    } catch (...) {}  // Nothing sensible to be done here.
     if (m_error != SshNoError)
         emit error(userError);
     if (m_state == ConnectionEstablished)

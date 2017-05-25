@@ -38,7 +38,7 @@
 
 using namespace ProjectExplorer;
 using QmakeProjectManager::QmakeProject;
-using QmakeProjectManager::QmakeProFileNode;
+using QmakeProjectManager::QmakeProFile;
 
 namespace WinRt {
 namespace Internal {
@@ -66,10 +66,7 @@ QList<Core::Id> WinRtRunConfigurationFactory::availableCreationIds(Target *paren
         return QList<Core::Id>();
 
     QmakeProject *project = static_cast<QmakeProject *>(parent->project());
-    QList<QmakeProFileNode *> nodes = project->applicationProFiles();
-    if (mode == AutoCreate)
-        nodes = QmakeProject::nodesWithQtcRunnable(nodes);
-    return QmakeProject::idsForNodes(Core::Id(Constants::WINRT_RC_PREFIX), nodes);
+    return project->creationIds(Constants::WINRT_RC_PREFIX, mode);
 }
 
 QString WinRtRunConfigurationFactory::displayNameForId(Core::Id id) const

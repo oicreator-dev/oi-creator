@@ -72,6 +72,8 @@
 #include <QPlainTextEdit>
 #include <QTimer>
 
+#include <memory.h>
+
 #define DEBUG_QML 0
 #if DEBUG_QML
 #   define SDEBUG(s) qDebug() << s
@@ -110,10 +112,16 @@ enum StepAction
 struct QmlV8ObjectData
 {
     int handle = -1;
+    int expectedProperties = -1;
     QString name;
     QString type;
     QVariant value;
     QVariantList properties;
+
+    bool hasChildren() const
+    {
+        return expectedProperties > 0 || !properties.isEmpty();
+    }
 };
 
 typedef std::function<void(const QVariantMap &)> QmlCallback;
@@ -142,7 +150,7 @@ public:
 
     void continueDebugging(StepAction stepAction);
 
-    void evaluate(const QString expr, const QmlCallback &cb);
+    void evaluate(const QString expr, qint64 context, const QmlCallback &cb);
     void lookup(const LookupItems &items);
     void backtrace();
     void updateLocals();
@@ -210,6 +218,7 @@ public:
     bool retryOnConnectFail = false;
     bool automaticConnect = false;
     bool unpausedEvaluate = false;
+    bool contextEvaluate = false;
 
     QTimer connectionTimer;
     QmlDebug::QmlDebugConnection *connection;
@@ -244,6 +253,8 @@ QmlEngine::QmlEngine(const DebuggerRunParameters &startParameters, DebuggerEngin
     if (masterEngine)
         setMasterEngine(masterEngine);
 
+    connect(this, &DebuggerEngine::stateChanged,
+            this, &QmlEngine::updateCurrentContext);
     connect(stackHandler(), &StackHandler::stackChanged,
             this, &QmlEngine::updateCurrentContext);
     connect(stackHandler(), &StackHandler::currentIndexChanged,
@@ -256,7 +267,7 @@ QmlEngine::QmlEngine(const DebuggerRunParameters &startParameters, DebuggerEngin
     connect(&d->applicationLauncher, &ApplicationLauncher::appendMessage,
             this, &QmlEngine::appendMessage);
     connect(&d->applicationLauncher, &ApplicationLauncher::processStarted,
-            &d->noDebugOutputTimer, static_cast<void(QTimer::*)()>(&QTimer::start));
+            this, &QmlEngine::handleLauncherStarted);
 
     d->outputParser.setNoOutputText(ApplicationLauncher::msgWinCannotRetrieveDebuggingOutput());
     connect(&d->outputParser, &QmlOutputParser::waitingForConnectionOnPort,
@@ -292,7 +303,7 @@ QmlEngine::QmlEngine(const DebuggerRunParameters &startParameters, DebuggerEngin
     connect(d->connection, &QmlDebugConnection::logStateChange,
             this, &QmlEngine::showConnectionStateMessage);
     connect(d->connection, &QmlDebugConnection::logError, this,
-            [this](const QString &error) { showMessage("QML Debugger: " + error, StatusBar); });
+            [this](const QString &error) { showMessage("QML Debugger: " + error, LogWarning); });
 
     connect(d->connection, &QmlDebugConnection::connectionFailed,
             this, &QmlEngine::connectionFailed);
@@ -336,6 +347,14 @@ void QmlEngine::setupInferior()
 
     if (d->automaticConnect)
         beginConnection();
+}
+
+void QmlEngine::handleLauncherStarted()
+{
+    // FIXME: The QmlEngine never calls notifyInferiorPid() triggering the
+    // raising, so do it here manually for now.
+    runControl()->bringApplicationToForeground();
+    d->noDebugOutputTimer.start();
 }
 
 void QmlEngine::appendMessage(const QString &msg, Utils::OutputFormat /* format */)
@@ -658,11 +677,6 @@ void QmlEngine::setupEngine()
         // we need to get the port first
         notifyEngineRequestRemoteSetup();
     } else {
-        // We can't do this in the constructore because runControl() isn't yet defined
-        connect(&d->applicationLauncher, &ApplicationLauncher::bringToForegroundRequested,
-                runControl(), &RunControl::bringApplicationToForeground,
-                Qt::UniqueConnection);
-
         notifyEngineSetupOk();
     }
 }
@@ -954,7 +968,7 @@ void QmlEngine::assignValueInDebugger(WatchItem *item,
             StackHandler *handler = stackHandler();
             QString exp = QString("%1 = %2;").arg(expression).arg(value.toString());
             if (handler->isContentsValid() && handler->currentFrame().isUsable()) {
-                d->evaluate(exp, [this](const QVariantMap &) { d->updateLocals(); });
+                d->evaluate(exp, -1, [this](const QVariantMap &) { d->updateLocals(); });
             } else {
                 showMessage(QString("Cannot evaluate %1 in current stack frame")
                             .arg(expression), ConsoleOutput);
@@ -986,7 +1000,7 @@ void QmlEngine::updateItem(const QString &iname)
         // The Qt side Q_ASSERTs otherwise. So postpone the evaluation,
         // it will be triggered from from upateLocals() later.
         QString exp = item->exp;
-        d->evaluate(exp, [this, iname, exp](const QVariantMap &response) {
+        d->evaluate(exp, -1, [this, iname, exp](const QVariantMap &response) {
             d->handleEvaluateExpression(response, iname, exp);
         });
     }
@@ -1119,22 +1133,36 @@ void QmlEngine::disconnected()
 void QmlEngine::updateCurrentContext()
 {
     QString context;
-    if (state() == InferiorStopOk) {
+    switch (state()) {
+    case InferiorStopOk:
         context = stackHandler()->currentFrame().function;
-    } else {
-        QModelIndex currentIndex = inspectorView()->currentIndex();
-        const WatchItem *currentData = watchHandler()->watchItem(currentIndex);
-        if (!currentData)
-            return;
-        const WatchItem *parentData = watchHandler()->watchItem(currentIndex.parent());
-        const WatchItem *grandParentData = watchHandler()->watchItem(currentIndex.parent().parent());
-        if (currentData->id != parentData->id)
-            context = currentData->name;
-        else if (parentData->id != grandParentData->id)
-            context = parentData->name;
-        else
-            context = grandParentData->name;
+        break;
+    case InferiorRunOk:
+        if (d->contextEvaluate || !d->unpausedEvaluate) {
+            // !unpausedEvaluate means we are using the old QQmlEngineDebugService which understands
+            // context. contextEvaluate means the V4 debug service can handle context.
+            QModelIndex currentIndex = inspectorView()->currentIndex();
+            const WatchItem *currentData = watchHandler()->watchItem(currentIndex);
+            if (!currentData)
+                return;
+            const WatchItem *parentData = watchHandler()->watchItem(currentIndex.parent());
+            const WatchItem *grandParentData = watchHandler()->watchItem(currentIndex.parent().parent());
+            if (currentData->id != parentData->id)
+                context = currentData->name;
+            else if (parentData->id != grandParentData->id)
+                context = parentData->name;
+            else
+                context = grandParentData->name;
+        }
+        break;
+    default:
+        // No context. Clear the label
+        debuggerConsole()->setContext(QString());
+        return;
     }
+
+    debuggerConsole()->setContext(tr("Context:") + QLatin1Char(' ')
+                                  + (context.isEmpty() ? tr("Global QML Context") : context));
 }
 
 void QmlEngine::executeDebuggerCommand(const QString &command, DebuggerLanguages languages)
@@ -1145,23 +1173,26 @@ void QmlEngine::executeDebuggerCommand(const QString &command, DebuggerLanguages
     if (state() == InferiorStopOk) {
         StackHandler *handler = stackHandler();
         if (handler->isContentsValid() && handler->currentFrame().isUsable()) {
-            d->evaluate(command, CB(d->handleExecuteDebuggerCommand));
+            d->evaluate(command, -1, CB(d->handleExecuteDebuggerCommand));
         } else {
             // Paused but no stack? Something is wrong
             d->engine->showMessage(QString("Cannot evaluate %1. The stack trace is broken.").arg(command),
                                    ConsoleOutput);
         }
-    } else if (d->unpausedEvaluate) {
-        d->evaluate(command, CB(d->handleExecuteDebuggerCommand));
     } else {
         QModelIndex currentIndex = inspectorView()->currentIndex();
-        quint32 queryId = d->inspectorAgent.queryExpressionResult(
-                    watchHandler()->watchItem(currentIndex)->id, command);
-        if (queryId) {
-            d->queryIds.append(queryId);
+        qint64 contextId = watchHandler()->watchItem(currentIndex)->id;
+
+        if (d->unpausedEvaluate) {
+            d->evaluate(command, contextId, CB(d->handleExecuteDebuggerCommand));
         } else {
-            d->engine->showMessage("The application has to be stopped in a breakpoint in order to"
-                                   " evaluate expressions", ConsoleOutput);
+            quint32 queryId = d->inspectorAgent.queryExpressionResult(contextId, command);
+            if (queryId) {
+                d->queryIds.append(queryId);
+            } else {
+                d->engine->showMessage("The application has to be stopped in a breakpoint in order to"
+                                       " evaluate expressions", ConsoleOutput);
+            }
         }
     }
 }
@@ -1230,6 +1261,8 @@ void QmlEngine::connectionFailed()
 {
     // this is only an error if we are already connected and something goes wrong.
     if (isConnected()) {
+        showMessage(tr("QML Debugger: Connection failed."), StatusBar);
+
         if (!isSlaveEngine()) { // normal flow for slave engine when gdb exits
             notifyInferiorSpontaneousStop();
             notifyInferiorIll();
@@ -1310,7 +1343,7 @@ void QmlEnginePrivate::continueDebugging(StepAction action)
     previousStepAction = action;
 }
 
-void QmlEnginePrivate::evaluate(const QString expr, const QmlCallback &cb)
+void QmlEnginePrivate::evaluate(const QString expr, qint64 context, const QmlCallback &cb)
 {
     //    { "seq"       : <number>,
     //      "type"      : "request",
@@ -1319,11 +1352,7 @@ void QmlEnginePrivate::evaluate(const QString expr, const QmlCallback &cb)
     //                      "frame"         : <number>,
     //                      "global"        : <boolean>,
     //                      "disable_break" : <boolean>,
-    //                      "additional_context" : [
-    //                           { "name" : <name1>, "handle" : <handle1> },
-    //                           { "name" : <name2>, "handle" : <handle2> },
-    //                           ...
-    //                      ]
+    //                      "context"       : <object id>
     //                    }
     //    }
 
@@ -1337,6 +1366,9 @@ void QmlEnginePrivate::evaluate(const QString expr, const QmlCallback &cb)
     StackHandler *handler = engine->stackHandler();
     if (handler->currentFrame().isUsable())
         cmd.arg(FRAME, handler->currentIndex());
+
+    if (context >= 0)
+        cmd.arg(CONTEXT, context);
 
     runCommand(cmd, cb);
 }
@@ -1367,13 +1399,14 @@ void QmlEnginePrivate::handleEvaluateExpression(const QVariantMap &response,
     if (success) {
         item->type = body.type;
         item->value = body.value.toString();
-        item->wantsChildren = body.properties.count();
+        item->setHasChildren(body.hasChildren());
     } else {
         //Do not set type since it is unknown
         item->setError(body.value.toString());
     }
     insertSubItems(item, body.properties);
     watchHandler->insertItem(item);
+    watchHandler->updateWatchersWindow();
 }
 
 void QmlEnginePrivate::lookup(const LookupItems &items)
@@ -1633,55 +1666,75 @@ QmlV8ObjectData QmlEnginePrivate::extractData(const QVariant &data) const
 
     objectData.name = dataMap.value(NAME).toString();
 
+    QString type = dataMap.value(TYPE).toString();
+    objectData.handle = dataMap.value(HANDLE).toInt();
+
+    if (type == "undefined") {
+        objectData.type = "undefined";
+        objectData.value = "undefined";
+
+    } else if (type == "null") { // Deprecated. typeof(null) == "object" in JavaScript
+        objectData.type = "object";
+        objectData.value = "null";
+
+    } else if (type == "boolean") {
+        objectData.type = "boolean";
+        objectData.value = dataMap.value(VALUE);
+
+    } else if (type == "number") {
+        objectData.type = "number";
+        objectData.value = dataMap.value(VALUE);
+
+    } else if (type == "string") {
+        QLatin1Char quote('"');
+        objectData.type = "string";
+        objectData.value = QString(quote + dataMap.value(VALUE).toString() + quote);
+
+    } else if (type == "object") {
+        objectData.type = "object";
+        // ignore "className": it doesn't make any sense.
+
+        if (dataMap.contains("value")) {
+            QVariant value = dataMap.value("value");
+            // The QVariant representation of null has changed across various Qt versions
+            // 5.6, 5.7: QVariant::Invalid
+            // 5.8: isValid(), !isNull(), type() == 51; only typeName() is unique: "std::nullptr_t"
+            // 5.9: isValid(), isNull(); We can then use isNull()
+            if (!value.isValid() || value.isNull()
+                    || strcmp(value.typeName(), "std::nullptr_t") == 0) {
+                objectData.value = "null"; // Yes, null is an object.
+            } else if (value.isValid()) {
+                objectData.expectedProperties = value.toInt();
+            }
+        }
+
+        if (dataMap.contains("properties"))
+            objectData.properties = dataMap.value("properties").toList();
+    } else if (type == "function") {
+        objectData.type = "function";
+        objectData.value = dataMap.value(NAME);
+        objectData.properties = dataMap.value("properties").toList();
+        QVariant value = dataMap.value("value");
+        if (value.isValid())
+            objectData.expectedProperties = value.toInt();
+
+    } else if (type == "script") {
+        objectData.type = "script";
+        objectData.value = dataMap.value(NAME);
+    }
+
     if (dataMap.contains(REF)) {
         objectData.handle = dataMap.value(REF).toInt();
         if (refVals.contains(objectData.handle)) {
             QmlV8ObjectData data = refVals.value(objectData.handle);
-            objectData.type = data.type;
-            objectData.value = data.value;
-            objectData.properties = data.properties;
-        }
-    } else {
-        objectData.handle = dataMap.value(HANDLE).toInt();
-        QString type = dataMap.value(TYPE).toString();
-
-        if (type == "undefined") {
-            objectData.type = "undefined";
-            objectData.value = "undefined";
-
-        } else if (type == "null") { // Deprecated. typeof(null) == "object" in JavaScript
-            objectData.type = "object";
-            objectData.value = "null";
-
-        } else if (type == "boolean") {
-            objectData.type = "boolean";
-            objectData.value = dataMap.value(VALUE);
-
-        } else if (type == "number") {
-            objectData.type = "number";
-            objectData.value = dataMap.value(VALUE);
-
-        } else if (type == "string") {
-            QLatin1Char quote('"');
-            objectData.type = "string";
-            objectData.value = QString(quote + dataMap.value(VALUE).toString() + quote);
-
-        } else if (type == "object") {
-            objectData.type = "object";
-            // ignore "className": it doesn't make any sense.
-
-            if (dataMap.contains("properties"))
-                objectData.properties = dataMap.value("properties").toList();
-            else if (dataMap.value("value").isNull())
-                objectData.value = "null"; // Yes, null is an object.
-        } else if (type == "function") {
-            objectData.type = "function";
-            objectData.value = dataMap.value(NAME);
-            objectData.properties = dataMap.value("properties").toList();
-
-        } else if (type == "script") {
-            objectData.type = "script";
-            objectData.value = dataMap.value(NAME);
+            if (objectData.type.isEmpty())
+                objectData.type = data.type;
+            if (!objectData.value.isValid())
+                objectData.value = data.value;
+            if (objectData.properties.isEmpty())
+                objectData.properties = data.properties;
+            if (objectData.expectedProperties < 0)
+                objectData.expectedProperties = data.expectedProperties;
         }
     }
 
@@ -2119,19 +2172,16 @@ StackFrame QmlEnginePrivate::extractStackFrame(const QVariant &bodyVal)
         return stackFrame;
     }
 
-    QmlV8ObjectData objectData = extractData(body.value("func"));
-    QString functionName = objectData.value.toString();
-    if (functionName.isEmpty())
-        functionName = QCoreApplication::translate("QmlEngine", "Anonymous Function");
-    stackFrame.function = functionName;
+    auto extractString = [this](const QVariant &item) {
+        return ((item.type() == QVariant::String) ? item : extractData(item).value).toString();
+    };
 
-    objectData = extractData(body.value("script"));
-    stackFrame.file = engine->toFileInProject(objectData.value.toString());
+    stackFrame.function = extractString(body.value("func"));
+    if (stackFrame.function.isEmpty())
+        stackFrame.function = QCoreApplication::translate("QmlEngine", "Anonymous Function");
+    stackFrame.file = engine->toFileInProject(extractString(body.value("script")));
     stackFrame.usable = QFileInfo(stackFrame.file).isReadable();
-
-    objectData = extractData(body.value("receiver"));
-    stackFrame.receiver = objectData.value.toString();
-
+    stackFrame.receiver = extractString(body.value("receiver"));
     stackFrame.line = body.value("line").toInt() + 1;
 
     return stackFrame;
@@ -2194,7 +2244,7 @@ void QmlEnginePrivate::handleFrame(const QVariantMap &response)
         item->id = objectData.handle;
         item->type = objectData.type;
         item->value = objectData.value.toString();
-        item->setHasChildren(objectData.properties.count());
+        item->setHasChildren(objectData.hasChildren());
         // In case of global object, we do not get children
         // Set children nevertheless and query later.
         if (item->value == "global") {
@@ -2202,7 +2252,7 @@ void QmlEnginePrivate::handleFrame(const QVariantMap &response)
             item->id = 0;
         }
         watchHandler->insertItem(item);
-        evaluate(exp, [this, iname, exp](const QVariantMap &response) {
+        evaluate(exp, -1, [this, iname, exp](const QVariantMap &response) {
             handleEvaluateExpression(response, iname, exp);
         });
     }
@@ -2225,7 +2275,7 @@ void QmlEnginePrivate::handleFrame(const QVariantMap &response)
         QStringList watchers = watchHandler->watchedExpressions();
         foreach (const QString &exp, watchers) {
             const QString iname = watchHandler->watcherName(exp);
-            evaluate(exp, [this, iname, exp](const QVariantMap &response) {
+            evaluate(exp, -1, [this, iname, exp](const QVariantMap &response) {
                 handleEvaluateExpression(response, iname, exp);
             });
         }
@@ -2267,7 +2317,7 @@ void QmlEnginePrivate::handleScope(const QVariantMap &response)
     LookupItems itemsToLookup;
     foreach (const QVariant &property, objectData.properties) {
         QmlV8ObjectData localData = extractData(property);
-        auto item = new WatchItem;
+        std::unique_ptr<WatchItem> item(new WatchItem);
         item->exp = localData.name;
         //Check for v8 specific local data
         if (item->exp.startsWith('.') || item->exp.isEmpty())
@@ -2276,12 +2326,12 @@ void QmlEnginePrivate::handleScope(const QVariantMap &response)
         item->name = item->exp;
         item->iname = "local." + item->exp;
         item->id = localData.handle;
+        item->type = localData.type;
+        item->value = localData.value.toString();
+        item->setHasChildren(localData.hasChildren());
 
-        if (localData.value.isValid()) {
-            item->type = localData.type;
-            item->value = localData.value.toString();
-            item->setHasChildren(localData.properties.count());
-            engine->watchHandler()->insertItem(item);
+        if (localData.value.isValid() || item->wantsChildren || localData.expectedProperties == 0) {
+            engine->watchHandler()->insertItem(item.release());
         } else {
             itemsToLookup.insert(int(item->id), {item->iname, item->name, item->exp});
         }
@@ -2400,7 +2450,7 @@ void QmlEnginePrivate::insertSubItems(WatchItem *parent, const QVariantList &pro
     const QSet<QString> expandedINames = engine->watchHandler()->expandedINames();
     foreach (const QVariant &property, properties) {
         QmlV8ObjectData propertyData = extractData(property);
-        auto item = new WatchItem;
+        std::unique_ptr<WatchItem> item(new WatchItem);
         item->name = propertyData.name;
 
         // Check for v8 specific local data
@@ -2421,8 +2471,8 @@ void QmlEnginePrivate::insertSubItems(WatchItem *parent, const QVariantList &pro
         item->value = propertyData.value.toString();
         if (item->type.isEmpty() || expandedINames.contains(item->iname))
             itemsToLookup.insert(propertyData.handle, {item->iname, item->name, item->exp});
-        item->setHasChildren(propertyData.properties.count() > 0);
-        parent->appendChild(item);
+        item->setHasChildren(propertyData.hasChildren());
+        parent->appendChild(item.release());
     }
 
     if (boolSetting(SortStructMembers)) {
@@ -2477,7 +2527,7 @@ void QmlEnginePrivate::handleLookup(const QVariantMap &response)
             item->type = bodyObjectData.type;
             item->value = bodyObjectData.value.toString();
 
-            item->setHasChildren(bodyObjectData.properties.count());
+            item->setHasChildren(bodyObjectData.hasChildren());
             insertSubItems(item, bodyObjectData.properties);
 
             engine->watchHandler()->insertItem(item);
@@ -2493,7 +2543,10 @@ void QmlEnginePrivate::stateChanged(State state)
     if (state == QmlDebugClient::Enabled) {
         /// Start session.
         flushSendBuffer();
-        runDirectCommand(CONNECT);
+        QJsonObject parameters;
+        parameters.insert("redundantRefs", false);
+        parameters.insert("namesAsObjects", false);
+        runDirectCommand(CONNECT, QJsonDocument(parameters).toJson());
         runCommand({VERSION}, CB(handleVersion));
     }
 }
@@ -2501,6 +2554,7 @@ void QmlEnginePrivate::stateChanged(State state)
 void QmlEnginePrivate::handleVersion(const QVariantMap &response)
 {
     unpausedEvaluate = response.value(BODY).toMap().value("UnpausedEvaluate", false).toBool();
+    contextEvaluate = response.value(BODY).toMap().value("ContextEvaluate", false).toBool();
 }
 
 void QmlEnginePrivate::flushSendBuffer()

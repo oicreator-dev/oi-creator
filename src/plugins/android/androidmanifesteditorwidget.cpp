@@ -86,7 +86,7 @@ bool checkPackageName(const QString &packageName)
 
 Project *androidProject(const Utils::FileName &fileName)
 {
-    foreach (Project *project, SessionManager::projects()) {
+    for (Project *project : SessionManager::projects()) {
         if (!project->activeTarget())
             continue;
         Kit *kit = project->activeTarget()->kit();
@@ -977,8 +977,8 @@ void AndroidManifestEditorWidget::parseApplication(QXmlStreamReader &reader, QXm
     writer.writeStartElement(reader.name().toString());
 
     QXmlStreamAttributes attributes = reader.attributes();
-    QStringList keys = { QLatin1String("android:label") };
-    QStringList values = { m_appNameLineEdit->text() };
+    QStringList keys = {QLatin1String("android:label")};
+    QStringList values = {m_appNameLineEdit->text()};
     bool ensureIconAttribute =  !m_lIconPath.isEmpty()
             || !m_mIconPath.isEmpty()
             || !m_hIconPath.isEmpty();
@@ -1056,8 +1056,8 @@ bool AndroidManifestEditorWidget::parseMetaData(QXmlStreamReader &reader, QXmlSt
     QXmlStreamAttributes result;
 
     if (attributes.value(QLatin1String("android:name")) == QLatin1String("android.app.lib_name")) {
-        QStringList keys = QStringList() << QLatin1String("android:value");
-        QStringList values = QStringList() << m_targetLineEdit->currentText();
+        QStringList keys = QStringList("android:value");
+        QStringList values = QStringList(m_targetLineEdit->currentText());
         result = modifyXmlStreamAttributes(attributes, keys, values);
         found = true;
     } else {

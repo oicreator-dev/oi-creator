@@ -58,7 +58,7 @@ GdbRemoteServerEngine::GdbRemoteServerEngine(const DebuggerRunParameters &runPar
     : GdbEngine(runParameters), m_startAttempted(false)
 {
     if (HostOsInfo::isWindowsHost())
-        m_gdbProc.setUseCtrlCStub(runParameters.useCtrlCStub); // This is only set for QNX/BlackBerry
+        m_gdbProc.setUseCtrlCStub(runParameters.useCtrlCStub); // This is only set for QNX
 
     connect(&m_uploadProc, &QProcess::errorOccurred, this, &GdbRemoteServerEngine::uploadProcError);
     connect(&m_uploadProc, &QProcess::readyReadStandardOutput,
@@ -177,10 +177,10 @@ void GdbRemoteServerEngine::setupInferior()
 //        postCommand("set architecture " + remoteArch);
     const QString solibSearchPath = rp.solibSearchPath.join(HostOsInfo::pathListSeparator());
     if (!solibSearchPath.isEmpty())
-        runCommand({"set solib-search-path " + solibSearchPath, NoFlags});
+        runCommand({"set solib-search-path " + solibSearchPath});
 
     if (!args.isEmpty())
-        runCommand({"-exec-arguments " + args, NoFlags});
+        runCommand({"-exec-arguments " + args});
 
     setEnvironmentVariables();
 
@@ -204,7 +204,7 @@ void GdbRemoteServerEngine::setupInferior()
     // mi_execute_async_cli_command: Assertion `is_running (inferior_ptid)'
     // failed.\nA problem internal to GDB has been detected,[...]
     if (usesTargetAsync())
-        runCommand({"set target-async on", NoFlags, CB(handleSetTargetAsync)});
+        runCommand({"set target-async on", CB(handleSetTargetAsync)});
 
     if (symbolFile.isEmpty()) {
         showMessage(tr("No symbol file given."), StatusBar);
@@ -214,7 +214,7 @@ void GdbRemoteServerEngine::setupInferior()
 
     if (!symbolFile.isEmpty()) {
         runCommand({"-file-exec-and-symbols \"" + symbolFile + '"',
-                    NoFlags, CB(handleFileExecAndSymbols)});
+                    CB(handleFileExecAndSymbols)});
     }
 }
 
@@ -261,11 +261,11 @@ void GdbRemoteServerEngine::callTargetRemote()
     }
 
     if (m_isQnxGdb)
-        runCommand({"target qnx " + channel, NoFlags, CB(handleTargetQnx)});
+        runCommand({"target qnx " + channel, CB(handleTargetQnx)});
     else if (runParameters().useExtendedRemote)
-        runCommand({"target extended-remote " + channel, NoFlags, CB(handleTargetExtendedRemote)});
+        runCommand({"target extended-remote " + channel, CB(handleTargetExtendedRemote)});
     else
-        runCommand({"target remote " + channel, NoFlags, CB(handleTargetRemote)});
+        runCommand({"target remote " + channel, CB(handleTargetRemote)});
 }
 
 void GdbRemoteServerEngine::handleTargetRemote(const DebuggerResponse &response)
@@ -277,7 +277,7 @@ void GdbRemoteServerEngine::handleTargetRemote(const DebuggerResponse &response)
         showMessage(msgAttachedToStoppedInferior(), StatusBar);
         QString commands = expand(stringSetting(GdbPostAttachCommands));
         if (!commands.isEmpty())
-            runCommand({commands, NoFlags});
+            runCommand({commands, NativeCommand});
         handleInferiorPrepared();
     } else {
         // 16^error,msg="hd:5555: Connection timed out."
@@ -293,14 +293,14 @@ void GdbRemoteServerEngine::handleTargetExtendedRemote(const DebuggerResponse &r
         showMessage(msgAttachedToStoppedInferior(), StatusBar);
         QString commands = expand(stringSetting(GdbPostAttachCommands));
         if (!commands.isEmpty())
-            runCommand({commands, NoFlags});
-        if (runParameters().attachPID > 0) { // attach to pid if valid
+            runCommand({commands, NativeCommand});
+        if (runParameters().attachPID.isValid()) { // attach to pid if valid
             // gdb server will stop the remote application itself.
-            runCommand({"attach " + QString::number(runParameters().attachPID),
-                        NoFlags, CB(handleTargetExtendedAttach)});
+            runCommand({"attach " + QString::number(runParameters().attachPID.pid()),
+                        CB(handleTargetExtendedAttach)});
         } else if (!runParameters().inferior.executable.isEmpty()) {
             runCommand({"-gdb-set remote exec-file " + runParameters().inferior.executable,
-                        NoFlags, CB(handleTargetExtendedAttach)});
+                        CB(handleTargetExtendedAttach)});
         } else {
             const QString title = tr("No Remote Executable or Process ID Specified");
             const QString msg = tr(
@@ -347,12 +347,11 @@ void GdbRemoteServerEngine::handleTargetQnx(const DebuggerResponse &response)
         showMessage(msgAttachedToStoppedInferior(), StatusBar);
 
         const DebuggerRunParameters &rp = isMasterEngine() ? runParameters() : masterEngine()->runParameters();
-        const qint64 pid = rp.attachPID;
         const QString remoteExecutable = rp.inferior.executable;
-        if (pid > -1)
-            runCommand({"attach " + QString::number(pid), NoFlags, CB(handleAttach)});
+        if (rp.attachPID.isValid())
+            runCommand({"attach " + QString::number(rp.attachPID.pid()), CB(handleAttach)});
         else if (!remoteExecutable.isEmpty())
-            runCommand({"set nto-executable " + remoteExecutable, NoFlags, CB(handleSetNtoExecutable)});
+            runCommand({"set nto-executable " + remoteExecutable, CB(handleSetNtoExecutable)});
         else
             handleInferiorPrepared();
     } else {
@@ -408,7 +407,7 @@ void GdbRemoteServerEngine::runEngine()
         notifyEngineRunAndInferiorStopOk();
         continueInferiorInternal();
     } else {
-        runCommand({"-exec-run", RunRequest, CB(handleExecRun)});
+        runCommand({"-exec-run", DebuggerCommand::RunRequest, CB(handleExecRun)});
     }
 }
 
@@ -429,7 +428,7 @@ void GdbRemoteServerEngine::interruptInferior2()
 {
     QTC_ASSERT(state() == InferiorStopRequested, qDebug() << state());
     if (usesTargetAsync()) {
-        runCommand({"-exec-interrupt", NoFlags, CB(handleInterruptInferior)});
+        runCommand({"-exec-interrupt", CB(handleInterruptInferior)});
     } else if (m_isQnxGdb && HostOsInfo::isWindowsHost()) {
         m_gdbProc.interrupt();
     } else {
@@ -465,7 +464,7 @@ void GdbRemoteServerEngine::notifyEngineRemoteServerRunning
     (const QString &serverChannel, int inferiorPid)
 {
     // Currently only used by Android support.
-    runParameters().attachPID = inferiorPid;
+    runParameters().attachPID = Utils::ProcessHandle(inferiorPid);
     runParameters().remoteChannel = serverChannel;
     runParameters().useExtendedRemote = true;
     showMessage("NOTE: REMOTE SERVER RUNNING IN MULTIMODE");

@@ -53,8 +53,6 @@ namespace Internal {
 WinRtRunControl::WinRtRunControl(WinRtRunConfiguration *runConfiguration, Core::Id mode)
     : RunControl(runConfiguration, mode)
     , m_runConfiguration(runConfiguration)
-    , m_state(StoppedState)
-    , m_runner(0)
 {
     setIcon(Utils::Icons::RUN_SMALL_TOOLBAR);
 }
@@ -65,6 +63,8 @@ void WinRtRunControl::start()
         return;
     if (!startWinRtRunner())
         m_state = StoppedState;
+    else
+        reportApplicationStart();
 }
 
 RunControl::StopResult WinRtRunControl::stop()
@@ -76,16 +76,10 @@ RunControl::StopResult WinRtRunControl::stop()
     return AsynchronousStop;
 }
 
-bool WinRtRunControl::isRunning() const
-{
-    return m_state == StartedState;
-}
-
 void WinRtRunControl::onProcessStarted()
 {
     QTC_CHECK(m_state == StartingState);
     m_state = StartedState;
-    emit started();
 }
 
 void WinRtRunControl::onProcessFinished()
@@ -101,7 +95,7 @@ void WinRtRunControl::onProcessError()
     m_runner->deleteLater();
     m_runner = 0;
     m_state = StoppedState;
-    emit finished();
+    reportApplicationStop();
 }
 
 bool WinRtRunControl::startWinRtRunner()

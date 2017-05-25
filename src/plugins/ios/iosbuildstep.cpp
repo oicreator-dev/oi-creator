@@ -98,7 +98,7 @@ bool IosBuildStep::init(QList<const BuildStep *> &earlierSteps)
     if (!bc)
         emit addTask(Task::buildConfigurationMissingTask());
 
-    ToolChain *tc = ToolChainKitInformation::toolChain(target()->kit(), ToolChain::Language::Cxx);
+    ToolChain *tc = ToolChainKitInformation::toolChain(target()->kit(), ProjectExplorer::Constants::CXX_LANGUAGE_ID);
     if (!tc)
         emit addTask(Task::compilerMissingTask());
 
@@ -170,7 +170,7 @@ QStringList IosBuildStep::defaultArguments() const
 {
     QStringList res;
     Kit *kit = target()->kit();
-    ToolChain *tc = ToolChainKitInformation::toolChain(kit, ToolChain::Language::Cxx);
+    ToolChain *tc = ToolChainKitInformation::toolChain(kit, ProjectExplorer::Constants::CXX_LANGUAGE_ID);
     switch (target()->activeBuildConfiguration()->buildType()) {
     case BuildConfiguration::Debug :
         res << QLatin1String("-configuration") << QLatin1String("Debug");
@@ -359,9 +359,9 @@ QList<BuildStepInfo> IosBuildStepFactory::availableSteps(BuildStepList *parent) 
             && parent->id() != ProjectExplorer::Constants::BUILDSTEPS_BUILD)
         return {};
 
-    return {{ IOS_BUILD_STEP_ID,
-              QCoreApplication::translate("GenericProjectManager::Internal::IosBuildStep",
-                                         IOS_BUILD_STEP_DISPLAY_NAME) }};
+    return {{IOS_BUILD_STEP_ID,
+             QCoreApplication::translate("GenericProjectManager::Internal::IosBuildStep",
+                                         IOS_BUILD_STEP_DISPLAY_NAME)}};
 }
 
 } // namespace Internal

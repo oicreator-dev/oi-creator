@@ -55,9 +55,9 @@
 
 #include <utils/algorithm.h>
 #include <utils/hostosinfo.h>
+#include <utils/temporarydirectory.h>
 
 #include <QLoggingCategory>
-#include <QTemporaryDir>
 
 using namespace CppTools;
 using namespace ProjectExplorer;
@@ -85,7 +85,7 @@ ClangStaticAnalyzerRunControl::ClangStaticAnalyzerRunControl(
     QTC_ASSERT(buildConfiguration, return);
     m_environment = buildConfiguration->environment();
 
-    ToolChain *toolChain = ToolChainKitInformation::toolChain(target->kit(), ToolChain::Language::Cxx);
+    ToolChain *toolChain = ToolChainKitInformation::toolChain(target->kit(), ProjectExplorer::Constants::CXX_LANGUAGE_ID);
     QTC_ASSERT(toolChain, return);
     m_targetTriple = toolChain->originalTargetTriple();
 }
@@ -188,9 +188,6 @@ public:
         optionsBuilder.addHeaderPathOptions();
         optionsBuilder.addPrecompiledHeaderOptions(pchUsage);
         optionsBuilder.addMsvcCompatibilityVersion();
-
-        if (type != ProjectExplorer::Constants::MSVC_TOOLCHAIN_TYPEID)
-            optionsBuilder.add(QLatin1String("-fPIC")); // TODO: Remove?
 
         return optionsBuilder.options();
     }
@@ -340,7 +337,7 @@ static QStringList tweakedArguments(const ProjectPart &projectPart,
 }
 
 static AnalyzeUnits unitsToAnalyzeFromCompilerCallData(
-            const QHash<QString, ProjectPart::Ptr> &projectFileToProjectPart,
+            const QHash<QString, ProjectPart::Ptr> &callGroupToProjectPart,
             const ProjectInfo::CompilerCallData &compilerCallData,
             const QString &targetTriple)
 {
@@ -350,7 +347,7 @@ static AnalyzeUnits unitsToAnalyzeFromCompilerCallData(
 
     foreach (const ProjectInfo::CompilerCallGroup &compilerCallGroup, compilerCallData) {
         const ProjectPart::Ptr projectPart
-                = projectFileToProjectPart.value(compilerCallGroup.groupId);
+                = callGroupToProjectPart.value(compilerCallGroup.groupId);
         QTC_ASSERT(projectPart, continue);
 
         QHashIterator<QString, QList<QStringList> > it(compilerCallGroup.callsPerSourceFile);
@@ -371,7 +368,7 @@ static AnalyzeUnits unitsToAnalyzeFromCompilerCallData(
     return unitsToAnalyze;
 }
 
-static AnalyzeUnits unitsToAnalyzeFromProjectParts(const QList<ProjectPart::Ptr> projectParts)
+static AnalyzeUnits unitsToAnalyzeFromProjectParts(const QVector<ProjectPart::Ptr> projectParts)
 {
     qCDebug(LOG) << "Taking arguments for analyzing from ProjectParts.";
 
@@ -385,6 +382,7 @@ static AnalyzeUnits unitsToAnalyzeFromProjectParts(const QList<ProjectPart::Ptr>
             if (file.path == CppModelManager::configurationFileName())
                 continue;
             QTC_CHECK(file.kind != ProjectFile::Unclassified);
+            QTC_CHECK(file.kind != ProjectFile::Unsupported);
             if (ProjectFile::isSource(file.kind)) {
                 const CompilerOptionsBuilder::PchUsage pchUsage = CppTools::getPchUsage();
                 const QStringList arguments
@@ -397,14 +395,14 @@ static AnalyzeUnits unitsToAnalyzeFromProjectParts(const QList<ProjectPart::Ptr>
     return unitsToAnalyze;
 }
 
-static QHash<QString, ProjectPart::Ptr> generateProjectFileToProjectPartMapping(
-            const QList<ProjectPart::Ptr> &projectParts)
+static QHash<QString, ProjectPart::Ptr> generateCallGroupToProjectPartMapping(
+            const QVector<ProjectPart::Ptr> &projectParts)
 {
     QHash<QString, ProjectPart::Ptr> mapping;
 
     foreach (const ProjectPart::Ptr &projectPart, projectParts) {
         QTC_ASSERT(projectPart, continue);
-        mapping[projectPart->projectFile] = projectPart;
+        mapping[projectPart->callGroupId] = projectPart;
     }
 
     return mapping;
@@ -419,9 +417,9 @@ AnalyzeUnits ClangStaticAnalyzerRunControl::sortedUnitsToAnalyze()
     if (compilerCallData.isEmpty()) {
         units = unitsToAnalyzeFromProjectParts(m_projectInfo.projectParts());
     } else {
-        const QHash<QString, ProjectPart::Ptr> projectFileToProjectPart
-                = generateProjectFileToProjectPartMapping(m_projectInfo.projectParts());
-        units = unitsToAnalyzeFromCompilerCallData(projectFileToProjectPart,
+        const QHash<QString, ProjectPart::Ptr> callGroupToProjectPart
+                = generateCallGroupToProjectPartMapping(m_projectInfo.projectParts());
+        units = unitsToAnalyzeFromCompilerCallData(callGroupToProjectPart,
                                                    compilerCallData,
                                                    m_targetTriple);
     }
@@ -447,7 +445,7 @@ static QDebug operator<<(QDebug debug, const AnalyzeUnits &analyzeUnits)
 static Core::Id toolchainType(ProjectExplorer::RunConfiguration *runConfiguration)
 {
     QTC_ASSERT(runConfiguration, return Core::Id());
-    return ToolChainKitInformation::toolChain(runConfiguration->target()->kit(), ToolChain::Language::Cxx)->typeId();
+    return ToolChainKitInformation::toolChain(runConfiguration->target()->kit(), ProjectExplorer::Constants::CXX_LANGUAGE_ID)->typeId();
 }
 
 static QString executableForVersionCheck(Core::Id toolchainType, const QString &executable)
@@ -470,7 +468,7 @@ void ClangStaticAnalyzerRunControl::start()
     m_success = false;
     emit starting();
 
-    QTC_ASSERT(m_projectInfo.isValid(), emit finished(); return);
+    QTC_ASSERT(m_projectInfo.isValid(), reportApplicationStop(); return);
     const Utils::FileName projectFile = m_projectInfo.project()->projectFilePath();
     appendMessage(tr("Running Clang Static Analyzer on %1").arg(projectFile.toUserOutput())
                   + QLatin1Char('\n'), Utils::NormalMessageFormat);
@@ -486,7 +484,7 @@ void ClangStaticAnalyzerRunControl::start()
         appendMessage(errorMessage + QLatin1Char('\n'), Utils::ErrorMessageFormat);
         TaskHub::addTask(Task::Error, errorMessage, Debugger::Constants::ANALYZERTASK_ID);
         TaskHub::requestPopup();
-        emit finished();
+        reportApplicationStop();
         return;
     }
 
@@ -515,7 +513,7 @@ void ClangStaticAnalyzerRunControl::start()
     m_clangExecutable = executable;
 
     // Create log dir
-    QTemporaryDir temporaryDir(QDir::tempPath() + QLatin1String("/qtc-clangstaticanalyzer-XXXXXX"));
+    Utils::TemporaryDirectory temporaryDir("qtc-clangstaticanalyzer-XXXXXX");
     temporaryDir.setAutoRemove(false);
     if (!temporaryDir.isValid()) {
         const QString errorMessage
@@ -523,7 +521,7 @@ void ClangStaticAnalyzerRunControl::start()
         appendMessage(errorMessage + QLatin1Char('\n'), Utils::ErrorMessageFormat);
         TaskHub::addTask(Task::Error, errorMessage, Debugger::Constants::ANALYZERTASK_ID);
         TaskHub::requestPopup();
-        emit finished();
+        reportApplicationStop();
         return;
     }
     m_clangLogFileDir = temporaryDir.path();
@@ -551,16 +549,15 @@ void ClangStaticAnalyzerRunControl::start()
     qCDebug(LOG) << "Environment:" << m_environment;
     m_runners.clear();
     const int parallelRuns = ClangStaticAnalyzerSettings::instance()->simultaneousProcesses();
-    QTC_ASSERT(parallelRuns >= 1, emit finished(); return);
+    QTC_ASSERT(parallelRuns >= 1, reportApplicationStop(); return);
     m_success = true;
-    m_running = true;
 
     if (m_unitsToProcess.isEmpty()) {
         finalize();
         return;
     }
 
-    emit started();
+    reportApplicationStart();
 
     while (m_runners.size() < parallelRuns && !m_unitsToProcess.isEmpty())
         analyzeNextFile();
@@ -579,14 +576,8 @@ RunControl::StopResult ClangStaticAnalyzerRunControl::stop()
     appendMessage(tr("Clang Static Analyzer stopped by user.") + QLatin1Char('\n'),
                   Utils::NormalMessageFormat);
     m_progress.reportFinished();
-    m_running = false;
-    emit finished();
+    reportApplicationStop();
     return RunControl::StoppedSynchronously;
-}
-
-bool ClangStaticAnalyzerRunControl::isRunning() const
-{
-    return m_running;
 }
 
 void ClangStaticAnalyzerRunControl::analyzeNextFile()
@@ -702,8 +693,7 @@ void ClangStaticAnalyzerRunControl::finalize()
     }
 
     m_progress.reportFinished();
-    m_running = false;
-    emit finished();
+    reportApplicationStop();
 }
 
 } // namespace Internal

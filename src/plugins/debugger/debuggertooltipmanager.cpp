@@ -221,7 +221,7 @@ ToolTipWatchItem::ToolTipWatchItem(TreeItem *item)
     valueColor = model->data(idx.sibling(idx.row(), 1), Qt::ForegroundRole).value<QColor>();
     expandable = model->hasChildren(idx);
     expression = model->data(idx.sibling(idx.row(), 0), Qt::EditRole).toString();
-    foreach (TreeItem *child, item->children())
+    for (TreeItem *child : *item)
         appendChild(new ToolTipWatchItem(child));
 }
 
@@ -236,9 +236,9 @@ class ToolTipModel : public TreeModel<ToolTipWatchItem>
 public:
     ToolTipModel()
     {
-        setHeader({ DebuggerToolTipManager::tr("Name"),
-                    DebuggerToolTipManager::tr("Value"),
-                    DebuggerToolTipManager::tr("Type") });
+        setHeader({DebuggerToolTipManager::tr("Name"),
+                   DebuggerToolTipManager::tr("Value"),
+                   DebuggerToolTipManager::tr("Type")});
         m_enabled = true;
         auto item = new ToolTipWatchItem;
         item->expandable = true;
@@ -1110,7 +1110,7 @@ void DebuggerToolTipManager::saveSessionData()
     w.writeEndDocument();
 
     return; // FIXME
-    setSessionValue(sessionSettingsKeyC, QVariant(data));
+//    setSessionValue(sessionSettingsKeyC, QVariant(data));
 }
 
 void DebuggerToolTipManager::closeAllToolTips()
@@ -1151,7 +1151,7 @@ static void slotTooltipOverrideRequested
                                   &context.function, &context.scopeFromLine, &context.scopeToLine);
     context.expression = fixCppExpression(raw);
     context.isCppEditor = CppTools::ProjectFile::classify(document->filePath().toString())
-                            != CppTools::ProjectFile::Unclassified;
+                            != CppTools::ProjectFile::Unsupported;
 
     if (context.expression.isEmpty()) {
         ToolTip::show(point, DebuggerToolTipManager::tr("No valid expression"),

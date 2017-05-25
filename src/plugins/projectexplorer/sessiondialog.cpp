@@ -88,7 +88,8 @@ SessionNameInputDialog::SessionNameInputDialog(const QStringList &sessions, QWid
     m_newSessionLineEdit->setValidator(new SessionValidator(this, sessions));
     hlayout->addWidget(m_newSessionLineEdit);
     auto buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, Qt::Horizontal, this);
-    m_switchToButton = buttons->addButton(tr("Switch To"), QDialogButtonBox::AcceptRole);
+    buttons->button(QDialogButtonBox::Ok)->setText(tr("&Create"));
+    m_switchToButton = buttons->addButton(tr("Create and &Open"), QDialogButtonBox::AcceptRole);
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     connect(buttons, &QDialogButtonBox::clicked, this, &SessionNameInputDialog::clicked);
@@ -120,6 +121,7 @@ bool SessionNameInputDialog::isSwitchToRequested() const
 SessionDialog::SessionDialog(QWidget *parent) : QDialog(parent)
 {
     m_ui.setupUi(this);
+    m_ui.sessionView->setActivationMode(Utils::DoubleClickActivation);
 
     connect(m_ui.btCreateNew, &QAbstractButton::clicked,
         m_ui.sessionView, &SessionView::createNewSession);
@@ -144,7 +146,7 @@ SessionDialog::SessionDialog(QWidget *parent) : QDialog(parent)
 
 void SessionDialog::setAutoLoadSession(bool check)
 {
-    m_ui.autoLoadCheckBox->setChecked(check ? Qt::Checked : Qt::Unchecked);
+    m_ui.autoLoadCheckBox->setChecked(check);
 }
 
 bool SessionDialog::autoLoadSession() const

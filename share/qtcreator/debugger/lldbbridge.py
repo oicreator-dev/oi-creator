@@ -204,13 +204,6 @@ class Dumper(DumperBase):
         val.name = nativeValue.GetName()
         return val
 
-    def nativeTypeFieldTypeByName(self, nativeType, name):
-        for i in range(nativeType.GetNumberOfFields()):
-            field = nativeType.GetFieldAtIndex(i)
-            if field.GetName() == name:
-                return self.fromNativeType(field.GetType())
-        return None
-
     def nativeStructAlignment(self, nativeType):
         def handleItem(nativeFieldType, align):
             a = self.fromNativeType(nativeFieldType).alignment()
@@ -224,7 +217,7 @@ class Dumper(DumperBase):
             align = handleItem(child.GetType(), align)
         return align
 
-    def listMembers(self, nativeType, value):
+    def listMembers(self, value, nativeType):
         #warn("ADDR: 0x%x" % self.fakeAddress)
         fakeAddress = self.fakeAddress if value.laddress is None else value.laddress
         sbaddr = lldb.SBAddress(fakeAddress, self.target)
@@ -250,33 +243,36 @@ class Dumper(DumperBase):
             fieldBits[f.name] = (bitsize, bitpos, f.IsBitfield())
 
         # Normal members and non-empty base classes.
+        anonNumber = 0
         for i in range(fakeValue.GetNumChildren()):
             nativeField = fakeValue.GetChildAtIndex(i)
             nativeField.SetPreferSyntheticValue(False)
 
-            field = self.Field(self)
-            field.name = nativeField.GetName()
+            fieldName = nativeField.GetName()
             nativeFieldType = nativeField.GetType()
 
-            if field.name in fieldBits:
-                (field.lbitsize, field.lbitpos, isBitfield) = fieldBits[field.name]
+            if fieldName in fieldBits:
+                (fieldBitsize, fieldBitpos, isBitfield) = fieldBits[fieldName]
             else:
-                field.lbitsize = nativeFieldType.GetByteSize() * 8
+                fieldBitsize = nativeFieldType.GetByteSize() * 8
+                fieldBitpost = None
                 isBitfield = False
 
             if isBitfield: # Bit fields
-                field.ltype = self.createBitfieldType(self.typeName(nativeFieldType), field.lbitsize)
-                yield field
+                fieldType = self.createBitfieldType(self.typeName(nativeFieldType), fieldBitsize)
+                yield self.Field(self, name=fieldName, type=fieldType,
+                                 bitsize=fieldBitsize, bitpos=fieldBitpos)
 
-            elif field.name is None: # Anon members
+            elif fieldName is None: # Anon members
+                anonNumber += 1
+                fieldName = '#%s' % anonNumber
                 fakeMember = fakeValue.GetChildAtIndex(i)
                 fakeMemberAddress = fakeMember.GetLoadAddress()
                 offset = fakeMemberAddress - fakeAddress
-                field.lbitpos = 8 * offset
-                field.ltype = self.fromNativeType(nativeFieldType)
-                yield field
+                yield self.Field(self, name=fieldName, type=self.fromNativeType(nativeFieldType),
+                                 bitsize=fieldBitsize, bitpos=8*offset)
 
-            elif field.name in baseNames:  # Simple bases
+            elif fieldName in baseNames:  # Simple bases
                 member = self.fromNativeValue(fakeValue.GetChildAtIndex(i))
                 member.isBaseClass = True
                 yield member
@@ -434,7 +430,7 @@ class Dumper(DumperBase):
                     warn('UNKNOWN TYPE KEY: %s: %s' % (typeName, code))
             elif code == lldb.eTypeClassEnumeration:
                 tdata.code = TypeCodeEnum
-                tdata.enumDisplay = lambda intval : \
+                tdata.enumDisplay = lambda intval, addr : \
                     self.nativeTypeEnumDisplay(nativeType, intval)
             elif code in (lldb.eTypeClassComplexInteger, lldb.eTypeClassComplexFloat):
                 tdata.code = TypeCodeComplex
@@ -443,9 +439,7 @@ class Dumper(DumperBase):
                 tdata.lalignment = lambda : \
                     self.nativeStructAlignment(nativeType)
                 tdata.lfields = lambda value : \
-                    self.listMembers(nativeType, value)
-                tdata.lfieldByName = lambda name : \
-                    self.nativeTypeFieldTypeByName(nativeType, name)
+                    self.listMembers(value, nativeType)
                 tdata.templateArguments = self.listTemplateParametersHelper(nativeType)
             elif code == lldb.eTypeClassFunction:
                 tdata.code = TypeCodeFunction,
@@ -708,11 +702,11 @@ class Dumper(DumperBase):
         else:
             self.report('error="%s"' % result.GetError())
 
-    def put(self, stuff):
-        self.output += stuff
-
     def canonicalTypeName(self, name):
         return re.sub('\\bconst\\b', '', name).replace(' ', '')
+
+    def removeTypePrefix(self, name):
+        return re.sub('^(struct|class|union|enum|typedef) ', '', name)
 
     def lookupNativeType(self, name):
         #warn('LOOKUP TYPE NAME: %s' % name)
@@ -725,6 +719,23 @@ class Dumper(DumperBase):
             #warn('VALID FIRST : %s' % typeobj)
             self.typeCache[name] = typeobj
             return typeobj
+
+        # FindFirstType has a bug (in lldb) that if there are two types with the same base name
+        # but different scope name (e.g. inside different classes) and the searched for type name
+        # would be returned as the second result in a call to FindTypes, FindFirstType would return
+        # an empty result.
+        # Therefore an additional call to FindTypes is done as a fallback.
+        # Note that specifying a prefix like enum or typedef or class will make the call fail to
+        # find the type, thus the prefix is stripped.
+        nonPrefixedName = self.canonicalTypeName(self.removeTypePrefix(name))
+        typeobjlist = self.target.FindTypes(nonPrefixedName)
+        if typeobjlist.IsValid():
+            for typeobj in typeobjlist:
+                n = self.canonicalTypeName(self.removeTypePrefix(typeobj.GetDisplayTypeName()))
+                if n == nonPrefixedName:
+                    #warn('FOUND TYPE USING FindTypes : %s' % typeobj)
+                    self.typeCache[name] = typeobj
+                    return typeobj
         if name.endswith('*'):
             #warn('RECURSE PTR')
             typeobj = self.lookupNativeType(name[:-1].strip())
@@ -753,6 +764,7 @@ class Dumper(DumperBase):
 
         needle = self.canonicalTypeName(name)
         #warn('NEEDLE: %s ' % needle)
+        warn('Searching for type %s across all target modules, this could be very slow' % name)
         for i in xrange(self.target.GetNumModules()):
             module = self.target.GetModuleAtIndex(i)
             # SBModule.GetType is new somewhere after early 300.x
@@ -799,7 +811,10 @@ class Dumper(DumperBase):
         self.nativeMixed = int(args.get('nativemixed', 0))
         self.workingDirectory_ = args.get('workingdirectory', '')
         if self.workingDirectory_ == '':
-            self.workingDirectory_ = os.getcwd()
+            try:
+                self.workingDirectory_ = os.getcwd()
+            except: # Could have been deleted in the mean time.
+                pass
 
         self.ignoreStops = 0
         self.silentStops = 0
@@ -1060,8 +1075,8 @@ class Dumper(DumperBase):
             raise RuntimeError("Unreadable %s bytes at 0x%x" % (size, address))
         return res
 
-    def findStaticMetaObject(self, typeName):
-        symbolName = self.mangleName(typeName + '::staticMetaObject')
+    def findStaticMetaObject(self, type):
+        symbolName = self.mangleName(type.name + '::staticMetaObject')
         symbol = self.target.FindFirstGlobalVariable(symbolName)
         return symbol.AddressOf().GetValueAsUnsigned() if symbol.IsValid() else 0
 
@@ -1646,7 +1661,7 @@ class Dumper(DumperBase):
             result += ',data="%s %s"' % (insn.GetMnemonic(self.target),
                 insn.GetOperands(self.target))
             result += ',function="%s"' % functionName
-            rawData = insn.GetData(lldb.target).uint8s
+            rawData = insn.GetData(self.target).uint8s
             result += ',rawdata="%s"' % ' '.join(["%02x" % x for x in rawData])
             if comment:
                 result += ',comment="%s"' % self.hexencode(comment)
@@ -1677,6 +1692,20 @@ class Dumper(DumperBase):
         lhs = self.findValueByExpression(exp)
         lhs.SetValueFromCString(value, error)
         self.reportResult(self.describeError(error), args)
+
+    def watchPoint(self, args):
+        self.reportToken(args)
+        ns = self.qtNamespace()
+        lenns = len(ns)
+        funcs = self.target.FindGlobalFunctions('.*QApplication::widgetAt', 2, 1)
+        func = funcs[1]
+        addr = func.GetFunction().GetStartAddress().GetLoadAddress(self.target)
+        expr = '((void*(*)(int,int))0x%x)' % addr
+        #expr = '%sQApplication::widgetAt(%s,%s)' % (ns, args['x'], args['y'])
+        res = self.parseAndEvaluate(expr)
+        p = 0 if res is None else res.pointer()
+        n = ns + 'QWidget'
+        self.reportResult('selected="0x%x",expr="(%s*)0x%x"' % (p, n, p), args)
 
     def createResolvePendingBreakpointsHookBreakpoint(self, args):
         bp = self.target.BreakpointCreateByName('qt_qmlDebugConnectorOpen')

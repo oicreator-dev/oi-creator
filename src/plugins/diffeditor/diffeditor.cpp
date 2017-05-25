@@ -64,9 +64,6 @@ static const char ignoreWhitespaceKeyC[] = "IgnoreWhitespace";
 
 static const char diffViewKeyC[] = "DiffEditorType";
 
-static const char legacySettingsGroupC[] = "Git";
-static const char useDiffEditorKeyC[] = "UseDiffEditor";
-
 using namespace TextEditor;
 
 namespace DiffEditor {
@@ -574,20 +571,6 @@ IDiffView *DiffEditor::loadSettings()
     QTC_ASSERT(currentView(), return 0);
     QSettings *s = Core::ICore::settings();
 
-    // TODO: Remove in 3.6: Read legacy settings first:
-    s->beginGroup(QLatin1String(legacySettingsGroupC));
-    const bool legacyExists = s->contains(QLatin1String(useDiffEditorKeyC));
-    const bool legacyEditor = s->value(
-                QLatin1String(useDiffEditorKeyC), true).toBool();
-    s->remove(QLatin1String(useDiffEditorKeyC));
-    s->endGroup();
-
-    // Save legacy settings to current settings:
-    if (legacyExists) {
-        saveSetting(QLatin1String(diffViewKeyC), legacyEditor ? m_views.at(0)->id().toSetting() :
-                                                                m_views.at(1)->id().toSetting());
-    }
-
     // Read current settings:
     s->beginGroup(QLatin1String(settingsGroupC));
     m_showDescription = s->value(QLatin1String(descriptionVisibleKeyC), true).toBool();
@@ -663,10 +646,6 @@ void DiffEditor::setupView(IDiffView *view)
 
     view->setDocument(m_document.data());
     view->setSync(m_sync);
-
-    view->beginOperation();
-    view->setDiff(m_document->diffFiles(), m_document->baseDirectory());
-    view->endOperation(true);
     view->setCurrentDiffFileIndex(m_currentDiffFileIndex);
 
     m_stackedWidget->setCurrentWidget(view->widget());

@@ -228,6 +228,12 @@ DebuggerSettings::DebuggerSettings()
 
     item = new SavedAction(this);
     item->setCheckable(true);
+    item->setDefaultValue(true);
+    item->setSettingsKey(cdbSettingsGroup, QLatin1String("UsePythonDumper"));
+    insertItem(CdbUsePythonDumper, item);
+
+    item = new SavedAction(this);
+    item->setCheckable(true);
     item->setDefaultValue(false);
     item->setSettingsKey(cdbSettingsGroup, QLatin1String("IgnoreFirstChanceAccessViolation"));
     insertItem(IgnoreFirstChanceAccessViolation, item);
@@ -475,12 +481,6 @@ DebuggerSettings::DebuggerSettings()
     item->setCheckable(true);
     item->setDefaultValue(false);
     insertItem(AutoQuit, item);
-
-    item = new SavedAction(this);
-    item->setSettingsKey(debugModeGroup, QLatin1String("AttemptQuickStart"));
-    item->setCheckable(true);
-    item->setDefaultValue(false);
-    insertItem(AttemptQuickStart, item);
 
     item = new SavedAction(this);
     item->setSettingsKey(debugModeGroup, QLatin1String("MultiInferior"));

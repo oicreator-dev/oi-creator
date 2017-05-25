@@ -25,6 +25,8 @@
 
 #pragma once
 
+#include "cmake_global.h"
+
 #include <projectexplorer/ioutputparser.h>
 #include <projectexplorer/task.h>
 
@@ -32,9 +34,8 @@
 #include <QRegularExpression>
 
 namespace CMakeProjectManager {
-namespace Internal {
 
-class CMakeParser : public ProjectExplorer::IOutputParser
+class CMAKE_EXPORT CMakeParser : public ProjectExplorer::IOutputParser
 {
     Q_OBJECT
 
@@ -59,4 +60,3 @@ private:
 };
 
 } // namespace CMakeProjectManager
-} // namespace Internal

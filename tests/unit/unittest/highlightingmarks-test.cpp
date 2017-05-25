@@ -676,49 +676,49 @@ TEST_F(HighlightingMarks, TemplateFunctionDeclaration)
     ASSERT_THAT(infos[1], HasOnlyType(HighlightingType::Function));
 }
 
-TEST_F(HighlightingMarks, TemplateTypeParameterReference)
+TEST_F(HighlightingMarks, DISABLED_ON_WINDOWS(TemplateTypeParameterReference))
 {
     const auto infos = translationUnit.highlightingMarksInRange(sourceRange(268, 58));
 
     ASSERT_THAT(infos[0], HasOnlyType(HighlightingType::Type));
 }
 
-TEST_F(HighlightingMarks, TemplateTypeParameterDeclarationReference)
+TEST_F(HighlightingMarks, DISABLED_ON_WINDOWS(TemplateTypeParameterDeclarationReference))
 {
     const auto infos = translationUnit.highlightingMarksInRange(sourceRange(268, 58));
 
     ASSERT_THAT(infos[1], HasOnlyType(HighlightingType::LocalVariable));
 }
 
-TEST_F(HighlightingMarks, NonTypeTemplateParameterReference)
+TEST_F(HighlightingMarks, DISABLED_ON_WINDOWS(NonTypeTemplateParameterReference))
 {
     const auto infos = translationUnit.highlightingMarksInRange(sourceRange(269, 71));
 
     ASSERT_THAT(infos[3], HasOnlyType(HighlightingType::LocalVariable));
 }
 
-TEST_F(HighlightingMarks, NonTypeTemplateParameterReferenceReference)
+TEST_F(HighlightingMarks, DISABLED_ON_WINDOWS(NonTypeTemplateParameterReferenceReference))
 {
     const auto infos = translationUnit.highlightingMarksInRange(sourceRange(269, 71));
 
     ASSERT_THAT(infos[1], HasOnlyType(HighlightingType::LocalVariable));
 }
 
-TEST_F(HighlightingMarks, TemplateTemplateParameterReference)
+TEST_F(HighlightingMarks, DISABLED_ON_WINDOWS(TemplateTemplateParameterReference))
 {
     const auto infos = translationUnit.highlightingMarksInRange(sourceRange(270, 89));
 
     ASSERT_THAT(infos[0], HasOnlyType(HighlightingType::Type));
 }
 
-TEST_F(HighlightingMarks, TemplateTemplateContainerParameterReference)
+TEST_F(HighlightingMarks, DISABLED_ON_WINDOWS(TemplateTemplateContainerParameterReference))
 {
     const auto infos = translationUnit.highlightingMarksInRange(sourceRange(270, 89));
 
     ASSERT_THAT(infos[2], HasOnlyType(HighlightingType::Type));
 }
 
-TEST_F(HighlightingMarks, TemplateTemplateParameterReferenceVariable)
+TEST_F(HighlightingMarks, DISABLED_ON_WINDOWS(TemplateTemplateParameterReferenceVariable))
 {
     const auto infos = translationUnit.highlightingMarksInRange(sourceRange(270, 89));
 
@@ -782,7 +782,7 @@ TEST_F(HighlightingMarks, DISABLED_SecondArgumentInMacroExpansionIsField)
 }
 
 
-TEST_F(HighlightingMarks, DISABLED_EnumerationType)
+TEST_F(HighlightingMarks, EnumerationType)
 {
     const auto infos = translationUnit.highlightingMarksInRange(sourceRange(316, 30));
 
@@ -1090,7 +1090,7 @@ TEST_F(HighlightingMarks, DISABLED_NonConstReferenceMemberInitialization)
                 HasTwoTypes(HighlightingType::LocalVariable, HighlightingType::OutputArgument));
 }
 
-TEST_F(HighlightingMarks, DISABLED_EnumerationTypeDef)
+TEST_F(HighlightingMarks, EnumerationTypeDef)
 {
     const auto infos = translationUnit.highlightingMarksInRange(sourceRange(424, 41));
 

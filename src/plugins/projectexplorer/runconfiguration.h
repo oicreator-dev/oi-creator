@@ -30,6 +30,7 @@
 #include "applicationlauncher.h"
 #include "devicesupport/idevice.h"
 
+#include <utils/processhandle.h>
 #include <utils/qtcassert.h>
 #include <utils/icon.h>
 
@@ -50,27 +51,10 @@ class RunConfigWidget;
 class RunControl;
 class Target;
 
-namespace Internal { class RunControlPrivate; }
-
-// FIXME: This should also contain a handle to an remote device if used.
-class PROJECTEXPLORER_EXPORT ProcessHandle
-{
-public:
-    explicit ProcessHandle(quint64 pid = 0);
-
-    bool isValid() const;
-    void setPid(quint64 pid);
-    quint64 pid() const;
-    QString toString() const;
-
-    bool equals(const ProcessHandle &) const;
-
-private:
-    quint64 m_pid;
-};
-
-inline bool operator==(const ProcessHandle &p1, const ProcessHandle &p2) { return p1.equals(p2); }
-inline bool operator!=(const ProcessHandle &p1, const ProcessHandle &p2) { return !p1.equals(p2); }
+namespace Internal {
+class RunControlPrivate;
+class SimpleRunControlPrivate;
+} // Internal
 
 /**
  * An interface for a hunk of global or per-project
@@ -188,7 +172,7 @@ class PROJECTEXPLORER_EXPORT Runnable
 
 public:
     Runnable() = default;
-    Runnable(const Runnable &other) : d(other.d->clone()) { }
+    Runnable(const Runnable &other) : d(other.d ? other.d->clone() : nullptr) { }
     Runnable(Runnable &&other) : d(std::move(other.d)) {}
     template <class T> Runnable(const T &data) : d(new Model<T>(data)) {}
 
@@ -228,7 +212,7 @@ class PROJECTEXPLORER_EXPORT Connection
 
 public:
     Connection() = default;
-    Connection(const Connection &other) : d(other.d->clone()) { }
+    Connection(const Connection &other) : d(other.d ? other.d->clone() : nullptr) { }
     Connection(Connection &&other) /* MSVC 2013 doesn't want = default */ : d(std::move(other.d)) {}
     template <class T> Connection(const T &data) : d(new Model<T>(data)) {}
 
@@ -276,7 +260,6 @@ public:
 
     template <typename T> T *extraAspect() const
     {
-        QTC_ASSERT(m_aspectsInitialized, return nullptr);
         foreach (IRunConfigurationAspect *aspect, m_aspects)
             if (T *result = qobject_cast<T *>(aspect))
                 return result;
@@ -286,7 +269,10 @@ public:
     virtual Runnable runnable() const;
     virtual Abi abi() const;
 
-    void addExtraAspects();
+    // Return the name of the build system target that created this run configuration.
+    // May return an empty string if no target built the executable!
+    virtual QString buildSystemTarget() const { return QString(); }
+
     void addExtraAspect(IRunConfigurationAspect *aspect);
 
 signals:
@@ -304,8 +290,9 @@ protected:
 private:
     void ctor();
 
+    void addExtraAspects();
+
     QList<IRunConfigurationAspect *> m_aspects;
-    bool m_aspectsInitialized;
 };
 
 class PROJECTEXPLORER_EXPORT IRunConfigurationFactory : public QObject
@@ -377,17 +364,19 @@ public:
 
     virtual bool promptToStop(bool *optionalPrompt = nullptr) const;
     virtual StopResult stop() = 0;
-    virtual bool isRunning() const = 0;
     virtual bool supportsReRunning() const { return true; }
+
 
     virtual QString displayName() const;
     void setDisplayName(const QString &displayName);
 
+    bool isRunning() const;
+
     void setIcon(const Utils::Icon &icon);
     Utils::Icon icon() const;
 
-    ProcessHandle applicationProcessHandle() const;
-    void setApplicationProcessHandle(const ProcessHandle &handle);
+    Utils::ProcessHandle applicationProcessHandle() const;
+    void setApplicationProcessHandle(const Utils::ProcessHandle &handle);
     Abi abi() const;
     IDevice::ConstPtr device() const;
 
@@ -395,7 +384,7 @@ public:
     Project *project() const;
     bool canReUseOutputPane(const RunControl *other) const;
 
-    Utils::OutputFormatter *outputFormatter();
+    Utils::OutputFormatter *outputFormatter() const;
     Core::Id runMode() const;
 
     const Runnable &runnable() const;
@@ -405,18 +394,19 @@ public:
     void setConnection(const Connection &connection);
 
     virtual void appendMessage(const QString &msg, Utils::OutputFormat format);
-
-public slots:
-    void bringApplicationToForeground(qint64 pid);
+    virtual void bringApplicationToForeground();
 
 signals:
     void appendMessageRequested(ProjectExplorer::RunControl *runControl,
                                 const QString &msg, Utils::OutputFormat format);
-    void started();
-    void finished();
-    void applicationProcessHandleChanged();
+    void started(QPrivateSignal); // Use reportApplicationStart!
+    void finished(QPrivateSignal); // Use reportApplicationStop!
+    void applicationProcessHandleChanged(QPrivateSignal); // Use setApplicationProcessHandle
 
 protected:
+    void reportApplicationStart(); // Call this when the application starts to run
+    void reportApplicationStop(); // Call this when the application has stopped for any reason
+
     bool showPromptToStopDialog(const QString &title, const QString &text,
                                 const QString &stopButtonText = QString(),
                                 const QString &cancelButtonText = QString(),
@@ -425,6 +415,23 @@ protected:
 private:
     void bringApplicationToForegroundInternal();
     Internal::RunControlPrivate *d;
+};
+
+class PROJECTEXPLORER_EXPORT SimpleRunControl : public RunControl
+{
+public:
+    SimpleRunControl(RunConfiguration *runConfiguration, Core::Id mode);
+    ~SimpleRunControl();
+
+    ApplicationLauncher &applicationLauncher();
+    void start() override;
+    StopResult stop() override;
+
+    virtual void onProcessStarted();
+    virtual void onProcessFinished(int exitCode, QProcess::ExitStatus status);
+
+private:
+    Internal::SimpleRunControlPrivate *d;
 };
 
 } // namespace ProjectExplorer

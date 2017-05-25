@@ -28,9 +28,7 @@
 #include "autotoolsproject.h"
 #include "autotoolsbuildconfiguration.h"
 #include "autotoolsprojectconstants.h"
-#include "autotoolsmanager.h"
 #include "autotoolsprojectnode.h"
-#include "autotoolsprojectfile.h"
 #include "autotoolsopenprojectwizard.h"
 #include "makestep.h"
 #include "makefileparserthread.h"
@@ -47,7 +45,7 @@
 #include <extensionsystem/pluginmanager.h>
 #include <cpptools/cppmodelmanager.h>
 #include <cpptools/projectinfo.h>
-#include <cpptools/projectpartbuilder.h>
+#include <cpptools/cppprojectupdater.h>
 #include <coreplugin/icore.h>
 #include <coreplugin/icontext.h>
 #include <qtsupport/baseqtversion.h>
@@ -69,46 +67,33 @@ using namespace AutotoolsProjectManager;
 using namespace AutotoolsProjectManager::Internal;
 using namespace ProjectExplorer;
 
-AutotoolsProject::AutotoolsProject(AutotoolsManager *manager, const QString &fileName) :
-    m_fileWatcher(new Utils::FileSystemWatcher(this))
+AutotoolsProject::AutotoolsProject(const Utils::FileName &fileName) :
+    Project(Constants::MAKEFILE_MIMETYPE, fileName),
+    m_fileWatcher(new Utils::FileSystemWatcher(this)),
+    m_cppCodeModelUpdater(new CppTools::CppProjectUpdater(this))
 {
     setId(Constants::AUTOTOOLS_PROJECT_ID);
-    setProjectManager(manager);
-    setDocument(new AutotoolsProjectFile(fileName));
-    setRootProjectNode(new AutotoolsProjectNode(projectDirectory()));
     setProjectContext(Core::Context(Constants::PROJECT_CONTEXT));
-    setProjectLanguages(Core::Context(ProjectExplorer::Constants::LANG_CXX));
-
-    const QFileInfo fileInfo = projectFilePath().toFileInfo();
-    m_projectName = fileInfo.absoluteDir().dirName();
-    rootProjectNode()->setDisplayName(m_projectName);
+    setProjectLanguages(Core::Context(ProjectExplorer::Constants::CXX_LANGUAGE_ID));
+    setDisplayName(projectDirectory().fileName());
 }
 
 AutotoolsProject::~AutotoolsProject()
 {
-    setRootProjectNode(0);
+    delete m_cppCodeModelUpdater;
 
-    if (m_makefileParserThread != 0) {
+    setRootProjectNode(nullptr);
+
+    if (m_makefileParserThread) {
         m_makefileParserThread->wait();
         delete m_makefileParserThread;
-        m_makefileParserThread = 0;
+        m_makefileParserThread = nullptr;
     }
-}
-
-QString AutotoolsProject::displayName() const
-{
-    return m_projectName;
 }
 
 QString AutotoolsProject::defaultBuildDirectory(const QString &projectPath)
 {
     return QFileInfo(projectPath).absolutePath();
-}
-
-QStringList AutotoolsProject::files(FilesMode fileMode) const
-{
-    Q_UNUSED(fileMode);
-    return m_files;
 }
 
 // This function, is called at the very beginning, to
@@ -219,13 +204,13 @@ void AutotoolsProject::makefileParsingFinished()
         m_watchedFiles.append(configureAcFilePath);
     }
 
-    QList<FileNode *> fileNodes = Utils::transform(files, [dir](const QString &f) {
+    auto newRoot = new AutotoolsProjectNode(projectDirectory());
+    for (const QString &f : files) {
         const Utils::FileName path = Utils::FileName::fromString(dir.absoluteFilePath(f));
-        return new FileNode(path,
-                            (f == QLatin1String("Makefile.am") || f == QLatin1String("configure.ac"))
-                            ? ProjectFileType : ResourceType, false);
-    });
-    rootProjectNode()->buildTree(fileNodes);
+        FileType ft = (f == "Makefile.am" || f == "configure.ac") ? FileType::Project : FileType::Resource;
+        newRoot->addNestedNode(new FileNode(path, ft, false));
+    }
+    setRootProjectNode(newRoot);
 
     updateCppCodeModel();
 
@@ -269,41 +254,48 @@ static QStringList filterIncludes(const QString &absSrc, const QString &absBuild
 
 void AutotoolsProject::updateCppCodeModel()
 {
-    CppTools::CppModelManager *modelManager = CppTools::CppModelManager::instance();
+    const Kit *k = nullptr;
+    if (Target *target = activeTarget())
+        k = target->kit();
+    else
+        k = KitManager::defaultKit();
+    QTC_ASSERT(k, return);
 
-    m_codeModelFuture.cancel();
-    CppTools::ProjectInfo pInfo(this);
-    CppTools::ProjectPartBuilder ppBuilder(pInfo);
+    ToolChain *cToolChain
+            = ToolChainKitInformation::toolChain(k, ProjectExplorer::Constants::C_LANGUAGE_ID);
+    ToolChain *cxxToolChain
+            = ToolChainKitInformation::toolChain(k, ProjectExplorer::Constants::CXX_LANGUAGE_ID);
+
+    m_cppCodeModelUpdater->cancel();
+
+    CppTools::RawProjectPart rpp;
+    rpp.setDisplayName(displayName());
+    rpp.setProjectFileLocation(projectFilePath().toString());
 
     CppTools::ProjectPart::QtVersion activeQtVersion = CppTools::ProjectPart::NoQt;
-    if (QtSupport::BaseQtVersion *qtVersion =
-            QtSupport::QtKitInformation::qtVersion(activeTarget()->kit())) {
+    if (QtSupport::BaseQtVersion *qtVersion = QtSupport::QtKitInformation::qtVersion(k)) {
         if (qtVersion->qtVersion() < QtSupport::QtVersionNumber(5,0,0))
             activeQtVersion = CppTools::ProjectPart::Qt4;
         else
             activeQtVersion = CppTools::ProjectPart::Qt5;
     }
 
-    ppBuilder.setQtVersion(activeQtVersion);
+    rpp.setQtVersion(activeQtVersion);
     const QStringList cflags = m_makefileParserThread->cflags();
     QStringList cxxflags = m_makefileParserThread->cxxflags();
     if (cxxflags.isEmpty())
         cxxflags = cflags;
-    ppBuilder.setCFlags(cflags);
-    ppBuilder.setCxxFlags(cxxflags);
+    rpp.setFlagsForC({cToolChain, cflags});
+    rpp.setFlagsForCxx({cxxToolChain, cxxflags});
 
     const QString absSrc = projectDirectory().toString();
     const Target *target = activeTarget();
     const QString absBuild = (target && target->activeBuildConfiguration())
             ? target->activeBuildConfiguration()->buildDirectory().toString() : QString();
 
-    ppBuilder.setIncludePaths(filterIncludes(absSrc, absBuild, m_makefileParserThread->includePaths()));
-    ppBuilder.setDefines(m_makefileParserThread->defines());
+    rpp.setIncludePaths(filterIncludes(absSrc, absBuild, m_makefileParserThread->includePaths()));
+    rpp.setDefines(m_makefileParserThread->defines());
+    rpp.setFiles(m_files);
 
-    const QList<Core::Id> languages = ppBuilder.createProjectPartsForFiles(m_files);
-    foreach (Core::Id language, languages)
-        setProjectLanguage(language, true);
-
-    pInfo.finish();
-    m_codeModelFuture = modelManager->updateProjectInfo(pInfo);
+    m_cppCodeModelUpdater->update({this, cToolChain, cxxToolChain, k, {rpp}});
 }

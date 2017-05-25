@@ -30,7 +30,6 @@
 #include "slog2inforunner.h"
 
 #include <debugger/analyzer/analyzerruncontrol.h>
-#include <projectexplorer/devicesupport/deviceapplicationrunner.h>
 #include <projectexplorer/kitinformation.h>
 #include <projectexplorer/target.h>
 
@@ -51,18 +50,18 @@ QnxAnalyzeSupport::QnxAnalyzeSupport(QnxRunConfiguration *runConfig,
     , m_runControl(runControl)
     , m_qmlPort(-1)
 {
-    const DeviceApplicationRunner *runner = appRunner();
-    connect(runner, &DeviceApplicationRunner::reportError,
+    const ApplicationLauncher *runner = appRunner();
+    connect(runner, &ApplicationLauncher::reportError,
             this, &QnxAnalyzeSupport::handleError);
-    connect(runner, &DeviceApplicationRunner::remoteProcessStarted,
+    connect(runner, &ApplicationLauncher::remoteProcessStarted,
             this, &QnxAbstractRunSupport::handleRemoteProcessStarted);
-    connect(runner, &DeviceApplicationRunner::finished,
+    connect(runner, &ApplicationLauncher::finished,
             this, &QnxAnalyzeSupport::handleRemoteProcessFinished);
-    connect(runner, &DeviceApplicationRunner::reportProgress,
+    connect(runner, &ApplicationLauncher::reportProgress,
             this, &QnxAnalyzeSupport::handleProgressReport);
-    connect(runner, &DeviceApplicationRunner::remoteStdout,
+    connect(runner, &ApplicationLauncher::remoteStdout,
             this, &QnxAnalyzeSupport::handleRemoteOutput);
-    connect(runner, &DeviceApplicationRunner::remoteStderr,
+    connect(runner, &ApplicationLauncher::remoteStderr,
             this, &QnxAnalyzeSupport::handleRemoteOutput);
 
     connect(m_runControl, &Debugger::AnalyzerRunControl::starting,
@@ -77,7 +76,7 @@ QnxAnalyzeSupport::QnxAnalyzeSupport(QnxRunConfiguration *runConfig,
     m_slog2Info = new Slog2InfoRunner(applicationId, qnxDevice, this);
     connect(m_slog2Info, &Slog2InfoRunner::output,
             this, &QnxAnalyzeSupport::showMessage);
-    connect(runner, &DeviceApplicationRunner::remoteProcessStarted,
+    connect(runner, &ApplicationLauncher::remoteProcessStarted,
             m_slog2Info, &Slog2InfoRunner::start);
     if (qnxDevice->qnxVersion() > 0x060500)
         connect(m_slog2Info, &Slog2InfoRunner::commandMissing,
@@ -107,7 +106,7 @@ void QnxAnalyzeSupport::startExecution()
         r.commandLineArguments += QLatin1Char(' ');
     r.commandLineArguments += QmlDebug::qmlDebugTcpArguments(QmlDebug::QmlProfilerServices,
                                                              m_qmlPort);
-    appRunner()->start(device(), r);
+    appRunner()->start(r, device());
 }
 
 void QnxAnalyzeSupport::handleRemoteProcessFinished(bool success)

@@ -255,7 +255,7 @@ bool UpdateIncludeDependenciesVisitor::haveMatchingStereotypes(const qmt::MObjec
 QStringList UpdateIncludeDependenciesVisitor::findFilePathOfComponent(const qmt::MComponent *component)
 {
     QMultiHash<QString, Node> filePaths;
-    foreach (const ProjectExplorer::Project *project, ProjectExplorer::SessionManager::projects()) {
+    for (const ProjectExplorer::Project *project : ProjectExplorer::SessionManager::projects()) {
         ProjectExplorer::ProjectNode *projectNode = project->rootProjectNode();
         if (projectNode)
             collectElementPaths(projectNode, &filePaths);
@@ -296,7 +296,7 @@ void UpdateIncludeDependenciesVisitor::collectElementPaths(const ProjectExplorer
         QStringList elementsPath = qmt::NameController::buildElementsPath(nodePath, false);
         filePathsMap->insertMulti(elementName, Node(fileNode->filePath().toString(), elementsPath));
     }
-    foreach (const ProjectExplorer::FolderNode *subNode, folderNode->subFolderNodes())
+    foreach (const ProjectExplorer::FolderNode *subNode, folderNode->folderNodes())
         collectElementPaths(subNode, filePathsMap);
 }
 
@@ -385,6 +385,7 @@ void ComponentViewController::createComponentModel(const ProjectExplorer::Folder
         bool isSource = false;
         CppTools::ProjectFile::Kind kind = CppTools::ProjectFile::classify(fileNode->filePath().toString());
         switch (kind) {
+        case CppTools::ProjectFile::AmbiguousHeader:
         case CppTools::ProjectFile::CHeader:
         case CppTools::ProjectFile::CSource:
         case CppTools::ProjectFile::CXXHeader:
@@ -398,6 +399,7 @@ void ComponentViewController::createComponentModel(const ProjectExplorer::Folder
             isSource = true;
             break;
         case CppTools::ProjectFile::Unclassified:
+        case CppTools::ProjectFile::Unsupported:
             isSource = false;
             break;
         }
@@ -419,7 +421,7 @@ void ComponentViewController::createComponentModel(const ProjectExplorer::Folder
         }
     }
 
-    foreach (const ProjectExplorer::FolderNode *subNode, folderNode->subFolderNodes())
+    foreach (const ProjectExplorer::FolderNode *subNode, folderNode->folderNodes())
         createComponentModel(subNode, diagram, anchorFolder);
 }
 

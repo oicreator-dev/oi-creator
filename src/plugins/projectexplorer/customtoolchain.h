@@ -77,12 +77,14 @@ public:
 
     bool isValid() const override;
 
+    PredefinedMacrosRunner createPredefinedMacrosRunner() const override;
     QByteArray predefinedMacros(const QStringList &cxxflags) const override;
     CompilerFlags compilerFlags(const QStringList &cxxflags) const override;
     WarningFlags warningFlags(const QStringList &cxxflags) const override;
     const QStringList &rawPredefinedMacros() const;
     void setPredefinedMacros(const QStringList &list);
 
+    SystemHeaderPathsRunner createSystemHeaderPathsRunner() const override;
     QList<HeaderPath> systemHeaderPaths(const QStringList &cxxFlags,
                                         const Utils::FileName &) const override;
     void addToEnvironment(Utils::Environment &env) const override;
@@ -122,7 +124,7 @@ protected:
 
 private:
     explicit CustomToolChain(Detection d);
-    explicit CustomToolChain(Language l, Detection d);
+    explicit CustomToolChain(Core::Id language, Detection d);
 
     Utils::FileName m_compilerCommand;
     Utils::FileName m_makeCommand;
@@ -148,10 +150,10 @@ class CustomToolChainFactory : public ToolChainFactory
 
 public:
     CustomToolChainFactory();
-    QSet<ToolChain::Language> supportedLanguages() const override;
+    QSet<Core::Id> supportedLanguages() const override;
 
     bool canCreate() override;
-    ToolChain *create(ToolChain::Language l) override;
+    ToolChain *create(Core::Id language) override;
 
     // Used by the ToolChainManager to restore user-generated tool chains
     bool canRestore(const QVariantMap &data) override;

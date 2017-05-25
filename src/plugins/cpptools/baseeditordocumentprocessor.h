@@ -54,8 +54,7 @@ public:
     BaseEditorDocumentProcessor(QTextDocument *textDocument, const QString &filePath);
     virtual ~BaseEditorDocumentProcessor();
 
-    // Function interface to implement
-    virtual void run() = 0;
+    void run(bool projectsUpdated = false);
     virtual void semanticRehighlight() = 0;
     virtual void recalculateSemanticInfoDetached(bool force) = 0;
     virtual CppTools::SemanticInfo recalculateSemanticInfo() = 0;
@@ -71,12 +70,15 @@ public:
 
     virtual void editorDocumentTimerRestarted();
 
+    virtual void setParserConfig(const BaseEditorDocumentParser::Configuration config);
+
 public:
     using HeaderErrorDiagnosticWidgetCreator = std::function<QWidget*()>;
 
 signals:
-
     // Signal interface to implement
+    void projectPartInfoUpdated(const CppTools::ProjectPartInfo &projectPartInfo);
+
     void codeWarningsUpdated(unsigned revision,
                              const QList<QTextEdit::ExtraSelection> selections,
                              const HeaderErrorDiagnosticWidgetCreator &creator,
@@ -91,12 +93,15 @@ signals:
 protected:
     static void runParser(QFutureInterface<void> &future,
                           BaseEditorDocumentParser::Ptr parser,
-                          const CppTools::WorkingCopy workingCopy);
+                          BaseEditorDocumentParser::UpdateParams updateParams);
 
     // Convenience
     QString filePath() const { return m_filePath; }
     unsigned revision() const { return static_cast<unsigned>(m_textDocument->revision()); }
     QTextDocument *textDocument() const { return m_textDocument; }
+
+private:
+    virtual void runImpl(const BaseEditorDocumentParser::UpdateParams &updateParams) = 0;
 
 private:
     QString m_filePath;

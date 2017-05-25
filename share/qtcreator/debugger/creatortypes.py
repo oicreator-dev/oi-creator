@@ -37,7 +37,7 @@ def extractPointerType(d, value):
     postfix = ""
     while stripTypeName(value) == "CPlusPlus::PointerType":
         postfix += "*"
-        value = d.downcast(value["_elementType"]["_type"])
+        value = value["_elementType"]["_type"]
     try:
         return readLiteral(d, value["_name"]) + postfix
     except:
@@ -60,7 +60,7 @@ def readTemplateName(d, value):
         for i in range(int(size)):
             if i > 0:
                 name += ", "
-            name += extractPointerType(d, d.downcast(start[i]["_type"]))
+            name += extractPointerType(d, start[i]["_type"])
     except:
         return "<not accessible>"
     name += ">"
@@ -69,7 +69,6 @@ def readTemplateName(d, value):
 def readLiteral(d, value):
     if d.isNull(value):
         return "<null>"
-    value = d.downcast(value)
     type = value.type.unqualified()
     try:
         type = type.target()
@@ -90,10 +89,13 @@ def dumpLiteral(d, value):
 
 def qdump__Core__Id(d, value):
     val = value.extractPointer()
-    try:
-        name = d.parseAndEvaluate("Core::nameForId(0x%x)" % val)
-        d.putSimpleCharArray(name.pointer())
-    except:
+    if True:
+        if d.isMsvcTarget():
+            name = d.nameForCoreId(val).address()
+        else:
+            name = d.parseAndEvaluate("Core::nameForId(0x%x)" % val).pointer()
+        d.putSimpleCharArray(name)
+    else:
         d.putValue(val)
     d.putPlainChildren(value)
 
@@ -144,7 +146,7 @@ def qdump__CPlusPlus__IntegerType(d, value):
     d.putPlainChildren(value)
 
 def qdump__CPlusPlus__FullySpecifiedType(d, value):
-    type = d.downcast(value["_type"])
+    type = value["_type"]
     typeName = stripTypeName(type)
     if typeName == "CPlusPlus::NamedType":
         dumpLiteral(d, type["_name"])
@@ -188,6 +190,10 @@ def qdump__Utils__FileName(d, value):
 
 def qdump__Utils__ElfSection(d, value):
     d.putByteArrayValue(value["name"])
+    d.putPlainChildren(value)
+
+def qdump__Utf8String(d, value):
+    d.putByteArrayValue(value['byteArray'])
     d.putPlainChildren(value)
 
 def qdump__CPlusPlus__Token(d, value):

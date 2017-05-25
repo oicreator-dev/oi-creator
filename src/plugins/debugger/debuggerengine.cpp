@@ -63,6 +63,7 @@
 
 #include <utils/fileinprojectfinder.h>
 #include <utils/macroexpander.h>
+#include <utils/processhandle.h>
 #include <utils/qtcassert.h>
 #include <utils/savedaction.h>
 
@@ -80,6 +81,7 @@ using namespace Core;
 using namespace Debugger::Internal;
 using namespace ProjectExplorer;
 using namespace TextEditor;
+using namespace Utils;
 
 //#define WITH_BENCHMARK
 #ifdef WITH_BENCHMARK
@@ -106,7 +108,7 @@ QDebug operator<<(QDebug str, const DebuggerRunParameters &sp)
             << " inferior environment=<" << sp.inferior.environment.size() << " variables>"
             << " debugger environment=<" << sp.debugger.environment.size() << " variables>"
             << " workingDir=" << sp.inferior.workingDirectory
-            << " attachPID=" << sp.attachPID
+            << " attachPID=" << sp.attachPID.pid()
             << " useTerminal=" << sp.useTerminal
             << " remoteChannel=" << sp.remoteChannel
             << " serverStartScript=" << sp.serverStartScript
@@ -309,7 +311,7 @@ public:
     void raiseApplication()
     {
         QTC_ASSERT(runControl(), return);
-        runControl()->bringApplicationToForeground(m_inferiorPid);
+        runControl()->bringApplicationToForeground();
     }
 
     void scheduleResetLocation()
@@ -361,7 +363,7 @@ public:
     RemoteSetupState m_remoteSetupState = RemoteSetupNone;
 
     Terminal m_terminal;
-    qint64 m_inferiorPid = 0;
+    ProcessHandle m_inferiorPid;
 
     ModulesHandler m_modulesHandler;
     RegisterHandler m_registerHandler;
@@ -591,10 +593,10 @@ void DebuggerEngine::startDebugger(DebuggerRunControl *runControl)
 
     d->m_runControl = runControl;
 
-    d->m_inferiorPid = d->m_runParameters.attachPID > 0
-        ? d->m_runParameters.attachPID : 0;
-    if (d->m_inferiorPid)
-        d->m_runControl->setApplicationProcessHandle(ProcessHandle(d->m_inferiorPid));
+    d->m_inferiorPid = d->m_runParameters.attachPID.isValid()
+        ? d->m_runParameters.attachPID : ProcessHandle();
+    if (d->m_inferiorPid.isValid())
+        d->m_runControl->setApplicationProcessHandle(d->m_inferiorPid);
 
     if (isNativeMixedActive())
         d->m_runParameters.inferior.environment.set("QV4_FORCE_INTERPRETER", "1");
@@ -943,7 +945,7 @@ void DebuggerEngine::notifyEngineRemoteSetupFinished(const RemoteSetupResult &re
             }
         } else if (result.inferiorPid != InvalidPid && runParameters().startMode == AttachExternal) {
             // e.g. iOS Simulator
-            runParameters().attachPID = result.inferiorPid;
+            runParameters().attachPID = ProcessHandle(result.inferiorPid);
         }
 
         if (result.qmlServerPort.isValid()) {
@@ -1378,6 +1380,12 @@ QString DebuggerEngine::expand(const QString &string) const
     return d->m_runParameters.macroExpander->expand(string);
 }
 
+QString DebuggerEngine::nativeStartupCommands() const
+{
+    return expand(QStringList({stringSetting(GdbStartupCommands),
+                               runParameters().additionalStartupCommands}).join('\n'));
+}
+
 void DebuggerEngine::updateBreakpointMarker(const Breakpoint &bp)
 {
     d->m_disassemblerAgent.updateBreakpointMarker(bp);
@@ -1420,13 +1428,14 @@ bool DebuggerEngine::debuggerActionsEnabled(DebuggerState state)
     return false;
 }
 
-void DebuggerEngine::notifyInferiorPid(qint64 pid)
+void DebuggerEngine::notifyInferiorPid(const ProcessHandle &pid)
 {
     if (d->m_inferiorPid == pid)
         return;
     d->m_inferiorPid = pid;
-    if (pid) {
-        showMessage(tr("Taking notice of pid %1").arg(pid));
+    if (pid.isValid()) {
+        runControl()->setApplicationProcessHandle(pid);
+        showMessage(tr("Taking notice of pid %1").arg(pid.pid()));
         if (d->m_runParameters.startMode == StartInternal
             || d->m_runParameters.startMode == StartExternal
             || d->m_runParameters.startMode == AttachExternal)
@@ -1436,7 +1445,7 @@ void DebuggerEngine::notifyInferiorPid(qint64 pid)
 
 qint64 DebuggerEngine::inferiorPid() const
 {
-    return d->m_inferiorPid;
+    return d->m_inferiorPid.pid();
 }
 
 bool DebuggerEngine::isReverseDebugging() const
@@ -1514,8 +1523,20 @@ void DebuggerEngine::selectWatchData(const QString &)
 {
 }
 
-void DebuggerEngine::watchPoint(const QPoint &)
+void DebuggerEngine::watchPoint(const QPoint &pnt)
 {
+    DebuggerCommand cmd("watchPoint", NeedsFullStop);
+    cmd.arg("x", pnt.x());
+    cmd.arg("y", pnt.y());
+    cmd.callback = [this](const DebuggerResponse &response) {
+        qulonglong addr = response.data["selected"].toAddress();
+        if (addr == 0)
+            showStatusMessage(tr("Could not find a widget."));
+        // Add the watcher entry nevertheless, as that's the place where
+        // the user expects visual feedback.
+        watchHandler()->watchExpression(response.data["expr"].data(), QString(), true);
+    };
+    runCommand(cmd);
 }
 
 void DebuggerEngine::runCommand(const DebuggerCommand &)
@@ -1886,7 +1907,6 @@ void DebuggerEngine::validateExecutable(DebuggerRunParameters *sp)
     switch (sp->toolChainAbi.binaryFormat()) {
     case Abi::PEFormat: {
         if (sp->masterEngineType != CdbEngineType) {
-            warnOnInappropriateDebugger = true;
             detailedWarning = tr(
                         "The inferior is in the Portable Executable format.\n"
                         "Selecting CDB as debugger would improve the debugging "
@@ -1910,7 +1930,6 @@ void DebuggerEngine::validateExecutable(DebuggerRunParameters *sp)
     }
     case Abi::ElfFormat: {
         if (sp->masterEngineType == CdbEngineType) {
-            warnOnInappropriateDebugger = true;
             detailedWarning = tr(
                         "The inferior is in the ELF format.\n"
                         "Selecting GDB or LLDB as debugger would improve the debugging "
@@ -2106,7 +2125,7 @@ void DebuggerEngine::checkState(DebuggerState state, const char *file, int line)
         return;
 
     QString msg = QString("UNEXPECTED STATE: %1  WANTED: %2 IN %3:%4")
-                .arg(current).arg(state).arg(QLatin1String(file)).arg(line);
+                .arg(stateName(current)).arg(stateName(state)).arg(QLatin1String(file)).arg(line);
 
     showMessage(msg, LogError);
     qDebug("%s", qPrintable(msg));

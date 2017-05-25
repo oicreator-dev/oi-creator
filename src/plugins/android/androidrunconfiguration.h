@@ -29,6 +29,10 @@
 
 #include <projectexplorer/runconfiguration.h>
 
+QT_BEGIN_NAMESPACE
+class QToolButton;
+QT_END_NAMESPACE
+
 namespace Android {
 
 class ANDROID_EXPORT AndroidRunConfiguration : public ProjectExplorer::RunConfiguration

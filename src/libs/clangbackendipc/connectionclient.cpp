@@ -30,12 +30,9 @@
 #include "cmbregistertranslationunitsforeditormessage.h"
 #include "cmbunregistertranslationunitsforeditormessage.h"
 
-#include <utils/hostosinfo.h>
-
 #include <QCoreApplication>
 #include <QMetaMethod>
 #include <QProcess>
-#include <QTemporaryDir>
 #include <QThread>
 
 namespace ClangBackEnd {
@@ -114,7 +111,7 @@ QProcessEnvironment ConnectionClient::processEnvironment() const
 
 const QTemporaryDir &ConnectionClient::temporaryDirectory() const
 {
-    return *temporaryDirectory_.data();
+    return *temporaryDirectory_;
 }
 
 LinePrefixer &ConnectionClient::stdErrPrefixer()
@@ -183,10 +180,13 @@ void ConnectionClient::endProcess(QProcess *process)
 
 void ConnectionClient::terminateProcess(QProcess *process)
 {
-    if (!Utils::HostOsInfo::isWindowsHost() && isProcessIsRunning()) {
+    Q_UNUSED(process)
+#ifndef Q_OS_WIN32
+    if (isProcessIsRunning()) {
         process->terminate();
         process->waitForFinished();
     }
+#endif
 }
 
 void ConnectionClient::killProcess(QProcess *process)
@@ -220,8 +220,7 @@ void ConnectionClient::printStandardError()
 
 void ConnectionClient::resetTemporaryDir()
 {
-    const QString templatePath = QDir::tempPath() + QStringLiteral("/qtc-clang-XXXXXX");
-    temporaryDirectory_.reset(new QTemporaryDir(templatePath));
+    temporaryDirectory_ = std::make_unique<Utils::TemporaryDirectory>("clang-XXXXXX");
 }
 
 void ConnectionClient::connectLocalSocketConnected()

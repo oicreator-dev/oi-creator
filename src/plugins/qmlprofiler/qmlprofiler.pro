@@ -21,7 +21,6 @@ SOURCES += \
     qmlprofilerbindingloopsrenderpass.cpp \
     qmlprofilerclientmanager.cpp \
     qmlprofilerconfigwidget.cpp \
-    qmlprofilerdatamodel.cpp \
     qmlprofilerdetailsrewriter.cpp \
     qmlprofilermodelmanager.cpp \
     qmlprofilernotesmodel.cpp \
@@ -43,7 +42,8 @@ SOURCES += \
     qmlprofilertraceview.cpp \
     qmlprofilerviewmanager.cpp \
     qmltypedevent.cpp \
-    scenegraphtimelinemodel.cpp
+    scenegraphtimelinemodel.cpp \
+    qmlprofilertextmark.cpp
 
 HEADERS += \
     debugmessagesmodel.h \
@@ -64,7 +64,6 @@ HEADERS += \
     qmlprofilerclientmanager.h \
     qmlprofilerconfigwidget.h \
     qmlprofilerconstants.h \
-    qmlprofilerdatamodel.h \
     qmlprofilerdetailsrewriter.h \
     qmlprofilereventsview.h \
     qmlprofilereventtypes.h \
@@ -88,7 +87,8 @@ HEADERS += \
     qmlprofilertraceview.h \
     qmlprofilerviewmanager.h \
     qmltypedevent.h \
-    scenegraphtimelinemodel.h
+    scenegraphtimelinemodel.h \
+    qmlprofilertextmark.h
 
 RESOURCES += \
     qml/qmlprofiler.qrc

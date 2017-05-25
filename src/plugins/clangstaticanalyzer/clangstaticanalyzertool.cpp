@@ -37,7 +37,6 @@
 #include <cpptools/cppmodelmanager.h>
 #include <projectexplorer/buildconfiguration.h>
 #include <projectexplorer/projectexplorer.h>
-#include <projectexplorer/projectexplorerconstants.h>
 #include <projectexplorer/session.h>
 #include <projectexplorer/target.h>
 
@@ -69,7 +68,6 @@ public:
         : RunConfiguration(parent, "ClangStaticAnalyzer.DummyRunConfig")
     {
         setDefaultDisplayName(tr("Clang Static Analyzer"));
-        addExtraAspects();
     }
 
 private:
@@ -141,7 +139,7 @@ ClangStaticAnalyzerTool::ClangStaticAnalyzerTool(QObject *parent)
 
     Debugger::registerPerspective(ClangStaticAnalyzerPerspectiveId, new Perspective(
         tr("Clang Static Analyzer"),
-        {{ ClangStaticAnalyzerDockId, m_diagnosticView, {}, Perspective::SplitVertical }}
+        {{ClangStaticAnalyzerDockId, m_diagnosticView, {}, Perspective::SplitVertical}}
     ));
 
     ActionDescription desc;

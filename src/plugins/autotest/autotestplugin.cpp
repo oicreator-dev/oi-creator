@@ -63,7 +63,7 @@
 using namespace Autotest::Internal;
 using namespace Core;
 
-static AutotestPlugin *m_instance = 0;
+static AutotestPlugin *s_instance = nullptr;
 
 AutotestPlugin::AutotestPlugin()
     : m_settings(new TestSettings)
@@ -73,7 +73,7 @@ AutotestPlugin::AutotestPlugin()
     qRegisterMetaType<TestTreeItem *>();
     qRegisterMetaType<TestCodeLocationAndType>();
 
-    m_instance = this;
+    s_instance = this;
 }
 
 AutotestPlugin::~AutotestPlugin()
@@ -83,7 +83,7 @@ AutotestPlugin::~AutotestPlugin()
 
 AutotestPlugin *AutotestPlugin::instance()
 {
-    return m_instance;
+    return s_instance;
 }
 
 QSharedPointer<TestSettings> AutotestPlugin::settings() const
@@ -114,8 +114,9 @@ void AutotestPlugin::initializeMenuEntries()
     action = new QAction(tr("Re&scan Tests"), this);
     command = ActionManager::registerAction(action, Constants::ACTION_SCAN_ID);
     command->setDefaultKeySequence(QKeySequence(tr("Alt+Shift+T,Alt+S")));
-    connect(action, &QAction::triggered,
-            TestTreeModel::instance()->parser(), &TestCodeParser::updateTestTree);
+    connect(action, &QAction::triggered, [this] () {
+        TestTreeModel::instance()->parser()->updateTestTree();
+    });
     menu->addAction(command);
 
     ActionContainer *toolsMenu = ActionManager::actionContainer(Core::Constants::M_TOOLS);
@@ -141,8 +142,6 @@ bool AutotestPlugin::initialize(const QStringList &arguments, QString *errorStri
     addAutoReleasedObject(new TestNavigationWidgetFactory);
     addAutoReleasedObject(TestResultsPane::instance());
 
-    if (m_settings->alwaysParse)
-        TestTreeModel::instance()->enableParsingFromSettings();
     m_frameworkManager->activateFrameworksFromSettings(m_settings);
     TestTreeModel::instance()->syncTestFrameworks();
 
@@ -178,7 +177,6 @@ void AutotestPlugin::onRunSelectedTriggered()
 void AutotestPlugin::updateMenuItemsEnabledState()
 {
     const bool enabled = !TestRunner::instance()->isTestRunning()
-            && TestTreeModel::instance()->parser()->enabled()
             && TestTreeModel::instance()->parser()->state() == TestCodeParser::Idle;
     const bool hasTests = TestTreeModel::instance()->hasTests();
 

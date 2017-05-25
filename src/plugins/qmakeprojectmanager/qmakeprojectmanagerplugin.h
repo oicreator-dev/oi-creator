@@ -33,9 +33,7 @@ class QAction;
 QT_END_NAMESPACE
 
 namespace ProjectExplorer {
-class Node;
 class Project;
-class KitInformation;
 class Target;
 }
 namespace Utils { class ParameterAction; }
@@ -53,7 +51,6 @@ class QmakeProjectManagerPlugin : public ExtensionSystem::IPlugin
     Q_PLUGIN_METADATA(IID "org.qt-project.Qt.QtCreatorPlugin" FILE "QmakeProjectManager.json")
 
 public:
-    ~QmakeProjectManagerPlugin();
     bool initialize(const QStringList &arguments, QString *errorMessage);
     void extensionsInitialized();
 
@@ -69,7 +66,7 @@ private:
     void projectChanged();
     void activeTargetChanged();
     void updateRunQMakeAction();
-    void updateContextActions(ProjectExplorer::Node *node, ProjectExplorer::Project *project);
+    void updateContextActions();
     void buildStateChanged(ProjectExplorer::Project *pro);
     void updateBuildFileAction();
 

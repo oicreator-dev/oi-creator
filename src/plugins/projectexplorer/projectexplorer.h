@@ -26,7 +26,6 @@
 #pragma once
 
 #include "projectexplorer_export.h"
-#include "projectexplorerconstants.h"
 #include "runconfiguration.h"
 
 #include <extensionsystem/iplugin.h>
@@ -44,6 +43,8 @@ class IMode;
 class Id;
 } // namespace Core
 
+namespace Utils { class ProcessHandle; }
+
 namespace ProjectExplorer {
 class RunControl;
 class RunConfiguration;
@@ -52,7 +53,6 @@ class Project;
 class Node;
 class FolderNode;
 class FileNode;
-class ProcessHandle;
 
 namespace Internal { class ProjectExplorerSettings; }
 
@@ -140,7 +140,7 @@ public:
     static void runStartupProject(Core::Id runMode, bool forceSkipDeploy = false);
     static void runRunConfiguration(RunConfiguration *rc, Core::Id runMode,
                              const bool forceSkipDeploy = false);
-    static QList<QPair<Runnable, ProcessHandle>> runningRunControlProcesses();
+    static QList<QPair<Runnable, Utils::ProcessHandle>> runningRunControlProcesses();
 
     static void addExistingFiles(FolderNode *folderNode, const QStringList &filePaths);
 

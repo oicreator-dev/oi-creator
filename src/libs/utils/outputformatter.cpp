@@ -68,6 +68,8 @@ QPlainTextEdit *OutputFormatter::plainTextEdit() const
 
 void OutputFormatter::setPlainTextEdit(QPlainTextEdit *plainText)
 {
+    plainText->setReadOnly(true);
+    plainText->setTextInteractionFlags(plainText->textInteractionFlags() | Qt::TextSelectableByKeyboard);
     d->plainTextEdit = plainText;
     d->cursor = plainText ? plainText->textCursor() : QTextCursor();
     initFormats();
@@ -142,6 +144,10 @@ void OutputFormatter::initFormats()
     // ErrorMessageFormat
     d->formats[ErrorMessageFormat].setFont(boldFont, QTextCharFormat::FontPropertiesSpecifiedOnly);
     d->formats[ErrorMessageFormat].setForeground(theme->color(Theme::OutputPanes_ErrorMessageTextColor));
+
+    // LogMessageFormat
+    d->formats[LogMessageFormat].setFont(d->font, QTextCharFormat::FontPropertiesSpecifiedOnly);
+    d->formats[LogMessageFormat].setForeground(theme->color(Theme::OutputPanes_WarningMessageTextColor));
 
     // StdOutFormat
     d->formats[StdOutFormat].setFont(d->font, QTextCharFormat::FontPropertiesSpecifiedOnly);

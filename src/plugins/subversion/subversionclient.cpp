@@ -31,7 +31,7 @@
 #include <vcsbase/vcscommand.h>
 #include <vcsbase/vcsbaseconstants.h>
 #include <vcsbase/vcsbaseeditor.h>
-#include <vcsbase/vcsbaseeditorparameterwidget.h>
+#include <vcsbase/vcsbaseeditorconfig.h>
 #include <vcsbase/vcsbaseplugin.h>
 #include <utils/qtcassert.h>
 #include <utils/synchronousprocess.h>
@@ -55,12 +55,12 @@ using namespace VcsBase;
 namespace Subversion {
 namespace Internal {
 
-class SubversionLogParameterWidget : public VcsBaseEditorParameterWidget
+class SubversionLogConfig : public VcsBaseEditorConfig
 {
     Q_OBJECT
 public:
-    SubversionLogParameterWidget(VcsBaseClientSettings &settings, QWidget *parent = 0) :
-        VcsBaseEditorParameterWidget(parent)
+    SubversionLogConfig(VcsBaseClientSettings &settings, QToolBar *toolBar) :
+        VcsBaseEditorConfig(toolBar)
     {
         mapSetting(addToggleButton(QLatin1String("--verbose"), tr("Verbose"),
                                    tr("Show files changed in each revision")),
@@ -70,7 +70,9 @@ public:
 
 SubversionClient::SubversionClient() : VcsBaseClient(new SubversionSettings)
 {
-    setLogParameterWidgetCreator([this] { return new SubversionLogParameterWidget(settings()); });
+    setLogConfigCreator([this](QToolBar *toolBar) {
+        return new SubversionLogConfig(settings(), toolBar);
+    });
 }
 
 VcsCommand *SubversionClient::createCommitCmd(const QString &repositoryRoot,
@@ -298,7 +300,8 @@ void SubversionClient::diff(const QString &workingDirectory, const QStringList &
     Q_UNUSED(extraOptions);
 
     const QString vcsCmdString = vcsCommandString(DiffCommand);
-    const QString documentId = VcsBaseEditor::getTitleId(workingDirectory, files);
+    const QString documentId = QLatin1String(Constants::SUBVERSION_PLUGIN)
+            + QLatin1String(".Diff.") + VcsBaseEditor::getTitleId(workingDirectory, files);
     const QString title = vcsEditorTitle(vcsCmdString, documentId);
 
     DiffController *controller = findOrCreateDiffEditor(documentId, workingDirectory, title,
@@ -326,7 +329,8 @@ void SubversionClient::log(const QString &workingDir,
 
 void SubversionClient::describe(const QString &workingDirectory, int changeNumber, const QString &title)
 {
-    const QString documentId = VcsBaseEditor::editorTag(DiffOutput,
+    const QString documentId = QLatin1String(Constants::SUBVERSION_PLUGIN)
+            + QLatin1String(".Describe.") + VcsBaseEditor::editorTag(DiffOutput,
                                                         workingDirectory,
                                                         QStringList(),
                                                         QString::number(changeNumber));

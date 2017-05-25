@@ -430,8 +430,7 @@ IAssistProcessor *InternalCompletionAssistProvider::createProcessor() const
     return new InternalCppCompletionAssistProcessor;
 }
 
-AssistInterface *InternalCompletionAssistProvider::createAssistInterface(
-        const QString &filePath,
+AssistInterface *InternalCompletionAssistProvider::createAssistInterface(const QString &filePath,
         const TextEditorWidget *textEditorWidget,
         const LanguageFeatures &languageFeatures,
         int position,
@@ -459,7 +458,7 @@ public:
         , m_replaceDotForArrow(static_cast<CppAssistProposalModel *>(model)->m_replaceDotForArrow)
     {}
 
-    bool isCorrective() const override { return m_replaceDotForArrow; }
+    bool isCorrective(TextEditorWidget *) const override { return m_replaceDotForArrow; }
     void makeCorrection(TextEditorWidget *editorWidget) override;
 
 private:
@@ -1275,8 +1274,7 @@ bool InternalCppCompletionAssistProcessor::completeInclude(const QTextCursor &cu
     if (!headerPaths.contains(currentFilePath))
         headerPaths.append(currentFilePath);
 
-    Utils::MimeDatabase mdb;
-    const QStringList suffixes = mdb.mimeTypeForName(QLatin1String("text/x-c++hdr")).suffixes();
+    const QStringList suffixes = Utils::mimeTypeForName(QLatin1String("text/x-c++hdr")).suffixes();
 
     foreach (const ProjectPartHeaderPath &headerPath, headerPaths) {
         QString realPath = headerPath.path;
@@ -1325,8 +1323,7 @@ bool InternalCppCompletionAssistProcessor::objcKeywordsWanted() const
 
     const QString fileName = m_interface->fileName();
 
-    Utils::MimeDatabase mdb;
-    const Utils::MimeType mt = mdb.mimeTypeForFile(fileName);
+    const Utils::MimeType mt = Utils::mimeTypeForFile(fileName);
     return mt.matchesName(QLatin1String(CppTools::Constants::OBJECTIVE_C_SOURCE_MIMETYPE))
             || mt.matchesName(QLatin1String(CppTools::Constants::OBJECTIVE_CPP_SOURCE_MIMETYPE));
 }
@@ -2123,7 +2120,10 @@ void CppCompletionAssistInterface::getCppSpecifics() const
     m_gotCppSpecifics = true;
 
     if (m_parser) {
-        m_parser->update(CppTools::CppModelManager::instance()->workingCopy());
+        m_parser->update({CppTools::CppModelManager::instance()->workingCopy(),
+                          nullptr,
+                          Language::Cxx,
+                          false});
         m_snapshot = m_parser->snapshot();
         m_headerPaths = m_parser->headerPaths();
     }

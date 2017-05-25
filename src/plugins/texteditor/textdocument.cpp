@@ -291,6 +291,11 @@ QMap<QString, QTextCodec *> TextDocument::openedTextDocumentEncodings()
     return workingCopy;
 }
 
+TextDocument *TextDocument::currentTextDocument()
+{
+    return qobject_cast<TextDocument *>(EditorManager::currentDocument());
+}
+
 QString TextDocument::plainText() const
 {
     return document()->toPlainText();
@@ -614,8 +619,7 @@ Core::IDocument::OpenResult TextDocument::open(QString *errorString, const QStri
     emit aboutToOpen(fileName, realFileName);
     OpenResult success = openImpl(errorString, fileName, realFileName, /*reload =*/ false);
     if (success == OpenResult::Success) {
-        Utils::MimeDatabase mdb;
-        setMimeType(mdb.mimeTypeForFile(fileName).name());
+        setMimeType(Utils::mimeTypeForFile(fileName).name());
         emit openFinishedSuccessfully();
     }
     return success;
