@@ -3,21 +3,21 @@ include(../../qtcreator.pri)
 TEMPLATE  = subdirs
 
 SUBDIRS   = \
-    autotest \
+#    autotest \
     clangstaticanalyzer \
     coreplugin \
     texteditor \
     cppeditor \
     bineditor \
     diffeditor \
-    imageviewer \
+#    imageviewer \
     bookmarks \
     projectexplorer \
-    vcsbase \
-    perforce \
-    subversion \
-    git \
-    cvs \
+#    vcsbase \
+#    perforce \
+#    subversion \
+#    git \
+#    cvs \
     cpptools \
     qtsupport \
     qmakeprojectmanager \
@@ -29,55 +29,55 @@ SUBDIRS   = \
     emacskeys \
     resourceeditor \
     genericprojectmanager \
-    qmljseditor \
-    qmlprojectmanager \
-    glsleditor \
+#    qmljseditor \
+#    qmlprojectmanager \
+#    glsleditor \
     pythoneditor \
-    nim \
-    mercurial \
-    bazaar \
+#    nim \
+#    mercurial \
+#    bazaar \
     classview \
     tasklist \
-    qmljstools \
+#    qmljstools \
     macros \
     remotelinux \
-    android \
+#    android \
     valgrind \
     todo \
-    qnx \
-    clearcase \
+#    qnx \
+#    clearcase \
     baremetal \
-    ios \
+#    ios \
     beautifier \
-    modeleditor \
-    qmakeandroidsupport \
-    winrt \
+#    modeleditor \
+#    qmakeandroidsupport \
+#    winrt \
     updateinfo \
-    scxmleditor \
-    welcome \
+#    scxmleditor \
+#    welcome \
     silversearcher
 
 qtHaveModule(quick) {
-    SUBDIRS += qmlprofiler
+    #SUBDIRS += qmlprofiler
 } else {
     warning("QmlProfiler plugin has been disabled since the Qt Quick module is not available.")
 }
 
 qtHaveModule(help) {
-    SUBDIRS += help
+    #SUBDIRS += help
 } else {
     warning("Help plugin has been disabled since the Qt Help module is not available.")
 }
 
 qtHaveModule(designercomponents_private) {
-    SUBDIRS += designer
+    #SUBDIRS += designer
 } else {
     warning("Qt Widget Designer plugin has been disabled since the Qt Designer module is not available.")
 }
 
 DO_NOT_BUILD_QMLDESIGNER = $$(DO_NOT_BUILD_QMLDESIGNER)
 isEmpty(DO_NOT_BUILD_QMLDESIGNER):qtHaveModule(quick-private) {
-    SUBDIRS += qmldesigner
+    #SUBDIRS += qmldesigner
 } else {
     !qtHaveModule(quick-private) {
         warning("QmlDesigner plugin has been disabled since the Qt Quick module is not available.")
@@ -89,8 +89,8 @@ isEmpty(DO_NOT_BUILD_QMLDESIGNER):qtHaveModule(quick-private) {
 
 isEmpty(QBS_INSTALL_DIR): QBS_INSTALL_DIR = $$(QBS_INSTALL_DIR)
 exists(../shared/qbs/qbs.pro)|!isEmpty(QBS_INSTALL_DIR): \
-    SUBDIRS += \
-        qbsprojectmanager
+    #SUBDIRS += \
+    #    qbsprojectmanager
 
 # prefer qmake variable set on command line over env var
 isEmpty(LLVM_INSTALL_DIR):LLVM_INSTALL_DIR=$$(LLVM_INSTALL_DIR)
