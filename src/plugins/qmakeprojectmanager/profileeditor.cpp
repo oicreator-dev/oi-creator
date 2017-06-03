@@ -171,7 +171,7 @@ static TextDocument *createProFileDocument()
 ProFileEditorFactory::ProFileEditorFactory()
 {
     setId(Constants::PROFILE_EDITOR_ID);
-    setDisplayName(qApp->translate("OpenWith::Editors", Constants::PROFILE_EDITOR_DISPLAY_NAME));
+    setDisplayName(QCoreApplication::translate("OpenWith::Editors", Constants::PROFILE_EDITOR_DISPLAY_NAME));
     addMimeType(Constants::PROFILE_MIMETYPE);
     addMimeType(Constants::PROINCLUDEFILE_MIMETYPE);
     addMimeType(Constants::PROFEATUREFILE_MIMETYPE);
@@ -185,7 +185,7 @@ ProFileEditorFactory::ProFileEditorFactory()
     ProFileCompletionAssistProvider *pcap = new ProFileCompletionAssistProvider;
     setCompletionAssistProvider(pcap);
 
-    setCommentStyle(Utils::CommentDefinition::HashStyle);
+    setCommentDefinition(Utils::CommentDefinition::HashStyle);
     setEditorActionHandlers(TextEditorActionHandler::UnCommentSelection
                 | TextEditorActionHandler::JumpToFileUnderCursor);
 

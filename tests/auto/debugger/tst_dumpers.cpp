@@ -1505,7 +1505,7 @@ void tst_Dumpers::dumper()
                 "!qtcreatorcdbext.script theDumper.setupDumpers()\n"
                 ".frame 1\n"
                 "!qtcreatorcdbext.pid\n"
-                "!qtcreatorcdbext.script -t 42 theDumper.fetchVariables({"
+                "!qtcreatorcdbext.script -t 42 theDumper.fetchVariables({" + dumperOptions +
                 "'token':2,'fancy':1,'forcens':1,"
                 "'autoderef':1,'dyntype':1,'passexceptions':0,"
                 "'testing':1,'qobjectnames':1,"
@@ -5390,12 +5390,14 @@ void tst_Dumpers::dumper_data()
 
     QTest::newRow("Bitfields")
             << Data("",
+                    "enum E { V1, V2 };"
                     "struct S\n"
                     "{\n"
-                    "    S() : x(2), y(3), z(39), c(1), b(0), f(5), d(6), i(7) {}\n"
+                    "    S() : x(2), y(3), z(39), e(V2), c(1), b(0), f(5), d(6), i(7) {}\n"
                     "    unsigned int x : 3;\n"
                     "    unsigned int y : 4;\n"
                     "    unsigned int z : 18;\n"
+                    "    E e : 3;\n"
                     "    bool c : 1;\n"
                     "    bool b;\n"
                     "    float f;\n"
@@ -5414,9 +5416,11 @@ void tst_Dumpers::dumper_data()
                + Check("s.x", "2", "unsigned int : 3") % NoCdbEngine
                + Check("s.y", "3", "unsigned int : 4") % NoCdbEngine
                + Check("s.z", "39", "unsigned int : 18") % NoCdbEngine
+               + Check("s.e", "1", "E : 3") % NoCdbEngine
                + Check("s.x", "2", "unsigned int") % CdbEngine
                + Check("s.y", "3", "unsigned int") % CdbEngine
-               + Check("s.z", "39", "unsigned int") % CdbEngine;
+               + Check("s.z", "39", "unsigned int") % CdbEngine
+               + Check("s.e", "V2 (1)", TypePattern("main::[a-zA-Z0-9_]*::E")) % CdbEngine;
 
 
     QTest::newRow("Function")
@@ -5512,6 +5516,14 @@ void tst_Dumpers::dumper_data()
                 + Check("b4", "<10 items>", "TVector") % GccVersion(1)
                 + Check("b5", "<10 items>", "TVector<bool>") % GccVersion(0, 0)
                 + Check("b6", "<10 items>", "TVector<int>") % GccVersion(0, 0);
+
+
+    QTest::newRow("Typedef3")
+            << Data("typedef enum { Value } Unnamed;\n"
+                    "struct Foo { Unnamed u = Value; };\n",
+                    "Foo foo;")
+               + Cxx11Profile()
+               + Check("foo.u", "Value (0)", "Unnamed");
 
 
     QTest::newRow("Struct")
@@ -6811,6 +6823,16 @@ void tst_Dumpers::dumper_data()
             + Check("f.b", "<optimized out>", "") % NoCdbEngine
             + Check("f.b", "", "<Value unavailable error>") % CdbEngine;
 
+    QTest::newRow("LongDouble")
+            << Data("",
+                    "long double a = 1;\n"
+                    "long double b = -2;\n"
+                    "long double c = 0;\n"
+                    "long double d = 0.5;\n")
+            + Check("a", FloatValue("1"), TypeDef("double", "long double"))
+            + Check("b", FloatValue("-2"), TypeDef("double", "long double"))
+            + Check("c", FloatValue("0"), TypeDef("double", "long double"))
+            + Check("d", FloatValue("0.5"), TypeDef("double", "long double"));
 
 #ifdef Q_OS_LINUX
     QTest::newRow("StaticMembersInLib")
@@ -6826,7 +6848,6 @@ void tst_Dumpers::dumper_data()
             + Check("p.FlagBit", "<optimized out>", "") % NoCdbEngine
             + Check("p.FlagBit", "", "<Value unavailable error>", "") % CdbEngine;
 #endif
-
 
     QTest::newRow("ArrayOfFunctionPointers")
             << Data("typedef int (*FP)(int *); \n"

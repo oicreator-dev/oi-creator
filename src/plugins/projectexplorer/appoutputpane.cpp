@@ -399,7 +399,7 @@ void AppOutputPane::updateBehaviorSettings()
 
 void AppOutputPane::createNewOutputWindow(RunControl *rc)
 {
-    connect(rc, &RunControl::started,
+    connect(rc, &RunControl::aboutToStart,
             this, &AppOutputPane::slotRunControlStarted);
     connect(rc, &RunControl::finished,
             this, &AppOutputPane::slotRunControlFinished);
@@ -510,7 +510,7 @@ void AppOutputPane::reRunRunControl()
 
     handleOldOutput(tab.window);
     tab.window->scrollToBottom();
-    tab.runControl->start();
+    tab.runControl->initiateStart();
 }
 
 void AppOutputPane::attachToRunControl()
@@ -525,11 +525,16 @@ void AppOutputPane::attachToRunControl()
 void AppOutputPane::stopRunControl()
 {
     const int index = currentIndex();
-    QTC_ASSERT(index != -1 && m_runControlTabs.at(index).runControl->isRunning(), return);
-
+    QTC_ASSERT(index != -1, return);
     RunControl *rc = m_runControlTabs.at(index).runControl;
+    QTC_ASSERT(rc, return);
+
     if (rc->isRunning() && optionallyPromptToStop(rc))
-        rc->stop();
+        rc->initiateStop();
+    else if (rc->isStarting()) {
+        QTC_CHECK(false);
+        rc->initiateStop();
+    }
 
     if (debug)
         qDebug() << "OutputPane::stopRunControl " << rc;
@@ -560,7 +565,7 @@ bool AppOutputPane::closeTab(int tabIndex, CloseTabMode closeTabMode)
 
     if (debug)
         qDebug() << "OutputPane::closeTab tab " << tabIndex << m_runControlTabs[index].runControl
-                        << m_runControlTabs[index].window << m_runControlTabs[index].asyncClosing;
+                 << m_runControlTabs[index].window;
     // Prompt user to stop
     if (m_runControlTabs[index].runControl->isRunning()) {
         switch (closeTabMode) {
@@ -579,15 +584,8 @@ bool AppOutputPane::closeTab(int tabIndex, CloseTabMode closeTabMode)
             break;
         }
         if (m_runControlTabs[index].runControl->isRunning()) { // yes it might have stopped already, then just close
-            QWidget *tabWidget = m_tabWidget->widget(tabIndex);
-            if (m_runControlTabs[index].runControl->stop() == RunControl::AsynchronousStop) {
-                m_runControlTabs[index].asyncClosing = true;
-                return false;
-            }
-            tabIndex = m_tabWidget->indexOf(tabWidget);
-            index = indexOf(tabWidget);
-            if (tabIndex == -1 || index == -1)
-                return false;
+            m_runControlTabs[index].runControl->initiateStop();
+            return false;
         }
     }
 
@@ -714,7 +712,6 @@ void AppOutputPane::slotRunControlStarted()
 
     if (current && current == sender())
         enableButtons(current, true); // RunControl::isRunning() cannot be trusted in signal handler.
-    emit runControlStarted(current);
 }
 
 void AppOutputPane::slotRunControlFinished()
@@ -745,11 +742,7 @@ void AppOutputPane::slotRunControlFinished2(RunControl *sender)
 
     m_runControlTabs.at(senderIndex).window->setFormatter(nullptr); // Reset formater for this RC
 
-    // Check for asynchronous close. Close the tab.
-    if (m_runControlTabs.at(senderIndex).asyncClosing)
-        closeTab(tabWidgetIndexOf(senderIndex), CloseTabNoPrompt);
-
-    emit runControlFinished(sender);
+    ProjectExplorerPlugin::instance()->updateRunActions();
 
     if (!isRunning())
         emit allRunControlsFinished();

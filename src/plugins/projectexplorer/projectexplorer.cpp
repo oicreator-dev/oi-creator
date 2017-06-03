@@ -173,7 +173,6 @@ namespace Constants {
 const int  P_MODE_SESSION         = 85;
 
 // Actions
-const char NEWSESSION[]           = "ProjectExplorer.NewSession";
 const char NEWPROJECT[]           = "ProjectExplorer.NewProject";
 const char LOAD[]                 = "ProjectExplorer.Load";
 const char UNLOAD[]               = "ProjectExplorer.Unload";
@@ -283,7 +282,7 @@ public:
     QPair<bool, QString> buildSettingsEnabled(const Project *pro);
 
     void addToRecentProjects(const QString &fileName, const QString &displayName);
-    void startRunControl(RunControl *runControl, Core::Id runMode);
+    void startRunControl(RunControl *runControl);
 
     void updateActions();
     void updateContext();
@@ -577,6 +576,10 @@ bool ProjectExplorerPlugin::initialize(const QStringList &arguments, QString *er
             dd, &ProjectExplorerPluginPrivate::updateContextMenuActions);
     connect(tree, &ProjectTree::currentProjectChanged,
             dd, &ProjectExplorerPluginPrivate::updateActions);
+    connect(tree, &ProjectTree::currentProjectChanged, this, [](Project *project) {
+        TextEditor::FindInFiles::instance()->setBaseDirectory(project ? project->projectDirectory()
+                                                                      : Utils::FileName());
+    });
 
     addAutoReleasedObject(new CustomWizardMetaFactory<CustomProjectWizard>(IWizardFactory::ProjectWizard));
     addAutoReleasedObject(new CustomWizardMetaFactory<CustomWizard>(IWizardFactory::FileWizard));
@@ -612,13 +615,6 @@ bool ProjectExplorerPlugin::initialize(const QStringList &arguments, QString *er
     addAutoReleasedObject(dd->m_outputPane);
     connect(SessionManager::instance(), &SessionManager::projectRemoved,
             dd->m_outputPane, &AppOutputPane::projectRemoved);
-
-    connect(dd->m_outputPane, &AppOutputPane::runControlStarted,
-            this, &ProjectExplorerPlugin::runControlStarted);
-    connect(dd->m_outputPane, &AppOutputPane::runControlFinished,
-            this, &ProjectExplorerPlugin::runControlFinished);
-    connect(dd->m_outputPane, &AppOutputPane::runControlFinished,
-            this, &ProjectExplorerPlugin::updateRunActions);
 
     addAutoReleasedObject(new AllProjectsFilter);
     addAutoReleasedObject(new CurrentProjectFilter);
@@ -833,9 +829,9 @@ bool ProjectExplorerPlugin::initialize(const QStringList &arguments, QString *er
             dd, &ProjectExplorerPluginPrivate::updateSessionMenu);
 
     // session manager action
-    dd->m_sessionManagerAction = new QAction(tr("Session &Manager..."), this);
-    cmd = ActionManager::registerAction(dd->m_sessionManagerAction, Constants::NEWSESSION);
-    mfile->addAction(cmd, Core::Constants::G_FILE_OPEN);
+    dd->m_sessionManagerAction = new QAction(tr("&Manage..."), this);
+    dd->m_sessionMenu->addAction(dd->m_sessionManagerAction);
+    dd->m_sessionMenu->addSeparator();
     cmd->setDefaultKeySequence(QKeySequence());
 
 
@@ -2012,7 +2008,7 @@ void ProjectExplorerPluginPrivate::executeRunConfiguration(RunConfiguration *run
             m_instance->showRunErrorMessage(errorMessage);
             return;
         }
-        startRunControl(control, runMode);
+        startRunControl(control);
     }
 }
 
@@ -2024,21 +2020,22 @@ void ProjectExplorerPlugin::showRunErrorMessage(const QString &errorMessage)
         QMessageBox::critical(ICore::mainWindow(), errorMessage.isNull() ? tr("Unknown error") : tr("Could Not Run"), errorMessage);
 }
 
-void ProjectExplorerPlugin::startRunControl(RunControl *runControl, Core::Id runMode)
+void ProjectExplorerPlugin::startRunControl(RunControl *runControl)
 {
-    dd->startRunControl(runControl, runMode);
+    dd->startRunControl(runControl);
 }
 
-void ProjectExplorerPluginPrivate::startRunControl(RunControl *runControl, Core::Id runMode)
+void ProjectExplorerPluginPrivate::startRunControl(RunControl *runControl)
 {
     m_outputPane->createNewOutputWindow(runControl);
     m_outputPane->flash(); // one flash for starting
     m_outputPane->showTabFor(runControl);
+    Core::Id runMode = runControl->runMode();
     bool popup = (runMode == Constants::NORMAL_RUN_MODE && dd->m_projectExplorerSettings.showRunOutput)
             || ((runMode == Constants::DEBUG_RUN_MODE || runMode == Constants::DEBUG_RUN_MODE_WITH_BREAK_ON_MAIN)
                 && m_projectExplorerSettings.showDebugOutput);
     m_outputPane->setBehaviorOnOutput(runControl, popup ? AppOutputPane::Popup : AppOutputPane::Flash);
-    runControl->start();
+    runControl->initiateStart();
     emit m_instance->updateRunActions();
 }
 
@@ -2340,16 +2337,11 @@ int ProjectExplorerPluginPrivate::queue(QList<Project *> projects, QList<Id> ste
                 }
             }
 
-            QList<RunControl *> asyncStop;
             if (stopThem) {
-                foreach (RunControl *rc, toStop) {
-                    if (rc->stop() == RunControl::AsynchronousStop)
-                        asyncStop << rc;
-                }
-            }
+                foreach (RunControl *rc, toStop)
+                    rc->initiateStop();
 
-            if (!asyncStop.isEmpty()) {
-                WaitForStopDialog dialog(asyncStop);
+                WaitForStopDialog dialog(toStop);
                 dialog.exec();
 
                 if (dialog.canceled())
@@ -3381,6 +3373,8 @@ void ProjectExplorerPluginPrivate::handleSetStartupProject()
 void ProjectExplorerPluginPrivate::updateSessionMenu()
 {
     m_sessionMenu->clear();
+    dd->m_sessionMenu->addAction(dd->m_sessionManagerAction);
+    dd->m_sessionMenu->addSeparator();
     QActionGroup *ag = new QActionGroup(m_sessionMenu);
     connect(ag, &QActionGroup::triggered, this, &ProjectExplorerPluginPrivate::setSession);
     const QString activeSession = SessionManager::activeSession();

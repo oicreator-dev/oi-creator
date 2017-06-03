@@ -54,7 +54,7 @@ HighlightingMark::HighlightingMark(const CXCursor &cxCursor,
     column = start.column();
     offset = start.offset();
     length = end.offset() - start.offset();
-    collectKinds(cxToken, originalCursor);
+    collectKinds(cxTranslationUnit, cxToken, originalCursor);
 }
 
 HighlightingMark::HighlightingMark(uint line, uint column, uint length, HighlightingTypes types)
@@ -154,6 +154,18 @@ void HighlightingMark::referencedTypeKind(const Cursor &cursor)
         case CXCursor_TypeAliasDecl:
         case CXCursor_EnumDecl:              types.mainHighlightingType = HighlightingType::Type; break;
         default:                             types.mainHighlightingType = HighlightingType::Invalid; break;
+    }
+}
+
+void HighlightingMark::overloadedDeclRefKind(const Cursor &cursor)
+{
+    types.mainHighlightingType = HighlightingType::Function;
+
+    // Workaround https://bugs.llvm.org//show_bug.cgi?id=33256 - SomeType in
+    // "using N::SomeType" is mistakenly considered as a CXCursor_OverloadedDeclRef.
+    if (cursor.overloadedDeclarationsCount() >= 1
+            && cursor.overloadedDeclaration(0).kind() != CXCursor_FunctionDecl) {
+        types.mainHighlightingType = HighlightingType::Type;
     }
 }
 
@@ -293,11 +305,11 @@ void HighlightingMark::identifierKind(const Cursor &cursor, Recursion recursion)
         case CXCursor_ObjCDynamicDecl:           types.mainHighlightingType = HighlightingType::Field; break;
         case CXCursor_TypeRef:                   referencedTypeKind(cursor); break;
         case CXCursor_ClassDecl:
+        case CXCursor_ClassTemplatePartialSpecialization:
         case CXCursor_TemplateTypeParameter:
         case CXCursor_TemplateTemplateParameter:
         case CXCursor_UnionDecl:
         case CXCursor_StructDecl:
-        case CXCursor_OverloadedDeclRef:
         case CXCursor_TemplateRef:
         case CXCursor_Namespace:
         case CXCursor_NamespaceRef:
@@ -316,6 +328,7 @@ void HighlightingMark::identifierKind(const Cursor &cursor, Recursion recursion)
         case CXCursor_ObjCProtocolRef:
         case CXCursor_ObjCClassRef:
         case CXCursor_ObjCSuperClassRef:         types.mainHighlightingType = HighlightingType::Type; break;
+        case CXCursor_OverloadedDeclRef:         overloadedDeclRefKind(cursor); break;
         case CXCursor_FunctionTemplate:          types.mainHighlightingType = HighlightingType::Function; break;
         case CXCursor_EnumConstantDecl:          types.mainHighlightingType = HighlightingType::Enumeration; break;
         case CXCursor_PreprocessingDirective:    types.mainHighlightingType = HighlightingType::Preprocessor; break;
@@ -369,14 +382,39 @@ HighlightingType HighlightingMark::punctuationKind(const Cursor &cursor)
     }
 }
 
-void HighlightingMark::collectKinds(CXToken *cxToken, const Cursor &cursor)
+static HighlightingType highlightingTypeForKeyword(CXTranslationUnit cxTranslationUnit,
+                                                   CXToken *cxToken)
+{
+    const ClangString spelling = clang_getTokenSpelling(cxTranslationUnit, *cxToken);
+    const char *c = spelling.cString();
+    if (std::strcmp(c, "bool") == 0
+            || std::strcmp(c, "char") == 0
+            || std::strcmp(c, "char16_t") == 0
+            || std::strcmp(c, "char32_t") == 0
+            || std::strcmp(c, "double") == 0
+            || std::strcmp(c, "float") == 0
+            || std::strcmp(c, "int") == 0
+            || std::strcmp(c, "long") == 0
+            || std::strcmp(c, "short") == 0
+            || std::strcmp(c, "signed") == 0
+            || std::strcmp(c, "unsigned") == 0
+            || std::strcmp(c, "void") == 0
+            || std::strcmp(c, "wchar_t") == 0) {
+        return HighlightingType::PrimitiveType;
+    }
+
+    return HighlightingType::Keyword;
+}
+
+void HighlightingMark::collectKinds(CXTranslationUnit cxTranslationUnit,
+                                    CXToken *cxToken, const Cursor &cursor)
 {
     auto cxTokenKind = clang_getTokenKind(*cxToken);
 
     types = HighlightingTypes();
 
     switch (cxTokenKind) {
-        case CXToken_Keyword:     types.mainHighlightingType = HighlightingType::Keyword; break;
+        case CXToken_Keyword:     types.mainHighlightingType = highlightingTypeForKeyword(cxTranslationUnit, cxToken); break;
         case CXToken_Punctuation: types.mainHighlightingType = punctuationKind(cursor); break;
         case CXToken_Identifier:  identifierKind(cursor, Recursion::FirstPass); break;
         case CXToken_Comment:     types.mainHighlightingType = HighlightingType::Comment; break;

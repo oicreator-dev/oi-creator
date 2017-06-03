@@ -23,24 +23,12 @@
 **
 ****************************************************************************/
 
-#pragma once
+import QtQuick 2.6
+import QtQuick.Layouts 1.3
 
-#include <texteditor/snippets/isnippetprovider.h>
-
-namespace CppEditor {
-namespace Internal {
-
-class CppSnippetProvider : public TextEditor::ISnippetProvider
-{
-    Q_OBJECT
-
-public:
-    ~CppSnippetProvider() final = default;
-
-    QString groupId() const final;
-    QString displayName() const final;
-    void decorateEditor(TextEditor::SnippetEditorWidget *editor) const final;
-};
-
-} // Internal
-} // CppEditor
+StackLayout {
+    id: root
+    //property alias index: root.currentIndex
+    property bool interactive: true
+    default property alias contentData: root.data
+}

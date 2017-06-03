@@ -81,11 +81,12 @@ const char GIT_DIRECTORY[] = ".git";
 const char graphLogFormatC[] = "%h %d %an %s %ci";
 const char HEAD[] = "HEAD";
 const char CHERRY_PICK_HEAD[] = "CHERRY_PICK_HEAD";
+const char BRANCHES_PREFIX[] = "Branches: ";
 const char stashNamePrefix[] = "stash@{";
 const char noColorOption[] = "--no-color";
 const char decorateOption[] = "--decorate";
 const char showFormatC[] =
-        "--pretty=format:commit %H%n"
+        "--pretty=format:commit %H%d%n"
         "Author: %an <%ae>, %ad (%ar)%n"
         "Committer: %cn <%ce>, %cd (%cr)%n"
         "%n"
@@ -358,7 +359,7 @@ private:
 
 void ShowController::reload()
 {
-    const QStringList args = {"show", "-s", noColorOption, decorateOption, showFormatC, m_id};
+    const QStringList args = {"show", "-s", noColorOption, showFormatC, m_id};
     m_state = GettingDescription;
     runCommand(QList<QStringList>() << args, GitPlugin::client()->encoding(m_directory, "i18n.commitEncoding"));
 }
@@ -1418,6 +1419,32 @@ void GitClient::synchronousTagsForCommit(const QString &workingDirectory, const 
     }
 }
 
+static QString branchesDisplay(const QString &prefix, QStringList *branches, bool *first)
+{
+    const int limit = 12;
+    const int count = branches->count();
+    int more = 0;
+    QString output;
+    if (*first)
+        *first = false;
+    else
+        output += QString(sizeof(BRANCHES_PREFIX) - 1, ' '); // Align
+    output += prefix + ": ";
+    // If there are more than 'limit' branches, list limit/2 (first limit/4 and last limit/4)
+    if (count > limit) {
+        const int leave = limit / 2;
+        more = count - leave;
+        branches->erase(branches->begin() + leave / 2 + 1, branches->begin() + count - leave / 2);
+        (*branches)[leave / 2] = "...";
+    }
+    output += branches->join(", ");
+    //: Displayed after the untranslated message "Branches: branch1, branch2 'and %n more'"
+    //  in git show.
+    if (more > 0)
+        output += ' ' + GitClient::tr("and %n more", 0, more);
+    return output;
+}
+
 void GitClient::branchesForCommit(const QString &revision)
 {
     auto controller = qobject_cast<DiffEditorController *>(sender());
@@ -1425,8 +1452,42 @@ void GitClient::branchesForCommit(const QString &revision)
     VcsCommand *command = vcsExec(
                 workingDirectory, {"branch", noColorOption, "-a", "--contains", revision}, nullptr,
                 false, 0, workingDirectory);
-    connect(command, &VcsCommand::stdOutText, controller,
-            &DiffEditorController::informationForCommitReceived);
+    connect(command, &VcsCommand::stdOutText, controller, [controller](const QString &text) {
+        QHash<QString, QStringList> remotes;
+        const QString remotePrefix = "remotes/";
+        const QString localPrefix = "<Local>";
+        const int prefixLength = remotePrefix.length();
+        QString output = BRANCHES_PREFIX;
+        QStringList branches;
+        QString previousRemote = localPrefix;
+        bool first = true;
+        for (const QString &branch : text.split('\n')) {
+            const QString b = branch.mid(2).trimmed();
+            if (b.isEmpty())
+                continue;
+            if (b.startsWith(remotePrefix)) {
+                const int nextSlash = b.indexOf('/', prefixLength);
+                if (nextSlash < 0)
+                    continue;
+                const QString remote = b.mid(prefixLength, nextSlash - prefixLength);
+                if (remote != previousRemote) {
+                    output += branchesDisplay(previousRemote, &branches, &first) + '\n';
+                    branches.clear();
+                    previousRemote = remote;
+                }
+                branches << b.mid(nextSlash + 1);
+            } else {
+                branches << b;
+            }
+        }
+        if (branches.isEmpty()) {
+            if (previousRemote == localPrefix)
+                output += tr("<None>");
+        } else {
+            output += branchesDisplay(previousRemote, &branches, &first);
+        }
+        controller->branchesReceived(output.trimmed());
+    });
 }
 
 bool GitClient::isRemoteCommit(const QString &workingDirectory, const QString &commit)

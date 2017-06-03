@@ -129,15 +129,16 @@ RemoteHelpFilter::~RemoteHelpFilter()
 {
 }
 
-QList<Core::LocatorFilterEntry> RemoteHelpFilter::matchesFor(QFutureInterface<Core::LocatorFilterEntry> &future, const QString &pattern)
+QList<Core::LocatorFilterEntry> RemoteHelpFilter::matchesFor(QFutureInterface<Core::LocatorFilterEntry> &future, const QString &entry)
 {
     QList<Core::LocatorFilterEntry> entries;
     foreach (const QString &url, remoteUrls()) {
         if (future.isCanceled())
             break;
-
-        entries.append(Core::LocatorFilterEntry(this, url.arg(pattern), QVariant(),
-            m_icon));
+        const QString name = url.arg(entry);
+        Core::LocatorFilterEntry filterEntry(this, name, QVariant(), m_icon);
+        filterEntry.highlightInfo = {name.lastIndexOf(entry), entry.length()};
+        entries.append(filterEntry);
     }
     return entries;
 }
@@ -165,7 +166,7 @@ QByteArray RemoteHelpFilter::saveState() const
     return value;
 }
 
-bool RemoteHelpFilter::restoreState(const QByteArray &state)
+void RemoteHelpFilter::restoreState(const QByteArray &state)
 {
     QDataStream in(state);
 
@@ -180,8 +181,6 @@ bool RemoteHelpFilter::restoreState(const QByteArray &state)
     bool defaultFilter;
     in >> defaultFilter;
     setIncludedByDefault(defaultFilter);
-
-    return true;
 }
 
 bool RemoteHelpFilter::openConfigDialog(QWidget *parent, bool &needsRefresh)

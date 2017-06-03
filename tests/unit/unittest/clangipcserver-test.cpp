@@ -60,13 +60,13 @@ MATCHER_P5(HasDirtyDocument,
            filePath,
            projectPartId,
            documentRevision,
-           isNeedingReparse,
+           isDirty,
            hasNewDiagnostics,
            std::string(negation ? "isn't" : "is")
            + " document with file path "+ PrintToString(filePath)
            + " and project " + PrintToString(projectPartId)
            + " and document revision " + PrintToString(documentRevision)
-           + " and isNeedingReparse = " + PrintToString(isNeedingReparse)
+           + " and isDirty = " + PrintToString(isDirty)
            + " and hasNewDiagnostics = " + PrintToString(hasNewDiagnostics)
            )
 {
@@ -75,10 +75,10 @@ MATCHER_P5(HasDirtyDocument,
         auto document = documents.document(filePath, projectPartId);
 
         if (document.documentRevision() == documentRevision) {
-            if (document.isNeedingReparse() && !isNeedingReparse) {
+            if (document.isDirty() && !isDirty) {
                 *result_listener << "isNeedingReparse is true";
                 return false;
-            } else if (!document.isNeedingReparse() && isNeedingReparse) {
+            } else if (!document.isDirty() && isDirty) {
                 *result_listener << "isNeedingReparse is false";
                 return false;
             }
@@ -106,14 +106,12 @@ protected:
 
     void registerProjectPart();
     void changeProjectPartArguments();
-    void unregisterProject(const Utf8String &projectPartId);
 
     void registerProjectAndFile(const Utf8String &filePath,
                                 int expectedDocumentAnnotationsChangedMessages = 1);
     void registerProjectAndFileAndWaitForFinished(const Utf8String &filePath,
                                                   int expectedDocumentAnnotationsChangedMessages = 1);
     void registerProjectAndFilesAndWaitForFinished(int expectedDocumentAnnotationsChangedMessages = 2);
-    void registerFile(const Utf8String &filePath, const Utf8String &projectFilePath);
     void registerFile(const Utf8String &filePath,
                       int expectedDocumentAnnotationsChangedMessages = 1);
     void registerFiles(int expectedDocumentAnnotationsChangedMessages);
@@ -124,7 +122,6 @@ protected:
                               quint32 revisionNumber);
 
     void unregisterFile(const Utf8String &filePath);
-    void unregisterFile(const Utf8String &filePath, const Utf8String &projectPartId);
 
     void removeUnsavedFile(const Utf8String &filePath);
 
@@ -435,14 +432,6 @@ void ClangCodeModelServer::expectDocumentAnnotationsChanged(int count)
     EXPECT_CALL(mockClangCodeModelClient, documentAnnotationsChanged(_)).Times(count);
 }
 
-void ClangCodeModelServer::registerFile(const Utf8String &filePath, const Utf8String &projectFilePath)
-{
-    const FileContainer fileContainer(filePath, projectFilePath);
-    const RegisterTranslationUnitForEditorMessage message({fileContainer}, filePath, {filePath});
-
-    clangServer.registerTranslationUnitsForEditor(message);
-}
-
 void ClangCodeModelServer::registerFileWithUnsavedContent(const Utf8String &filePath,
                                                     const Utf8String &unsavedContent)
 {
@@ -595,21 +584,6 @@ void ClangCodeModelServer::unregisterFile(const Utf8String &filePath)
     const UnregisterTranslationUnitsForEditorMessage message(fileContainers);
 
     clangServer.unregisterTranslationUnitsForEditor(message);
-}
-
-void ClangCodeModelServer::unregisterFile(const Utf8String &filePath, const Utf8String &projectPartId)
-{
-    const QVector<FileContainer> fileContainers = {FileContainer(filePath, projectPartId)};
-    const UnregisterTranslationUnitsForEditorMessage message(fileContainers);
-
-    clangServer.unregisterTranslationUnitsForEditor(message);
-}
-
-void ClangCodeModelServer::unregisterProject(const Utf8String &projectPartId)
-{
-    const UnregisterProjectPartsForEditorMessage message({projectPartId});
-
-    clangServer.unregisterProjectPartsForEditor(message);
 }
 
 void ClangCodeModelServer::registerProjectPart()

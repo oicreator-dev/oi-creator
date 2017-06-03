@@ -39,7 +39,7 @@ namespace Internal {
 
 IosRunControl::IosRunControl(IosRunConfiguration *rc)
     : RunControl(rc, ProjectExplorer::Constants::NORMAL_RUN_MODE)
-    , m_runner(new IosRunner(this, rc, false, QmlDebug::NoQmlDebugServices))
+    , m_runner(new IosRunner(this, this, false, QmlDebug::NoQmlDebugServices))
 {
     setIcon(Utils::Icons::RUN_SMALL_TOOLBAR);
 }
@@ -64,10 +64,9 @@ void IosRunControl::start()
     m_runner->start();
 }
 
-RunControl::StopResult IosRunControl::stop()
+void IosRunControl::stop()
 {
     m_runner->stop();
-    return StoppedSynchronously;
 }
 
 void IosRunControl::handleRemoteProcessFinished(bool cleanEnd)

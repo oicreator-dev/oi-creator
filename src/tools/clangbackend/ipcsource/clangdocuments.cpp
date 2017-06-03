@@ -43,7 +43,8 @@ namespace ClangBackEnd {
 
 bool operator==(const FileContainer &fileContainer, const Document &document)
 {
-    return fileContainer.filePath() == document.filePath() && fileContainer.projectPartId() == document.projectPartId();
+    return fileContainer.filePath() == document.filePath()
+        && fileContainer.projectPartId() == document.projectPart().id();
 }
 
 bool operator==(const Document &document, const FileContainer &fileContainer)
@@ -157,7 +158,7 @@ const std::vector<Document> Documents::filtered(const IsMatchingDocument &isMatc
 std::vector<Document> Documents::dirtyAndVisibleButNotCurrentDocuments() const
 {
     return filtered([](const Document &document) {
-        return document.isNeedingReparse()
+        return document.isDirty()
             && document.isVisibleInEditor()
             && !document.isUsedByCurrentEditor();
     });
@@ -185,10 +186,16 @@ void Documents::updateDocumentsWithChangedDependencies(const QVector<FileContain
         updateDocumentsWithChangedDependency(fileContainer.filePath());
 }
 
-void Documents::setDocumentsDirtyIfProjectPartChanged()
+std::vector<Document> Documents::setDocumentsDirtyIfProjectPartChanged()
 {
-    for (auto &document : documents_)
-        document.setDirtyIfProjectPartIsOutdated();
+    std::vector<Document> notDirtyBefore;
+
+    for (auto &document : documents_) {
+        if (!document.isDirty() && document.setDirtyIfProjectPartIsOutdated())
+            notDirtyBefore.push_back(document);
+    }
+
+    return notDirtyBefore;
 }
 
 QVector<FileContainer> Documents::newerFileContainers(const QVector<FileContainer> &fileContainers) const
@@ -218,7 +225,9 @@ const ClangFileSystemWatcher *Documents::clangFileSystemWatcher() const
 
 Document Documents::createDocument(const FileContainer &fileContainer)
 {
-    Document::FileExistsCheck checkIfFileExists = fileContainer.hasUnsavedFileContent() ? Document::DoNotCheckIfFileExists : Document::CheckIfFileExists;
+    const Document::FileExistsCheck checkIfFileExists = fileContainer.hasUnsavedFileContent()
+            ? Document::FileExistsCheck::DoNotCheck
+            : Document::FileExistsCheck::Check;
 
     documents_.emplace_back(fileContainer.filePath(),
                                    projectParts.project(fileContainer.projectPartId()),

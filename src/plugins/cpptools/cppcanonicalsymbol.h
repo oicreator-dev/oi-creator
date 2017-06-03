@@ -23,37 +23,40 @@
 **
 ****************************************************************************/
 
-#include "qmljssnippetprovider.h"
-#include "qmljshighlighter.h"
-#include "qmljseditor.h"
-#include "qmljsautocompleter.h"
-#include "qmljseditorconstants.h"
+#pragma once
 
-#include <texteditor/texteditorsettings.h>
-#include <texteditor/texteditorconstants.h>
-#include <texteditor/snippets/snippeteditor.h>
+#include "cpptools_global.h"
 
-#include <qmljstools/qmljsindenter.h>
+#include <cplusplus/LookupContext.h>
+#include <cplusplus/Symbol.h>
+#include <cplusplus/TypeOfExpression.h>
 
-#include <QLatin1String>
-#include <QCoreApplication>
+QT_FORWARD_DECLARE_CLASS(QTextCursor)
 
-using namespace QmlJSEditor;
-using namespace Internal;
+namespace CppTools {
 
-QString QmlJSSnippetProvider::groupId() const
+class CPPTOOLS_EXPORT CanonicalSymbol
 {
-    return QLatin1String(Constants::QML_SNIPPETS_GROUP_ID);
-}
+public:
+    CanonicalSymbol(const CPlusPlus::Document::Ptr &document,
+                    const CPlusPlus::Snapshot &snapshot);
 
-QString QmlJSSnippetProvider::displayName() const
-{
-    return QCoreApplication::translate("QmlJSEditor::Internal::QmlJSSnippetProvider", "QML");
-}
+    const CPlusPlus::LookupContext &context() const;
 
-void QmlJSSnippetProvider::decorateEditor(TextEditor::SnippetEditorWidget *editor) const
-{
-    editor->textDocument()->setSyntaxHighlighter(new QmlJSHighlighter);
-    editor->textDocument()->setIndenter(new Indenter);
-    editor->setAutoCompleter(new AutoCompleter);
-}
+    CPlusPlus::Scope *getScopeAndExpression(const QTextCursor &cursor, QString *code);
+
+    CPlusPlus::Symbol *operator()(const QTextCursor &cursor);
+    CPlusPlus::Symbol *operator()(CPlusPlus::Scope *scope, const QString &code);
+
+public:
+    static CPlusPlus::Symbol *canonicalSymbol(CPlusPlus::Scope *scope,
+                                              const QString &code,
+                                              CPlusPlus::TypeOfExpression &typeOfExpression);
+
+private:
+    CPlusPlus::Document::Ptr m_document;
+    CPlusPlus::Snapshot m_snapshot;
+    CPlusPlus::TypeOfExpression m_typeOfExpression;
+};
+
+} // namespace CppTools

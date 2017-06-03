@@ -32,6 +32,7 @@
 #include <qmldesignerplugin.h>
 #endif
 
+#include <nodeinstanceview.h>
 
 #include <projectexplorer/kit.h>
 #include <projectexplorer/project.h>
@@ -111,23 +112,24 @@ QDateTime PuppetCreator::qtLastModified() const
 
 QDateTime PuppetCreator::puppetSourceLastModified() const
 {
-    QString basePuppetSourcePath = puppetSourceDirectoryPath();
-    QStringList sourceDirectoryPathes;
+    const QString basePuppetSourcePath = puppetSourceDirectoryPath();
+
+    const QStringList sourceDirectoryPaths = {
+        basePuppetSourcePath + "/commands",
+        basePuppetSourcePath + "/container",
+        basePuppetSourcePath + "/instances",
+        basePuppetSourcePath + "/interfaces",
+        basePuppetSourcePath + "/types",
+        basePuppetSourcePath + "/qmlpuppet",
+        basePuppetSourcePath + "/qmlpuppet/instances",
+        basePuppetSourcePath + "/qml2puppet",
+        basePuppetSourcePath + "/qml2puppet/instances"
+    };
+
     QDateTime lastModified;
-
-    sourceDirectoryPathes.append(basePuppetSourcePath + QStringLiteral("/commands"));
-    sourceDirectoryPathes.append(basePuppetSourcePath + QStringLiteral("/container"));
-    sourceDirectoryPathes.append(basePuppetSourcePath + QStringLiteral("/instances"));
-    sourceDirectoryPathes.append(basePuppetSourcePath + QStringLiteral("/interfaces"));
-    sourceDirectoryPathes.append(basePuppetSourcePath + QStringLiteral("/types"));
-    sourceDirectoryPathes.append(basePuppetSourcePath + QStringLiteral("/qmlpuppet"));
-    sourceDirectoryPathes.append(basePuppetSourcePath + QStringLiteral("/qmlpuppet/instances"));
-    sourceDirectoryPathes.append(basePuppetSourcePath + QStringLiteral("/qml2puppet"));
-    sourceDirectoryPathes.append(basePuppetSourcePath + QStringLiteral("/qml2puppet/instances"));
-
-    foreach (const QString directoryPath, sourceDirectoryPathes) {
+    foreach (const QString directoryPath, sourceDirectoryPaths) {
         foreach (const QFileInfo fileEntry, QDir(directoryPath).entryInfoList()) {
-            QDateTime filePathLastModified = fileEntry.lastModified();
+            const QDateTime filePathLastModified = fileEntry.lastModified();
             if (lastModified < filePathLastModified)
                 lastModified = filePathLastModified;
         }
@@ -230,7 +232,7 @@ QProcess *PuppetCreator::puppetProcess(const QString &puppetPath,
         QObject::connect(puppetProcess, SIGNAL(readyRead()), handlerObject, outputSlot);
     }
     puppetProcess->setWorkingDirectory(workingDirectory);
-    puppetProcess->start(puppetPath, QStringList() << socketToken << puppetMode << QLatin1String("-graphicssystem raster"));
+    puppetProcess->start(puppetPath, {socketToken, puppetMode, "-graphicssystem raster"});
 
 #ifndef QMLDESIGNER_TEST
     QString debugPuppet = m_designerSettings.value(DesignerSettingsKey::
@@ -460,6 +462,9 @@ QProcessEnvironment PuppetCreator::processEnvironment() const
     if (!m_qrcMapping.isEmpty()) {
         environment.set(QLatin1String("QMLDESIGNER_RC_PATHS"), m_qrcMapping);
     }
+#ifndef QMLDESIGNER_TEST
+    QmlDesignerPlugin::instance()->viewManager().nodeInstanceView()->emitCustomNotification("PuppetStatus", {}, {QVariant(m_qrcMapping)});
+#endif
 
     QStringList importPaths = m_model->importPaths();
 
@@ -620,7 +625,7 @@ bool PuppetCreator::checkPuppetVersion(const QString &qmlPuppetPath)
 {
 
     QProcess qmlPuppetVersionProcess;
-    qmlPuppetVersionProcess.start(qmlPuppetPath, QStringList() << QLatin1String("--version"));
+    qmlPuppetVersionProcess.start(qmlPuppetPath, {"--version"});
     qmlPuppetVersionProcess.waitForReadyRead(6000);
 
     QByteArray versionString = qmlPuppetVersionProcess.readAll();

@@ -30,7 +30,6 @@
 #include "qmlprofilereventtypes.h"
 
 #include <debugger/analyzer/analyzermanager.h>
-#include <debugger/analyzer/analyzerruncontrol.h>
 
 QT_BEGIN_NAMESPACE
 class QMessageBox;
@@ -38,7 +37,7 @@ QT_END_NAMESPACE
 
 namespace QmlProfiler {
 
-class QmlProfilerRunControl;
+class QmlProfilerRunner;
 
 namespace Internal {
 
@@ -50,11 +49,14 @@ public:
     explicit QmlProfilerTool(QObject *parent);
     ~QmlProfilerTool();
 
-    Debugger::AnalyzerRunControl *createRunControl(ProjectExplorer::RunConfiguration *runConfiguration = 0);
-    void finalizeRunControl(QmlProfilerRunControl *runControl);
+    static QmlProfilerTool *instance();
+
+    ProjectExplorer::RunWorker *createRunner(ProjectExplorer::RunControl *runControl,
+                                         ProjectExplorer::RunConfiguration *runConfiguration = 0);
+    void finalizeRunControl(QmlProfilerRunner *runWorker);
 
     bool prepareTool();
-    void startRemoteTool(ProjectExplorer::RunConfiguration *rc);
+    void startRemoteTool();
 
     QString summary(const QVector<int> &typeIds) const;
     QStringList details(int typeId) const;

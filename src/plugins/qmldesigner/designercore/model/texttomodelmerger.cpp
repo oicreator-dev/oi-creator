@@ -868,7 +868,7 @@ void TextToModelMerger::setupPossibleImports(const QmlJS::Snapshot &snapshot, co
 
 void TextToModelMerger::setupUsedImports()
 {
-     QList<QmlJS::Import> allImports = m_scopeChain->context()->imports(m_document.data())->all();
+     const QList<QmlJS::Import> allImports = m_scopeChain->context()->imports(m_document.data())->all();
 
      QList<Import> usedImports;
 
@@ -1111,7 +1111,7 @@ void TextToModelMerger::syncNode(ModelNode &modelNode,
                         || isConnectionsType(typeName)) {
                     AbstractProperty modelProperty = modelNode.property(astPropertyName.toUtf8());
                     if (context->isArrayProperty(propertyType, containingObject, name))
-                        syncArrayProperty(modelProperty, QList<AST::UiObjectMember*>() << member, context, differenceHandler);
+                        syncArrayProperty(modelProperty, {member}, context, differenceHandler);
                     else
                         syncNodeProperty(modelProperty, binding, context, TypeName(), differenceHandler);
                     modelPropertyNames.remove(astPropertyName.toUtf8());
@@ -1129,7 +1129,7 @@ void TextToModelMerger::syncNode(ModelNode &modelNode,
             if (property->type == AST::UiPublicMember::Signal)
                 continue; // QML designer doesn't support this yet.
 
-            if (property->name.isEmpty() || property->memberType.isEmpty())
+            if (property->name.isEmpty() || !property->isValid())
                 continue; // better safe than sorry.
 
             const QStringRef astName = property->name;
@@ -1144,7 +1144,7 @@ void TextToModelMerger::syncNode(ModelNode &modelNode,
                 astValue = astValue.left(astValue.length() - 1);
             astValue = astValue.trimmed();
 
-            const TypeName &astType = property->memberType.toUtf8();
+            const TypeName &astType = property->memberTypeName().toUtf8();
             AbstractProperty modelProperty = modelNode.property(astName.toUtf8());
 
             if (property->binding) {
@@ -1711,12 +1711,12 @@ void ModelValidator::idsDiffer(ModelNode &modelNode, const QString &qmlId)
 
 void ModelAmender::modelMissesImport(const QmlDesigner::Import &import)
 {
-    m_merger->view()->model()->changeImports(QList<QmlDesigner::Import>() << import, QList<QmlDesigner::Import>());
+    m_merger->view()->model()->changeImports({import}, {});
 }
 
 void ModelAmender::importAbsentInQMl(const QmlDesigner::Import &import)
 {
-    m_merger->view()->model()->changeImports(QList<Import>(), QList<Import>() << import);
+    m_merger->view()->model()->changeImports({}, {import});
 }
 
 void ModelAmender::bindingExpressionsDiffer(BindingProperty &modelProperty,
@@ -1938,7 +1938,7 @@ void TextToModelMerger::setupComponent(const ModelNode &node)
     if (!node.isValid())
         return;
 
-    QString componentText = m_rewriterView->extractText(QList<ModelNode>() << node).value(node);
+    QString componentText = m_rewriterView->extractText({node}).value(node);
 
     if (componentText.isEmpty())
         return;
@@ -2030,13 +2030,13 @@ void TextToModelMerger::populateQrcMapping(const QString &filePath)
     const QString fileName = fileForFullQrcPath(filePath);
     path.remove(QLatin1String("qrc:"));
     QMap<QString,QStringList> map = ModelManagerInterface::instance()->filesInQrcPath(path);
-    const QStringList qrcFilePathes = map.value(fileName, QStringList());
-    if (!qrcFilePathes.isEmpty()) {
-        QString fileSystemPath =  qrcFilePathes.first();
+    const QStringList qrcFilePaths = map.value(fileName, {});
+    if (!qrcFilePaths.isEmpty()) {
+        QString fileSystemPath =  qrcFilePaths.first();
         fileSystemPath.remove(fileName);
         if (path.isEmpty())
             path.prepend(QLatin1String("/"));
-        m_qrcMapping.insert(qMakePair(path, fileSystemPath));
+        m_qrcMapping.insert({path, fileSystemPath});
     }
 }
 
@@ -2066,7 +2066,7 @@ void TextToModelMerger::setupCustomParserNode(const ModelNode &node)
     if (!node.isValid())
         return;
 
-    QString modelText = m_rewriterView->extractText(QList<ModelNode>() << node).value(node);
+    QString modelText = m_rewriterView->extractText({node}).value(node);
 
     if (modelText.isEmpty())
         return;

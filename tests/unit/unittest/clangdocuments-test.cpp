@@ -59,7 +59,7 @@ MATCHER_P3(IsDocument, filePath, projectPartId, documentRevision,
            )
 {
     return arg.filePath() == filePath
-        && arg.projectPartId() == projectPartId
+        && arg.projectPart().id() == projectPartId
         && arg.documentRevision() == documentRevision;
 }
 
@@ -133,7 +133,7 @@ TEST_F(Documents, CreateWithUnsavedContentSetsDependenciesDirty)
 
     documents.create({fileContainerWithUnsavedContent});
 
-    ASSERT_TRUE(dependentDocument.isNeedingReparse());
+    ASSERT_TRUE(dependentDocument.isDirty());
 }
 
 TEST_F(Documents, AddAndTestCreatedTranslationUnit)
@@ -212,7 +212,7 @@ TEST_F(DocumentsSlowTest, UpdateUnsavedFileAndCheckForReparse)
 
     documents.update({headerContainerWithUnsavedContent});
 
-    ASSERT_TRUE(documents.document(filePath, projectPartId).isNeedingReparse());
+    ASSERT_TRUE(documents.document(filePath, projectPartId).isDirty());
 }
 
 TEST_F(DocumentsSlowTest, RemoveFileAndCheckForReparse)
@@ -226,7 +226,7 @@ TEST_F(DocumentsSlowTest, RemoveFileAndCheckForReparse)
 
     documents.remove({headerContainerWithUnsavedContent});
 
-    ASSERT_TRUE(documents.document(filePath, projectPartId).isNeedingReparse());
+    ASSERT_TRUE(documents.document(filePath, projectPartId).isDirty());
 }
 
 TEST_F(Documents, DontGetNewerFileContainerIfRevisionIsTheSame)
@@ -400,6 +400,29 @@ TEST_F(Documents, IsNotVisibleEditorAfterBeingVisible)
     documents.setVisibleInEditors({headerPath});
 
     ASSERT_FALSE(document.isVisibleInEditor());
+}
+
+TEST_F(Documents, SetDocumentsDirtyIfProjectPartChanged)
+{
+    ClangBackEnd::FileContainer fileContainer(filePath, projectPartId, Utf8StringVector(), 74u);
+    const auto createdDocuments = documents.create({fileContainer});
+    ClangBackEnd::FileContainer fileContainerWithOtherProject(filePath, otherProjectPartId, Utf8StringVector(), 74u);
+    documents.create({fileContainerWithOtherProject});
+    projects.createOrUpdate({ProjectPartContainer(projectPartId)});
+
+    const auto notDirtyBefore = documents.setDocumentsDirtyIfProjectPartChanged();
+
+    ASSERT_THAT(notDirtyBefore, createdDocuments);
+}
+
+TEST_F(Documents, SetDocumentsDirtyIfProjectPartChangedReturnsEmpty)
+{
+    ClangBackEnd::FileContainer fileContainer(filePath, projectPartId, Utf8StringVector(), 74u);
+    documents.create({fileContainer});
+
+    const auto notDirtyBefore = documents.setDocumentsDirtyIfProjectPartChanged();
+
+    ASSERT_TRUE(notDirtyBefore.empty());
 }
 
 void Documents::SetUp()

@@ -25,33 +25,30 @@
 
 #pragma once
 
+#include <debugger/debuggerruncontrol.h>
+
 #include "androidrunconfiguration.h"
 
-namespace Debugger { class DebuggerRunControl; }
-
-namespace ProjectExplorer { class RunControl; }
-
 namespace Android {
-class AndroidRunConfiguration;
-
 namespace Internal {
+
 class AndroidRunner;
 
-class AndroidDebugSupport : public QObject
+class AndroidDebugSupport : public Debugger::DebuggerRunTool
 {
     Q_OBJECT
 
 public:
-    AndroidDebugSupport(AndroidRunConfiguration *runConfig,
-        Debugger::DebuggerRunControl *runControl);
+    AndroidDebugSupport(ProjectExplorer::RunControl *runControl,
+                        const Debugger::DebuggerStartParameters &sp,
+                        QString *errorMessage);
 
-    static ProjectExplorer::RunControl *createDebugRunControl(AndroidRunConfiguration *runConfig,
+    static ProjectExplorer::RunControl *createDebugRunControl(ProjectExplorer::RunConfiguration *runConfig,
                                                               QString *errorMessage);
 
 private:
     void handleRemoteProcessStarted(Utils::Port gdbServerPort, Utils::Port qmlPort);
 
-    Debugger::DebuggerRunControl *m_runControl;
     AndroidRunner * const m_runner;
 };
 

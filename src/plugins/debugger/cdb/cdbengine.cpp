@@ -35,7 +35,7 @@
 #include <debugger/debuggerinternalconstants.h>
 #include <debugger/debuggerprotocol.h>
 #include <debugger/debuggermainwindow.h>
-#include <debugger/debuggerstartparameters.h>
+#include <debugger/debuggerruncontrol.h>
 #include <debugger/debuggertooltipmanager.h>
 #include <debugger/disassembleragent.h>
 #include <debugger/disassemblerlines.h>
@@ -200,11 +200,11 @@ static inline bool validMode(DebuggerStartMode sm)
 }
 
 // Accessed by RunControlFactory
-DebuggerEngine *createCdbEngine(const DebuggerRunParameters &rp, QStringList *errors)
+DebuggerEngine *createCdbEngine(QStringList *errors, DebuggerStartMode sm)
 {
     if (HostOsInfo::isWindowsHost()) {
-        if (validMode(rp.startMode))
-            return new CdbEngine(rp);
+        if (validMode(sm))
+            return new CdbEngine();
         errors->append(CdbEngine::tr("Internal error: Invalid start parameters passed for the CDB engine."));
     } else {
         errors->append(CdbEngine::tr("Unsupported CDB host system."));
@@ -222,8 +222,7 @@ void addCdbOptionPages(QList<Core::IOptionsPage *> *opts)
 
 #define QT_CREATOR_CDB_EXT "qtcreatorcdbext"
 
-CdbEngine::CdbEngine(const DebuggerRunParameters &sp) :
-    DebuggerEngine(sp),
+CdbEngine::CdbEngine() :
     m_tokenPrefix("<token>"),
     m_effectiveStartMode(NoStartMode),
     m_accessible(false),
@@ -456,6 +455,9 @@ void CdbEngine::setupEngine()
     if (debug)
         qDebug(">setupEngine");
 
+    if (!prepareCommand())
+        return;
+
     init();
     if (!m_logTime.elapsed())
         m_logTime.start();
@@ -521,7 +523,11 @@ bool CdbEngine::launchCDB(const DebuggerRunParameters &sp, QString *errorMessage
                            "If you have updated Qt Creator via Maintenance Tool you may "
                            "need to rerun the Tool and select \"Add or remove components\""
                            "and then select the\n"
-                           "Qt > Tools > Qt Creator > Qt Creator CDB Debugger Support component.").
+                           "Qt > Tools > Qt Creator > Qt Creator CDB Debugger Support component.\n"
+                           "If you build Qt Creator from sources and want to use a cdb executable"
+                           "with another bitness than your Qt Creator build,\n"
+                           "you will need to build a separate cdbextension with the "
+                           "same bitness as the cdb you want to use.").
                 arg(QDir::toNativeSeparators(extensionFi.absoluteFilePath()));
         return false;
     }
@@ -832,7 +838,7 @@ void CdbEngine::shutdownEngine()
 
 void CdbEngine::abortDebugger()
 {
-    if (targetState() == DebuggerFinished) {
+    if (isDying()) {
         // We already tried. Try harder.
         showMessage("ABORTING DEBUGGER. SECOND TIME.");
         m_process.kill();
@@ -972,7 +978,7 @@ void CdbEngine::doInterruptInferior(SpecialStopMode sm)
     showMessage(QString("Interrupting process %1...").arg(inferiorPid()), LogMisc);
 
     QTC_ASSERT(!m_signalOperation, notifyInferiorStopFailed();  return;);
-    m_signalOperation = runParameters().device->signalOperation();
+    m_signalOperation = runTool()->device()->signalOperation();
     m_specialStopMode = sm;
     QTC_ASSERT(m_signalOperation, notifyInferiorStopFailed(); return;);
     connect(m_signalOperation.data(), &DeviceProcessSignalOperation::finished,
@@ -1828,7 +1834,7 @@ unsigned CdbEngine::examineStopReason(const GdbMi &stopReason,
 {
     // Report stop reason (GDBMI)
     unsigned rc  = 0;
-    if (targetState() == DebuggerFinished)
+    if (isDying())
         rc |= StopShutdownInProgress;
     if (debug)
         qDebug("%s", qPrintable(stopReason.toString(true, 4)));
@@ -2968,6 +2974,18 @@ void CdbEngine::setupScripting(const DebuggerResponse &response)
                 [this](const DebuggerResponse &response) {
                     watchHandler()->addDumpers(response.data["result"]["dumpers"]);
     }});
+
+    const QString path = stringSetting(ExtraDumperFile);
+    if (!path.isEmpty() && QFileInfo(path).isReadable()) {
+        DebuggerCommand cmd("addDumperModule", ScriptCommand);
+        cmd.arg("path", path);
+        runCommand(cmd);
+    }
+    const QString commands = stringSetting(ExtraDumperCommands);
+    if (!commands.isEmpty()) {
+        for (auto command : commands.split('\n', QString::SkipEmptyParts))
+            runCommand({command, ScriptCommand});
+    }
 }
 
 void CdbEngine::mergeStartParametersSourcePathMap()

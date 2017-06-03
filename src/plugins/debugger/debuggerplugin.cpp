@@ -66,7 +66,6 @@
 
 #include "analyzer/analyzerconstants.h"
 #include "analyzer/analyzermanager.h"
-#include "analyzer/analyzerruncontrol.h"
 #include "analyzer/analyzerstartparameters.h"
 
 #include <coreplugin/actionmanager/actioncontainer.h>
@@ -493,7 +492,7 @@ QAction *addCheckableAction(QMenu *menu, const QString &display, bool on, bool c
 class DummyEngine : public DebuggerEngine
 {
 public:
-    DummyEngine() : DebuggerEngine(DebuggerRunParameters()) {}
+    DummyEngine() {}
     ~DummyEngine() override {}
 
     void setupEngine() override {}
@@ -613,15 +612,6 @@ static Kit *findUniversalCdbKit()
 
 static DebuggerPluginPrivate *dd = 0;
 
-//class DockWidgetEventFilter : public QObject
-//{
-//public:
-//    DockWidgetEventFilter() {}
-
-//private:
-//    bool eventFilter(QObject *obj, QEvent *event) override;
-//};
-
 /*!
     \class Debugger::Internal::DebuggerCore
 
@@ -648,7 +638,7 @@ public:
     void extensionsInitialized();
     void aboutToShutdown();
 
-    void connectEngine(DebuggerEngine *engine);
+    void connectEngine(DebuggerRunTool *runTool);
     void disconnectEngine() { connectEngine(0); }
     DebuggerEngine *dummyEngine();
 
@@ -662,7 +652,7 @@ public:
         m_threadBox->blockSignals(state);
     }
 
-    DebuggerRunControl *attachToRunningProcess(Kit *kit, DeviceProcessItem process, bool contAfterAttach);
+    RunControl *attachToRunningProcess(Kit *kit, DeviceProcessItem process, bool contAfterAttach);
 
     void writeSettings()
     {
@@ -672,8 +662,11 @@ public:
 
     void selectThread(int index)
     {
-        ThreadId id = m_currentEngine->threadsHandler()->threadAt(index);
-        m_currentEngine->selectThread(id);
+        QTC_ASSERT(m_currentRunTool, return);
+        DebuggerEngine *engine = m_currentRunTool->activeEngine();
+        QTC_ASSERT(engine, return);
+        ThreadId id = engine->threadsHandler()->threadAt(index);
+        engine->selectThread(id);
     }
 
     void breakpointSetMarginActionTriggered(bool isMessageOnly, const ContextData &data)
@@ -716,14 +709,14 @@ public:
     {
         showMessage(QLatin1String("ATTEMPT SYNC"), LogDebug);
         for (int i = 0, n = m_snapshotHandler->size(); i != n; ++i) {
-            if (DebuggerEngine *engine = m_snapshotHandler->at(i))
+            if (DebuggerEngine *engine = m_snapshotHandler->at(i)->engine())
                 engine->attemptBreakpointSynchronization();
         }
     }
 
-    void reloadSourceFiles() { if (m_currentEngine) m_currentEngine->reloadSourceFiles(); }
-    void reloadRegisters() { if (m_currentEngine) m_currentEngine->reloadRegisters(); }
-    void reloadModules() { if (m_currentEngine) m_currentEngine->reloadModules(); }
+    void reloadSourceFiles() { if (m_currentRunTool) m_currentRunTool->engine()->reloadSourceFiles(); }
+    void reloadRegisters() { if (m_currentRunTool) m_currentRunTool->engine()->reloadRegisters(); }
+    void reloadModules() { if (m_currentRunTool) m_currentRunTool->engine()->reloadModules(); }
 
     void editorOpened(IEditor *editor);
     void updateBreakMenuItem(IEditor *editor);
@@ -753,11 +746,11 @@ public:
     void enableReverseDebuggingTriggered(const QVariant &value);
     void showStatusMessage(const QString &msg, int timeout = -1);
 
-    void runControlStarted(DebuggerEngine *engine);
-    void runControlFinished(DebuggerEngine *engine);
+    void runControlStarted(DebuggerRunTool *runTool);
+    void runControlFinished(DebuggerRunTool *runTool);
     void remoteCommand(const QStringList &options);
 
-    void displayDebugger(DebuggerEngine *engine, bool updateEngine = true);
+    void displayDebugger(DebuggerRunTool *runTool, bool updateEngine = true);
 
     void dumpLog();
     void cleanupViews();
@@ -765,7 +758,7 @@ public:
 
     void fontSettingsChanged(const FontSettings &settings);
 
-    void updateState(DebuggerEngine *engine);
+    void updateState(DebuggerRunTool *runTool);
     void onCurrentProjectChanged(Project *project);
 
     void sessionLoaded();
@@ -928,9 +921,10 @@ public:
         currentEngine()->watchHandler()->watchVariable(exp);
     }
 
-    void handleExecExit()
+    void stopDebugger()
     {
-        currentEngine()->exitDebugger();
+        QTC_ASSERT(dd->m_currentRunTool, return);
+        dd->m_currentRunTool->runControl()->initiateStop();
     }
 
     void handleFrameDown()
@@ -974,10 +968,7 @@ public:
     QPointer<QWidget> m_modeWindow;
     QPointer<DebugMode> m_mode;
 
-    QHash<Id, ActionDescription> m_descriptions;
     ActionContainer *m_menu = 0;
-
-//    DockWidgetEventFilter m_resizeEventFilter;
 
     QHash<DebuggerLanguage, Core::Context> m_contextsForLanguage;
 
@@ -1062,7 +1053,8 @@ public:
 
     SnapshotHandler *m_snapshotHandler = 0;
     bool m_shuttingDown = false;
-    QPointer<DebuggerEngine> m_currentEngine;
+    QPointer<DebuggerEngine> m_previouslyActiveEngine;
+    QPointer<DebuggerRunTool> m_currentRunTool;
     DebuggerSettings *m_debuggerSettings = 0;
     QStringList m_arguments;
     DebuggerToolTipManager m_toolTipManager;
@@ -1412,7 +1404,7 @@ bool DebuggerPluginPrivate::initialize(const QStringList &arguments,
 
     act = m_exitAction = new QAction(tr("Stop Debugger"), this);
     act->setIcon(Icons::DEBUG_EXIT_SMALL.icon());
-    connect(act, &QAction::triggered, this, &DebuggerPluginPrivate::handleExecExit);
+    connect(act, &QAction::triggered, this, &DebuggerPluginPrivate::stopDebugger);
 
     act = m_interruptAction = new QAction(tr("Interrupt"), this);
     act->setIcon(visibleStartIcon(Id(Constants::INTERRUPT), false));
@@ -1914,12 +1906,12 @@ void DebuggerPluginPrivate::onCurrentProjectChanged(Project *project)
     }
     for (int i = 0, n = m_snapshotHandler->size(); i != n; ++i) {
         // Run controls might be deleted during exit.
-        if (DebuggerEngine *engine = m_snapshotHandler->at(i)) {
-            if (DebuggerRunControl *runControl = engine->runControl()) {
+        if (DebuggerRunTool *runTool = m_snapshotHandler->at(i)) {
+            if (RunControl *runControl = runTool->runControl()) {
                 RunConfiguration *rc = runControl->runConfiguration();
                 if (rc == activeRc) {
                     m_snapshotHandler->setCurrentIndex(i);
-                    updateState(engine);
+                    updateState(runTool);
                     return;
                 }
             }
@@ -2070,9 +2062,9 @@ void DebuggerPluginPrivate::attachToUnstartedApplicationDialog()
 
     connect(dlg, &QDialog::finished, dlg, &QObject::deleteLater);
     connect(dlg, &UnstartedAppWatcherDialog::processFound, this, [this, dlg] {
-        DebuggerRunControl *rc = attachToRunningProcess(dlg->currentKit(),
-                                                        dlg->currentProcess(),
-                                                        dlg->continueOnAttach());
+        RunControl *rc = attachToRunningProcess(dlg->currentKit(),
+                                                dlg->currentProcess(),
+                                                dlg->continueOnAttach());
         if (!rc)
             return;
 
@@ -2083,7 +2075,7 @@ void DebuggerPluginPrivate::attachToUnstartedApplicationDialog()
     dlg->show();
 }
 
-DebuggerRunControl *DebuggerPluginPrivate::attachToRunningProcess(Kit *kit,
+RunControl *DebuggerPluginPrivate::attachToRunningProcess(Kit *kit,
     DeviceProcessItem process, bool contAfterAttach)
 {
     QTC_ASSERT(kit, return 0);
@@ -2127,13 +2119,13 @@ void DebuggerPlugin::attachExternalApplication(RunControl *rc)
     rp.startMode = AttachExternal;
     rp.closeMode = DetachAtClose;
     rp.toolChainAbi = rc->abi();
-    Kit *kit = 0;
-    if (const RunConfiguration *runConfiguration = rc->runConfiguration())
-        if (const Target *target = runConfiguration->target())
-            kit = target->kit();
-    if (!kit)
-        kit = guessKitFromParameters(rp);
-    createAndScheduleRun(rp, kit);
+    if (RunConfiguration *runConfig = rc->runConfiguration()) {
+        auto runControl = new RunControl(runConfig, ProjectExplorer::Constants::DEBUG_RUN_MODE);
+        (void) new DebuggerRunTool(runControl, rp);
+        ProjectExplorerPlugin::startRunControl(runControl);
+    } else {
+        createAndScheduleRun(rp, guessKitFromParameters(rp));
+    }
 }
 
 void DebuggerPlugin::getEnginesState(QByteArray *json) const
@@ -2145,7 +2137,7 @@ void DebuggerPlugin::getEnginesState(QByteArray *json) const
     QVariantMap states;
 
     for (int i = 0; i < dd->m_snapshotHandler->size(); ++i) {
-        const DebuggerEngine *engine = dd->m_snapshotHandler->at(i);
+        const DebuggerEngine *engine = dd->m_snapshotHandler->at(i)->engine();
         states[QString::number(i)] = QVariantMap({
                    {"current", dd->m_snapshotHandler->currentIndex() == i},
                    {"pid", engine->inferiorPid()},
@@ -2226,8 +2218,8 @@ void DebuggerPluginPrivate::enableReverseDebuggingTriggered(const QVariant &valu
 
 void DebuggerPluginPrivate::runScheduled()
 {
-    for (int i = 0, n = m_scheduledStarts.size(); i != n; ++i)
-        createAndScheduleRun(m_scheduledStarts.at(i).first, m_scheduledStarts.at(i).second);
+    for (const QPair<DebuggerRunParameters, Kit *> pair : m_scheduledStarts)
+        createAndScheduleRun(pair.first, pair.second);
 }
 
 void DebuggerPluginPrivate::editorOpened(IEditor *editor)
@@ -2403,30 +2395,35 @@ void DebuggerPluginPrivate::requestMark(TextEditorWidget *widget, int lineNumber
 }
 
 // If updateEngine is set, the engine will update its threads/modules and so forth.
-void DebuggerPluginPrivate::displayDebugger(DebuggerEngine *engine, bool updateEngine)
+void DebuggerPluginPrivate::displayDebugger(DebuggerRunTool *runTool, bool updateEngine)
 {
+    QTC_ASSERT(runTool, return);
+    DebuggerEngine *engine = runTool ? runTool->engine() : dummyEngine();
     QTC_ASSERT(engine, return);
+
     disconnectEngine();
-    connectEngine(engine);
+    connectEngine(runTool);
     if (updateEngine)
         engine->updateAll();
     engine->updateViews();
 }
 
-void DebuggerPluginPrivate::connectEngine(DebuggerEngine *engine)
+void DebuggerPluginPrivate::connectEngine(DebuggerRunTool *runTool)
 {
-    if (!engine)
-        engine = dummyEngine();
-
-    if (m_currentEngine == engine)
-        return;
-
     if (m_shuttingDown)
         return;
 
-    if (m_currentEngine)
-        m_currentEngine->resetLocation();
-    m_currentEngine = engine;
+    m_currentRunTool = runTool;
+    DebuggerEngine *engine = currentEngine();
+    QTC_ASSERT(engine, return);
+
+    if (m_previouslyActiveEngine == engine)
+        return;
+
+    if (m_previouslyActiveEngine)
+        m_previouslyActiveEngine->resetLocation();
+
+    m_previouslyActiveEngine = engine;
 
     m_localsView->setModel(engine->watchModel());
     m_modulesView->setModel(engine->modulesModel());
@@ -2562,10 +2559,12 @@ void DebuggerPluginPrivate::setInitialState()
     m_threadLabel->setEnabled(false);
 }
 
-void DebuggerPluginPrivate::updateState(DebuggerEngine *engine)
+void DebuggerPluginPrivate::updateState(DebuggerRunTool *runTool)
 {
     if (m_shuttingDown)
         return;
+    QTC_ASSERT(runTool, return);
+    DebuggerEngine *engine = runTool->engine();
     QTC_ASSERT(engine, return);
     QTC_ASSERT(m_watchersView->model(), return);
     QTC_ASSERT(m_returnView->model(), return);
@@ -2659,7 +2658,7 @@ void DebuggerPluginPrivate::updateState(DebuggerEngine *engine)
     m_threadBox->setEnabled(state == InferiorStopOk || state == InferiorUnrunnable);
     m_threadLabel->setEnabled(m_threadBox->isEnabled());
 
-    const bool isCore = engine->runParameters().startMode == AttachCore;
+    const bool isCore = runTool->runParameters().startMode == AttachCore;
     const bool stopped = state == InferiorStopOk;
     const bool detachable = stopped && !isCore;
     m_detachAction->setEnabled(detachable);
@@ -2714,7 +2713,7 @@ void DebuggerPluginPrivate::updateDebugActions()
     if (m_shuttingDown)
         return;
     //if we're currently debugging the actions are controlled by engine
-    if (m_currentEngine && m_currentEngine->state() != DebuggerNotReady)
+    if (m_currentRunTool && m_currentRunTool->engine()->state() != DebuggerNotReady)
         return;
 
     QString whyNot;
@@ -2817,10 +2816,8 @@ void DebuggerPluginPrivate::coreShutdown()
 {
     m_shuttingDown = true;
     if (currentEngine()) {
-        if (currentEngine()->state() != Debugger::DebuggerNotReady) {
-            currentEngine()->setTargetState(Debugger::DebuggerFinished);
+        if (currentEngine()->state() != Debugger::DebuggerNotReady)
             currentEngine()->abortDebugger();
-        }
     }
 }
 
@@ -2943,25 +2940,27 @@ static QString formatStartParameters(DebuggerRunParameters &sp)
     return rc;
 }
 
-void DebuggerPluginPrivate::runControlStarted(DebuggerEngine *engine)
+void DebuggerPluginPrivate::runControlStarted(DebuggerRunTool *runTool)
 {
     activateDebugMode();
     const QString message = tr("Starting debugger \"%1\" for ABI \"%2\"...")
-            .arg(engine->objectName())
-            .arg(engine->runParameters().toolChainAbi.toString());
+            .arg(runTool->objectName())
+            .arg(runTool->runParameters().toolChainAbi.toString());
     showStatusMessage(message);
-    showMessage(formatStartParameters(engine->runParameters()), LogDebug);
+    showMessage(formatStartParameters(runTool->runParameters()), LogDebug);
     showMessage(m_debuggerSettings->dump(), LogDebug);
-    m_snapshotHandler->appendSnapshot(engine);
-    connectEngine(engine);
+    m_snapshotHandler->appendSnapshot(runTool);
+    connectEngine(runTool);
 }
 
-void DebuggerPluginPrivate::runControlFinished(DebuggerEngine *engine)
+void DebuggerPluginPrivate::runControlFinished(DebuggerRunTool *runTool)
 {
+    if (runTool && runTool->engine())
+        runTool->engine()->handleFinished();
     if (m_shuttingDown)
         return;
     showStatusMessage(tr("Debugger finished."));
-    m_snapshotHandler->removeSnapshot(engine);
+    m_snapshotHandler->removeSnapshot(runTool);
     if (m_snapshotHandler->size() == 0) {
         // Last engine quits.
         disconnectEngine();
@@ -3031,7 +3030,10 @@ void DebuggerPluginPrivate::extensionsInitialized()
 
 DebuggerEngine *currentEngine()
 {
-    return dd->m_currentEngine;
+    DebuggerEngine *engine = nullptr;
+    if (dd->m_currentRunTool)
+        engine = dd->m_currentRunTool->activeEngine();
+    return engine ? engine : dd->dummyEngine();
 }
 
 SavedAction *action(int code)
@@ -3139,9 +3141,9 @@ void DebuggerPluginPrivate::aboutToShutdown()
     m_mode = 0;
 }
 
-void updateState(DebuggerEngine *engine)
+void updateState(DebuggerRunTool *runTool)
 {
-    dd->updateState(engine);
+    dd->updateState(runTool);
 }
 
 void updateWatchersWindow(bool showWatch, bool showReturn)
@@ -3179,19 +3181,19 @@ void showMessage(const QString &msg, int channel, int timeout)
     dd->showMessage(msg, channel, timeout);
 }
 
-void runControlStarted(DebuggerEngine *engine)
+void runControlStarted(DebuggerRunTool *runTool)
 {
-    dd->runControlStarted(engine);
+    dd->runControlStarted(runTool);
 }
 
-void runControlFinished(DebuggerEngine *engine)
+void runControlFinished(DebuggerRunTool *runTool)
 {
-    dd->runControlFinished(engine);
+    dd->runControlFinished(runTool);
 }
 
-void displayDebugger(DebuggerEngine *engine, bool updateEngine)
+void displayDebugger(DebuggerRunTool *runTool, bool updateEngine)
 {
-    dd->displayDebugger(engine, updateEngine);
+    dd->displayDebugger(runTool, updateEngine);
 }
 
 void synchronizeBreakpoints()
@@ -3354,8 +3356,9 @@ void DebuggerPluginPrivate::updateUiForTarget(Target *target)
 
 void DebuggerPluginPrivate::updateActiveLanguages()
 {
-    QTC_ASSERT(dd->m_currentEngine, return);
-    const DebuggerLanguages languages = dd->m_currentEngine->runParameters().languages;
+    if (!dd->m_currentRunTool)
+        return;
+    const DebuggerLanguages languages = dd->m_currentRunTool->runParameters().languages;
 //    Id perspective = (languages & QmlLanguage) && !(languages & CppLanguage)
 //            ? QmlPerspectiveId : CppPerspectiveId;
 //    m_mainWindow->restorePerspective(perspective);
@@ -3368,19 +3371,6 @@ void DebuggerPluginPrivate::updateActiveLanguages()
     }
 }
 
-//bool DockWidgetEventFilter::eventFilter(QObject *obj, QEvent *event)
-//{
-//    switch (event->type()) {
-//    case QEvent::Resize:
-//    case QEvent::ZOrderChange:
-//        dd->updateDockWidgetSettings();
-//        break;
-//    default:
-//        break;
-//    }
-//    return QObject::eventFilter(obj, event);
-//}
-
 void DebuggerPluginPrivate::onModeChanged(Id mode)
 {
     // FIXME: This one gets always called, even if switching between modes
@@ -3392,20 +3382,6 @@ void DebuggerPluginPrivate::onModeChanged(Id mode)
             editor->widget()->setFocus();
 
         m_toolTipManager.debugModeEntered();
-
-//        static bool firstTime = true;
-//        if (firstTime) {
-
-//            // Dock widgets
-//            connect(m_mainWindow->dockWidget(DOCKWIDGET_MODULES)->toggleViewAction(), &QAction::toggled,
-//                    this, &DebuggerPluginPrivate::modulesDockToggled, Qt::QueuedConnection);
-//            connect(m_mainWindow->dockWidget(DOCKWIDGET_OUTPUT)->toggleViewAction(), &QAction::toggled,
-//                    this, &DebuggerPluginPrivate::registerDockToggled, Qt::QueuedConnection);
-//            connect(m_mainWindow->dockWidget(DOCKWIDGET_SOURCE_FILES)->toggleViewAction(), &QAction::toggled,
-//                    this, &DebuggerPluginPrivate::sourceFilesDockToggled, Qt::QueuedConnection);
-
-//            firstTime = false;
-//        }
         updateActiveLanguages();
     } else {
         m_toolTipManager.leavingDebugMode();
@@ -3418,14 +3394,6 @@ void saveModeToRestore()
 }
 
 } // namespace Internal
-
-bool ActionDescription::isRunnable(QString *reason) const
-{
-    if (m_customToolStarter) // Something special. Pretend we can always run it.
-        return true;
-
-    return ProjectExplorerPlugin::canRunStartupProject(m_runMode, reason);
-}
 
 static bool buildTypeAccepted(QFlags<ToolMode> toolMode, BuildConfiguration::BuildType buildType)
 {
@@ -3440,85 +3408,80 @@ static bool buildTypeAccepted(QFlags<ToolMode> toolMode, BuildConfiguration::Bui
     return false;
 }
 
-void ActionDescription::startTool() const
+RunConfiguration *startupRunConfiguration()
 {
-    TaskHub::clearTasks(Constants::ANALYZERTASK_ID);
-    Debugger::selectPerspective(m_perspectiveId);
+    if (Project *pro = SessionManager::startupProject()) {
+        if (const Target *target = pro->activeTarget())
+            return target->activeRunConfiguration();
+    }
+    return nullptr;
+}
 
-    if (m_toolPreparer && !m_toolPreparer())
-        return;
-
-    // ### not sure if we're supposed to check if the RunConFiguration isEnabled
-    Project *pro = SessionManager::startupProject();
-    RunConfiguration *rc = 0;
+static BuildConfiguration::BuildType startupBuildType()
+{
     BuildConfiguration::BuildType buildType = BuildConfiguration::Unknown;
-    if (pro) {
-        if (const Target *target = pro->activeTarget()) {
-            // Build configuration is 0 for QML projects.
-            if (const BuildConfiguration *buildConfig = target->activeBuildConfiguration())
-                buildType = buildConfig->buildType();
-            rc = target->activeRunConfiguration();
-        }
+    if (RunConfiguration *runConfig = startupRunConfiguration()) {
+        if (const BuildConfiguration *buildConfig = runConfig->target()->activeBuildConfiguration())
+            buildType = buildConfig->buildType();
     }
+    return buildType;
+}
 
-    // Custom start.
-    if (m_customToolStarter) {
-        if (rc) {
-            m_customToolStarter(rc);
-        } else {
-            QMessageBox *errorDialog = new QMessageBox(ICore::mainWindow());
-            errorDialog->setIcon(QMessageBox::Warning);
-            errorDialog->setWindowTitle(m_text);
-            errorDialog->setText(tr("Cannot start %1 without a project. Please open the project "
-                                    "and try again.").arg(m_text));
-            errorDialog->setStandardButtons(QMessageBox::Ok);
-            errorDialog->setDefaultButton(QMessageBox::Ok);
-            errorDialog->show();
-        }
-        return;
-    }
+void showCannotStartDialog(const QString &text)
+{
+    QMessageBox *errorDialog = new QMessageBox(ICore::mainWindow());
+    errorDialog->setIcon(QMessageBox::Warning);
+    errorDialog->setWindowTitle(text);
+    errorDialog->setText(DebuggerPlugin::tr("Cannot start %1 without a project. Please open the project "
+                                               "and try again.").arg(text));
+    errorDialog->setStandardButtons(QMessageBox::Ok);
+    errorDialog->setDefaultButton(QMessageBox::Ok);
+    errorDialog->show();
+}
 
+bool wantRunTool(ToolMode toolMode, const QString &toolName)
+{
     // Check the project for whether the build config is in the correct mode
     // if not, notify the user and urge him to use the correct mode.
-    if (!buildTypeAccepted(m_toolMode, buildType)) {
+    BuildConfiguration::BuildType buildType = startupBuildType();
+    if (!buildTypeAccepted(toolMode, buildType)) {
         QString currentMode;
         switch (buildType) {
             case BuildConfiguration::Debug:
-                currentMode = tr("Debug");
+                currentMode = DebuggerPlugin::tr("Debug");
                 break;
             case BuildConfiguration::Profile:
-                currentMode = tr("Profile");
+                currentMode = DebuggerPlugin::tr("Profile");
                 break;
             case BuildConfiguration::Release:
-                currentMode = tr("Release");
+                currentMode = DebuggerPlugin::tr("Release");
                 break;
             default:
                 QTC_CHECK(false);
         }
 
         QString toolModeString;
-        switch (m_toolMode) {
+        switch (toolMode) {
             case DebugMode:
-                toolModeString = tr("in Debug mode");
+                toolModeString = DebuggerPlugin::tr("in Debug mode");
                 break;
             case ProfileMode:
-                toolModeString = tr("in Profile mode");
+                toolModeString = DebuggerPlugin::tr("in Profile mode");
                 break;
             case ReleaseMode:
-                toolModeString = tr("in Release mode");
+                toolModeString = DebuggerPlugin::tr("in Release mode");
                 break;
             case SymbolsMode:
-                toolModeString = tr("with debug symbols (Debug or Profile mode)");
+                toolModeString = DebuggerPlugin::tr("with debug symbols (Debug or Profile mode)");
                 break;
             case OptimizedMode:
-                toolModeString = tr("on optimized code (Profile or Release mode)");
+                toolModeString = DebuggerPlugin::tr("on optimized code (Profile or Release mode)");
                 break;
             default:
                 QTC_CHECK(false);
         }
-        const QString toolName = m_text; // The action text is always the name of the tool
-        const QString title = tr("Run %1 in %2 Mode?").arg(toolName).arg(currentMode);
-        const QString message = tr("<html><head/><body><p>You are trying "
+        const QString title = DebuggerPlugin::tr("Run %1 in %2 Mode?").arg(toolName).arg(currentMode);
+        const QString message = DebuggerPlugin::tr("<html><head/><body><p>You are trying "
             "to run the tool \"%1\" on an application in %2 mode. "
             "The tool is designed to be used %3.</p><p>"
             "Run-time characteristics differ significantly between "
@@ -3533,34 +3496,10 @@ void ActionDescription::startTool() const
         if (Utils::CheckableMessageBox::doNotAskAgainQuestion(ICore::mainWindow(),
                 title, message, ICore::settings(), QLatin1String("AnalyzerCorrectModeWarning"))
                     != QDialogButtonBox::Yes)
-            return;
+            return false;
     }
 
-    ProjectExplorerPlugin::runStartupProject(m_runMode);
-}
-
-void registerAction(Id actionId, const ActionDescription &desc, QAction *startAction)
-{
-    auto action = new QAction(dd);
-    action->setText(desc.text());
-    action->setToolTip(desc.toolTip());
-    dd->m_descriptions.insert(actionId, desc);
-
-    Id menuGroup = desc.menuGroup();
-    if (menuGroup.isValid()) {
-        Command *command = ActionManager::registerAction(action, actionId);
-        dd->m_menu->addAction(command, menuGroup);
-    }
-
-    QObject::connect(action, &QAction::triggered, dd, [desc] { desc.startTool(); });
-
-    if (startAction) {
-        QObject::connect(startAction, &QAction::triggered, action, &QAction::triggered);
-
-        QObject::connect(startAction, &QAction::changed, action, [action, startAction] {
-            action->setEnabled(startAction->isEnabled());
-        });
-    }
+    return true;
 }
 
 void registerToolbar(const QByteArray &perspectiveId, const ToolbarDescription &desc)
@@ -3636,15 +3575,6 @@ void showPermanentStatusMessage(const QString &message)
     dd->m_mainWindow->showStatusMessage(message, -1);
 }
 
-AnalyzerRunControl *createAnalyzerRunControl(RunConfiguration *runConfiguration, Id runMode)
-{
-    foreach (const ActionDescription &action, dd->m_descriptions) {
-        if (action.runMode() == runMode)
-            return action.runControlCreator()(runConfiguration, runMode);
-    }
-    return 0;
-}
-
 namespace Internal {
 
 static bool s_testRun = false;
@@ -3716,17 +3646,19 @@ void DebuggerUnitTests::testStateMachine()
     DebuggerRunParameters rp;
     Target *t = SessionManager::startupProject()->activeTarget();
     QVERIFY(t);
-    Kit *kit = t->kit();
-    QVERIFY(kit);
     RunConfiguration *rc = t->activeRunConfiguration();
     QVERIFY(rc);
     rp.inferior = rc->runnable().as<StandardRunnable>();
     rp.testCase = TestNoBoundsOfCurrentFunction;
-    DebuggerRunControl *runControl = createAndScheduleRun(rp, kit);
 
-    connect(runControl, &RunControl::finished, this, [this] {
+    auto runControl = new RunControl(rc, ProjectExplorer::Constants::DEBUG_RUN_MODE);
+    auto runTool = new DebuggerRunTool(runControl, rp);
+
+    connect(runTool, &DebuggerRunTool::stopped, this, [this] {
         QTestEventLoop::instance().exitLoop();
     });
+
+    ProjectExplorerPlugin::startRunControl(runControl);
 
     QTestEventLoop::instance().enterLoop(5);
 }

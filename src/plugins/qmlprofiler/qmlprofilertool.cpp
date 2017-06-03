@@ -40,7 +40,6 @@
 
 #include <debugger/debuggericons.h>
 #include <debugger/analyzer/analyzermanager.h>
-#include <debugger/analyzer/analyzerruncontrol.h>
 #include <debugger/analyzer/analyzerstartparameters.h>
 
 #include <utils/fancymainwindow.h>
@@ -54,6 +53,7 @@
 #include <projectexplorer/session.h>
 #include <projectexplorer/kitinformation.h>
 #include <projectexplorer/runnables.h>
+#include <projectexplorer/taskhub.h>
 #include <texteditor/texteditor.h>
 
 #include <coreplugin/coreconstants.h>
@@ -127,9 +127,12 @@ public:
     bool m_toolBusy = false;
 };
 
+static QmlProfilerTool *s_instance;
+
 QmlProfilerTool::QmlProfilerTool(QObject *parent)
     : QObject(parent), d(new QmlProfilerToolPrivate)
 {
+    s_instance = this;
     setObjectName(QLatin1String("QmlProfilerTool"));
 
     d->m_profilerState = new QmlProfilerStateManager(this);
@@ -163,7 +166,7 @@ QmlProfilerTool::QmlProfilerTool(QObject *parent)
     Command *command = 0;
 
     ActionContainer *menu = ActionManager::actionContainer(M_DEBUG_ANALYZER);
-    ActionContainer *options = ActionManager::createMenu(M_DEBUG_ANALYZER_QML_OPTIONS);
+    ActionContainer *options = ActionManager::createMenu("Analyzer.Menu.QMLOptions");
     options->menu()->setTitle(tr("QML Profiler Options"));
     menu->addMenu(options, G_ANALYZER_OPTIONS);
     options->menu()->setEnabled(true);
@@ -244,8 +247,8 @@ QmlProfilerTool::QmlProfilerTool(QObject *parent)
     // is available, then we can populate the file finder
     d->m_profilerModelManager->populateFileFinder();
 
-    auto runControlCreator = [this](RunConfiguration *runConfiguration, Core::Id) {
-        return createRunControl(runConfiguration);
+    auto runWorkerCreator = [this](RunControl *runControl) {
+       return createRunner(runControl, Debugger::startupRunConfiguration());
     };
 
     QString description = tr("The QML Profiler can be used to find performance "
@@ -254,25 +257,27 @@ QmlProfilerTool::QmlProfilerTool(QObject *parent)
     d->m_startAction = Debugger::createStartAction();
     d->m_stopAction = Debugger::createStopAction();
 
-    ActionDescription desc;
-    desc.setText(tr("QML Profiler"));
-    desc.setToolTip(description);
-    desc.setPerspectiveId(Constants::QmlProfilerPerspectiveId);
-    desc.setRunControlCreator(runControlCreator);
-    desc.setToolPreparer([this] { return prepareTool(); });
-    desc.setRunMode(ProjectExplorer::Constants::QML_PROFILER_RUN_MODE);
-    desc.setMenuGroup(Debugger::Constants::G_ANALYZER_TOOLS);
-    Debugger::registerAction(Constants::QmlProfilerLocalActionId, desc, d->m_startAction);
+    RunControl::registerWorkerCreator(ProjectExplorer::Constants::QML_PROFILER_RUN_MODE, runWorkerCreator);
+    act = new QAction(tr("QML Profiler"), this);
+    act->setToolTip(description);
+    menu->addAction(ActionManager::registerAction(act, "QmlProfiler.Local"),
+                    Debugger::Constants::G_ANALYZER_TOOLS);
+    QObject::connect(act, &QAction::triggered, this, [this] {
+         if (!prepareTool())
+             return;
+        Debugger::selectPerspective(Constants::QmlProfilerPerspectiveId);
+        ProjectExplorerPlugin::runStartupProject(ProjectExplorer::Constants::QML_PROFILER_RUN_MODE);
+    });
+    QObject::connect(d->m_startAction, &QAction::triggered, act, &QAction::triggered);
+    QObject::connect(d->m_startAction, &QAction::changed, act, [act, this] {
+        act->setEnabled(d->m_startAction->isEnabled());
+    });
 
-    desc.setText(tr("QML Profiler (External)"));
-    desc.setToolTip(description);
-    desc.setPerspectiveId(Constants::QmlProfilerPerspectiveId);
-    desc.setRunControlCreator(runControlCreator);
-    desc.setCustomToolStarter([this](RunConfiguration *rc) { startRemoteTool(rc); });
-    desc.setToolPreparer([this] { return prepareTool(); });
-    desc.setRunMode(ProjectExplorer::Constants::QML_PROFILER_RUN_MODE);
-    desc.setMenuGroup(Debugger::Constants::G_ANALYZER_REMOTE_TOOLS);
-    Debugger::registerAction(Constants::QmlProfilerRemoteActionId, desc);
+    act = new QAction(tr("QML Profiler (External)"), this);
+    act->setToolTip(description);
+    menu->addAction(ActionManager::registerAction(act, "QmlProfiler.Remote"),
+                    Debugger::Constants::G_ANALYZER_REMOTE_TOOLS);
+    QObject::connect(act, &QAction::triggered, this, &QmlProfilerTool::startRemoteTool);
 
     Utils::ToolbarDescription toolbar;
     toolbar.addAction(d->m_startAction);
@@ -302,6 +307,11 @@ QmlProfilerTool::~QmlProfilerTool()
     delete d;
 }
 
+QmlProfilerTool *QmlProfilerTool::instance()
+{
+    return s_instance;
+}
+
 void QmlProfilerTool::updateRunActions()
 {
     if (d->m_toolBusy) {
@@ -318,7 +328,7 @@ void QmlProfilerTool::updateRunActions()
     }
 }
 
-AnalyzerRunControl *QmlProfilerTool::createRunControl(RunConfiguration *runConfiguration)
+RunWorker *QmlProfilerTool::createRunner(RunControl *runControl, RunConfiguration *runConfiguration)
 {
     d->m_toolBusy = true;
     if (runConfiguration) {
@@ -333,27 +343,27 @@ AnalyzerRunControl *QmlProfilerTool::createRunControl(RunConfiguration *runConfi
         }
     }
 
-    auto runControl = new QmlProfilerRunControl(runConfiguration, this);
+    auto runWorker = new QmlProfilerRunner(runControl);
     connect(runControl, &RunControl::finished, this, [this, runControl] {
         d->m_toolBusy = false;
         updateRunActions();
-        disconnect(d->m_stopAction, &QAction::triggered, runControl, &QmlProfilerRunControl::stop);
+        disconnect(d->m_stopAction, &QAction::triggered, runControl, &RunControl::stop);
     });
 
-    connect(d->m_stopAction, &QAction::triggered, runControl, &QmlProfilerRunControl::stop);
+    connect(d->m_stopAction, &QAction::triggered, runControl, &RunControl::stop);
 
     updateRunActions();
-    return runControl;
+    return runWorker;
 }
 
-void QmlProfilerTool::finalizeRunControl(QmlProfilerRunControl *runControl)
+void QmlProfilerTool::finalizeRunControl(QmlProfilerRunner *runWorker)
 {
-    runControl->registerProfilerStateManager(d->m_profilerState);
+    runWorker->registerProfilerStateManager(d->m_profilerState);
     QmlProfilerClientManager *clientManager = d->m_profilerConnections;
 
-    QTC_ASSERT(runControl->connection().is<AnalyzerConnection>(), return);
+    QTC_ASSERT(runWorker->connection().is<AnalyzerConnection>(), return);
     // FIXME: Check that there's something sensible in sp.connParams
-    auto connection = runControl->connection().as<AnalyzerConnection>();
+    auto connection = runWorker->connection().as<AnalyzerConnection>();
     if (!connection.analyzerSocket.isEmpty()) {
         clientManager->setLocalSocket(connection.analyzerSocket);
         // We open the server and the application connects to it, so let's do that right away.
@@ -366,6 +376,7 @@ void QmlProfilerTool::finalizeRunControl(QmlProfilerRunControl *runControl)
     // Initialize m_projectFinder
     //
 
+    auto runControl = runWorker->runControl();
     RunConfiguration *runConfiguration = runControl->runConfiguration();
     if (runConfiguration) {
         d->m_profilerModelManager->populateFileFinder(runConfiguration);
@@ -373,14 +384,14 @@ void QmlProfilerTool::finalizeRunControl(QmlProfilerRunControl *runControl)
 
     if (connection.analyzerSocket.isEmpty()) {
         QString host = connection.analyzerHost;
-        connect(runControl, &QmlProfilerRunControl::processRunning,
+        connect(runWorker, &QmlProfilerRunner::processRunning,
                 clientManager, [clientManager, host](Utils::Port port) {
             clientManager->setTcpConnection(host, port);
             clientManager->connectToTcpServer();
         });
     }
     connect(clientManager, &QmlProfilerClientManager::connectionFailed,
-            runControl, [this, clientManager, runControl]() {
+            runWorker, [this, clientManager, runWorker]() {
         QMessageBox *infoBox = new QMessageBox(ICore::mainWindow());
         infoBox->setIcon(QMessageBox::Critical);
         infoBox->setWindowTitle(tr("Qt Creator"));
@@ -390,7 +401,7 @@ void QmlProfilerTool::finalizeRunControl(QmlProfilerRunControl *runControl)
         infoBox->setDefaultButton(QMessageBox::Retry);
         infoBox->setModal(true);
 
-        connect(infoBox, &QDialog::finished, runControl, [clientManager, runControl](int result) {
+        connect(infoBox, &QDialog::finished, runWorker, [clientManager, runWorker](int result) {
             switch (result) {
             case QMessageBox::Retry:
                 clientManager->retryConnect();
@@ -401,7 +412,7 @@ void QmlProfilerTool::finalizeRunControl(QmlProfilerRunControl *runControl)
             case QMessageBox::Cancel:
                 // The actual error message has already been logged.
                 logState(tr("Failed to connect."));
-                runControl->cancelProcess();
+                runWorker->cancelProcess();
                 break;
             }
         });
@@ -557,8 +568,11 @@ bool QmlProfilerTool::prepareTool()
     return true;
 }
 
-void QmlProfilerTool::startRemoteTool(ProjectExplorer::RunConfiguration *rc)
+void QmlProfilerTool::startRemoteTool()
 {
+    if (!prepareTool())
+        return;
+
     Id kitId;
     quint16 port;
     Kit *kit = 0;
@@ -595,10 +609,14 @@ void QmlProfilerTool::startRemoteTool(ProjectExplorer::RunConfiguration *rc)
     }
     connection.analyzerPort = Utils::Port(port);
 
-    auto runControl = qobject_cast<QmlProfilerRunControl *>(createRunControl(rc));
+    Debugger::selectPerspective(Constants::QmlProfilerPerspectiveId);
+
+    RunConfiguration *rc = Debugger::startupRunConfiguration();
+    auto runControl = new RunControl(rc, ProjectExplorer::Constants::QML_PROFILER_RUN_MODE);
+    runControl->createWorker(ProjectExplorer::Constants::QML_PROFILER_RUN_MODE);
     runControl->setConnection(connection);
 
-    ProjectExplorerPlugin::startRunControl(runControl, ProjectExplorer::Constants::QML_PROFILER_RUN_MODE);
+    ProjectExplorerPlugin::startRunControl(runControl);
 }
 
 QString QmlProfilerTool::summary(const QVector<int> &typeIds) const

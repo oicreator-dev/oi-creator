@@ -548,3 +548,9 @@ struct NonConstReferenceMemberInitialization
 
     int &foo;
 };
+
+template<class T> class Coo;
+template<class T> class Coo<T*>;
+
+namespace N { void goo(); }
+using N::goo;

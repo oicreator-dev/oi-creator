@@ -26,23 +26,19 @@
 #include "iosanalyzesupport.h"
 #include "iosrunner.h"
 
-#include <debugger/analyzer/analyzerruncontrol.h>
-
-using namespace Debugger;
 using namespace ProjectExplorer;
 
 namespace Ios {
 namespace Internal {
 
-IosAnalyzeSupport::IosAnalyzeSupport(IosRunConfiguration *runConfig,
-    AnalyzerRunControl *runControl, bool cppDebug, bool qmlDebug)
-    : QObject(runControl), m_runControl(runControl),
-      m_runner(new IosRunner(this, runConfig, cppDebug, qmlDebug ? QmlDebug::QmlProfilerServices :
+IosAnalyzeSupport::IosAnalyzeSupport(RunControl *runControl, bool cppDebug, bool qmlDebug)
+    : RunWorker(runControl),
+      m_runner(new IosRunner(this, runControl, cppDebug, qmlDebug ? QmlDebug::QmlProfilerServices :
                                                                    QmlDebug::NoQmlDebugServices))
 {
-    connect(m_runControl, &AnalyzerRunControl::starting,
+    connect(runControl, &RunControl::starting,
             m_runner, &IosRunner::start);
-    connect(m_runControl, &RunControl::finished,
+    connect(runControl, &RunControl::finished,
             m_runner, &IosRunner::stop);
     connect(&m_outputParser, &QmlDebug::QmlOutputParser::waitingForConnectionOnPort,
             this, &IosAnalyzeSupport::qmlServerReady);
@@ -60,13 +56,9 @@ IosAnalyzeSupport::IosAnalyzeSupport(IosRunConfiguration *runConfig,
         this, &IosAnalyzeSupport::handleRemoteOutput);
 }
 
-IosAnalyzeSupport::~IosAnalyzeSupport()
-{
-}
-
 void IosAnalyzeSupport::qmlServerReady()
 {
-    m_runControl->notifyRemoteSetupDone(m_qmlPort);
+    runControl()->notifyRemoteSetupDone(m_qmlPort);
 }
 
 void IosAnalyzeSupport::handleServerPorts(Utils::Port gdbServerPort, Utils::Port qmlPort)
@@ -83,29 +75,23 @@ void IosAnalyzeSupport::handleGotInferiorPid(qint64 pid, Utils::Port qmlPort)
 
 void IosAnalyzeSupport::handleRemoteProcessFinished(bool cleanEnd)
 {
-    if (m_runControl) {
-        if (!cleanEnd)
-            m_runControl->appendMessage(tr("Run ended with error."), Utils::ErrorMessageFormat);
-        else
-            m_runControl->appendMessage(tr("Run ended."), Utils::NormalMessageFormat);
-        m_runControl->notifyRemoteFinished();
-    }
+    if (!cleanEnd)
+        appendMessage(tr("Run ended with error."), Utils::ErrorMessageFormat);
+    else
+        appendMessage(tr("Run ended."), Utils::NormalMessageFormat);
+    runControl()->notifyRemoteFinished();
 }
 
 void IosAnalyzeSupport::handleRemoteOutput(const QString &output)
 {
-    if (m_runControl) {
-        m_runControl->appendMessage(output, Utils::StdOutFormat);
-        m_outputParser.processOutput(output);
-    }
+    appendMessage(output, Utils::StdOutFormat);
+    m_outputParser.processOutput(output);
 }
 
 void IosAnalyzeSupport::handleRemoteErrorOutput(const QString &output)
 {
-    if (m_runControl) {
-        m_runControl->appendMessage(output, Utils::StdErrFormat);
-        m_outputParser.processOutput(output);
-    }
+    appendMessage(output, Utils::StdErrFormat);
+    m_outputParser.processOutput(output);
 }
 
 } // namespace Internal

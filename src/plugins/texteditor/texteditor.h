@@ -359,8 +359,10 @@ public:
     void duplicateSelection();
     void duplicateSelectionAndComment();
     void deleteLine();
+    void deleteEndOfLine();
     void deleteEndOfWord();
     void deleteEndOfWordCamelCase();
+    void deleteStartOfLine();
     void deleteStartOfWord();
     void deleteStartOfWordCamelCase();
     void unfoldAll();
@@ -651,7 +653,7 @@ public:
     void addHoverHandler(BaseHoverHandler *handler);
     void setCompletionAssistProvider(CompletionAssistProvider *provider);
 
-    void setCommentStyle(Utils::CommentDefinition::Style style);
+    void setCommentDefinition(Utils::CommentDefinition definition);
     void setDuplicatedSupported(bool on);
     void setMarksVisible(bool on);
     void setParenthesesMatchingEnabled(bool on);

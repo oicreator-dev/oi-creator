@@ -281,7 +281,7 @@ TEST_F(HighlightingMarks, InbuiltTypeConversionFunction)
 {
     const auto infos = translationUnit.highlightingMarksInRange(sourceRange(69, 20));
 
-    ASSERT_THAT(infos[1], IsHighlightingMark(69u, 14u, 3u, HighlightingType::Keyword));
+    ASSERT_THAT(infos[1], IsHighlightingMark(69u, 14u, 3u, HighlightingType::PrimitiveType));
 }
 
 TEST_F(HighlightingMarks, TypeReference)
@@ -757,7 +757,7 @@ TEST_F(HighlightingMarks, ArgumentInMacroExpansionIsKeyword)
 {
     const auto infos = translationUnit.highlightingMarksInRange(sourceRange(302, 36));
 
-    ASSERT_THAT(infos[2], HasOnlyType(HighlightingType::Keyword));
+    ASSERT_THAT(infos[2], HasOnlyType(HighlightingType::PrimitiveType));
 }
 
 TEST_F(HighlightingMarks, DISABLED_FirstArgumentInMacroExpansionIsLocalVariable)
@@ -1103,6 +1103,20 @@ TEST_F(HighlightingMarks, DISABLED_ArgumentToUserDefinedIndexOperator)
     const auto infos = translationUnit.highlightingMarksInRange(sourceRange(434, 19));
 
     ASSERT_THAT(infos[2], HasOnlyType(HighlightingType::LocalVariable));
+}
+
+TEST_F(HighlightingMarks, ClassTemplateParticalSpecialization)
+{
+    const auto infos = translationUnit.highlightingMarksInRange(sourceRange(553, 33));
+
+    ASSERT_THAT(infos[6], HasOnlyType(HighlightingType::Type));
+}
+
+TEST_F(HighlightingMarks, UsingFunction)
+{
+    const auto infos = translationUnit.highlightingMarksInRange(sourceRange(556, 27));
+
+    ASSERT_THAT(infos[3], HasOnlyType(HighlightingType::Function));
 }
 
 Data *HighlightingMarks::d;

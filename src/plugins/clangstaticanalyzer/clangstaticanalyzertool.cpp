@@ -31,10 +31,15 @@
 #include "clangstaticanalyzerdiagnosticview.h"
 #include "clangstaticanalyzerruncontrol.h"
 
-#include <debugger/analyzer/analyzermanager.h>
+#include <coreplugin/actionmanager/actioncontainer.h>
+#include <coreplugin/actionmanager/actionmanager.h>
 #include <coreplugin/coreconstants.h>
 #include <coreplugin/icore.h>
+
 #include <cpptools/cppmodelmanager.h>
+
+#include <debugger/analyzer/analyzermanager.h>
+
 #include <projectexplorer/buildconfiguration.h>
 #include <projectexplorer/projectexplorer.h>
 #include <projectexplorer/session.h>
@@ -52,6 +57,7 @@
 #include <QSortFilterProxyModel>
 #include <QToolButton>
 
+using namespace Core;
 using namespace Debugger;
 using namespace ProjectExplorer;
 using namespace Utils;
@@ -74,16 +80,12 @@ private:
     QWidget *createConfigurationWidget() override { return 0; }
 };
 
-ClangStaticAnalyzerTool::ClangStaticAnalyzerTool(QObject *parent)
-    : QObject(parent)
-    , m_diagnosticModel(0)
-    , m_diagnosticFilterModel(0)
-    , m_diagnosticView(0)
-    , m_goBack(0)
-    , m_goNext(0)
-    , m_running(false)
+static ClangStaticAnalyzerTool *s_instance;
+
+ClangStaticAnalyzerTool::ClangStaticAnalyzerTool()
 {
-    setObjectName(QLatin1String("ClangStaticAnalyzerTool"));
+    setObjectName("ClangStaticAnalyzerTool");
+    s_instance = this;
 
     //
     // Diagnostic View
@@ -134,6 +136,7 @@ ClangStaticAnalyzerTool::ClangStaticAnalyzerTool(QObject *parent)
     connect(action, &QAction::triggered, m_diagnosticView, &DetailedErrorView::goNext);
     m_goNext = action;
 
+    ActionContainer *menu = ActionManager::actionContainer(Debugger::Constants::M_DEBUG_ANALYZER);
     const QString toolTip = tr("Clang Static Analyzer uses the analyzer from the Clang project "
                                "to find bugs.");
 
@@ -142,17 +145,16 @@ ClangStaticAnalyzerTool::ClangStaticAnalyzerTool(QObject *parent)
         {{ClangStaticAnalyzerDockId, m_diagnosticView, {}, Perspective::SplitVertical}}
     ));
 
-    ActionDescription desc;
-    desc.setText(tr("Clang Static Analyzer"));
-    desc.setToolTip(toolTip);
-    desc.setRunMode(Constants::CLANGSTATICANALYZER_RUN_MODE);
-    desc.setPerspectiveId(ClangStaticAnalyzerPerspectiveId);
-    desc.setCustomToolStarter([this](RunConfiguration *runConfiguration) {
-        Q_UNUSED(runConfiguration);
-        startTool();
+    //Debugger::registerAction(Constants::CLANGSTATICANALYZER_RUN_MODE, {});
+    action = new QAction(tr("Clang Static Analyzer"), this);
+    action->setToolTip(toolTip);
+    menu->addAction(ActionManager::registerAction(action, "ClangStaticAnalyzer.Action"),
+                    Debugger::Constants::G_ANALYZER_TOOLS);
+    QObject::connect(action, &QAction::triggered, this, &ClangStaticAnalyzerTool::startTool);
+    QObject::connect(m_startAction, &QAction::triggered, action, &QAction::triggered);
+    QObject::connect(m_startAction, &QAction::changed, action, [action, this] {
+        action->setEnabled(m_startAction->isEnabled());
     });
-    desc.setMenuGroup(Debugger::Constants::G_ANALYZER_TOOLS);
-    Debugger::registerAction(ClangStaticAnalyzerActionId, desc, m_startAction);
 
     ToolbarDescription toolbar;
     toolbar.addAction(m_startAction);
@@ -167,37 +169,14 @@ ClangStaticAnalyzerTool::ClangStaticAnalyzerTool(QObject *parent)
             this, &ClangStaticAnalyzerTool::updateRunActions);
 }
 
-RunControl *ClangStaticAnalyzerTool::createRunControl(RunConfiguration *runConfiguration,
-                                                      Core::Id runMode)
+ClangStaticAnalyzerTool::~ClangStaticAnalyzerTool()
 {
-    QTC_ASSERT(runConfiguration, return 0);
-    QTC_ASSERT(m_projectInfoBeforeBuild.isValid(), return 0);
 
-    // Some projects provides CompilerCallData once a build is finished,
-    // so pass on the updated Project Info unless no configuration change
-    // (defines/includes/files) happened.
-    Project *project = runConfiguration->target()->project();
-    QTC_ASSERT(project, return 0);
-    const CppTools::ProjectInfo projectInfoAfterBuild
-            = CppTools::CppModelManager::instance()->projectInfo(project);
-    QTC_ASSERT(!projectInfoAfterBuild.configurationOrFilesChanged(m_projectInfoBeforeBuild),
-               return 0);
-    m_projectInfoBeforeBuild = CppTools::ProjectInfo();
+}
 
-    auto runControl = new ClangStaticAnalyzerRunControl(runConfiguration, runMode,
-                                                        projectInfoAfterBuild);
-    connect(runControl, &ClangStaticAnalyzerRunControl::starting,
-            this, &ClangStaticAnalyzerTool::onEngineIsStarting);
-    connect(runControl, &ClangStaticAnalyzerRunControl::newDiagnosticsAvailable,
-            this, &ClangStaticAnalyzerTool::onNewDiagnosticsAvailable);
-    connect(runControl, &ClangStaticAnalyzerRunControl::finished,
-            this, &ClangStaticAnalyzerTool::onEngineFinished);
-
-    connect(m_stopAction, &QAction::triggered, runControl, [runControl] { runControl->stop(); });
-
-    m_toolBusy = true;
-    updateRunActions();
-    return runControl;
+ClangStaticAnalyzerTool *ClangStaticAnalyzerTool::instance()
+{
+    return s_instance;
 }
 
 static bool dontStartAfterHintForDebugMode(Project *project)
@@ -240,6 +219,7 @@ void ClangStaticAnalyzerTool::startTool()
     if (dontStartAfterHintForDebugMode(project))
         return;
 
+    Debugger::selectPerspective(ClangStaticAnalyzerPerspectiveId);
     m_diagnosticModel->clear();
     setBusyCursor(true);
     m_diagnosticFilterModel->setProject(project);
@@ -247,6 +227,9 @@ void ClangStaticAnalyzerTool::startTool()
     QTC_ASSERT(m_projectInfoBeforeBuild.isValid(), emit finished(false); return);
     m_running = true;
     handleStateUpdate();
+
+    m_toolBusy = true;
+    updateRunActions();
 
     Target * const target = project->activeTarget();
     QTC_ASSERT(target, return);
@@ -292,12 +275,12 @@ void ClangStaticAnalyzerTool::onNewDiagnosticsAvailable(const QList<Diagnostic> 
     m_diagnosticModel->addDiagnostics(diagnostics);
 }
 
-void ClangStaticAnalyzerTool::onEngineFinished()
+void ClangStaticAnalyzerTool::onEngineFinished(bool success)
 {
     resetCursorAndProjectInfoBeforeBuild();
     m_running = false;
     handleStateUpdate();
-    emit finished(static_cast<ClangStaticAnalyzerRunControl *>(sender())->success());
+    emit finished(success);
     m_toolBusy = false;
     updateRunActions();
 }

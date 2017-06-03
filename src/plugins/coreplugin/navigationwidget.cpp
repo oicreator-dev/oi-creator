@@ -167,7 +167,6 @@ struct NavigationWidgetPrivate
     QStandardItemModel *m_factoryModel;
 
     bool m_shown;
-    bool m_suppressed;
     int m_width;
     QAction *m_toggleSideBarAction; // does not take ownership
     Side m_side;
@@ -184,7 +183,6 @@ struct NavigationWidgetPrivate
 NavigationWidgetPrivate::NavigationWidgetPrivate(QAction *toggleSideBarAction, Side side) :
     m_factoryModel(new QStandardItemModel),
     m_shown(true),
-    m_suppressed(false),
     m_width(0),
     m_toggleSideBarAction(toggleSideBarAction),
     m_side(side)
@@ -509,7 +507,7 @@ void NavigationWidget::setShown(bool b)
     d->m_shown = b;
     NavigationWidgetPlaceHolder *current = NavigationWidgetPlaceHolder::current(d->m_side);
     if (current) {
-        bool visible = d->m_shown && !d->m_suppressed && haveData;
+        bool visible = d->m_shown && haveData;
         current->setVisible(visible);
         d->m_toggleSideBarAction->setChecked(visible);
     } else {
@@ -521,20 +519,6 @@ void NavigationWidget::setShown(bool b)
 bool NavigationWidget::isShown() const
 {
     return d->m_shown;
-}
-
-bool NavigationWidget::isSuppressed() const
-{
-    return d->m_suppressed;
-}
-
-void NavigationWidget::setSuppressed(bool b)
-{
-    if (d->m_suppressed == b)
-        return;
-    d->m_suppressed = b;
-    if (NavigationWidgetPlaceHolder::current(d->m_side))
-        NavigationWidgetPlaceHolder::current(d->m_side)->setVisible(d->m_shown && !d->m_suppressed);
 }
 
 int NavigationWidget::factoryIndex(Id id)

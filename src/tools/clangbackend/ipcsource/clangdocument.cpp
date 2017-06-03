@@ -70,11 +70,14 @@ public:
     QSet<Utf8String> dependedFilePaths;
 
     uint documentRevision = 0;
-    TimePoint needsToBeReparsedChangeTimePoint;
+
+    TimePoint isDirtyChangeTimePoint;
+    bool isDirty = false;
+
     bool hasParseOrReparseFailed = false;
-    bool needsToBeReparsed = false;
     bool isUsedByCurrentEditor = false;
     bool isVisibleInEditor = false;
+    bool increaseResponsiveness = false;
 };
 
 DocumentData::DocumentData(const Utf8String &filePath,
@@ -87,7 +90,7 @@ DocumentData::DocumentData(const Utf8String &filePath,
       projectPart(projectPart),
       lastProjectPartChangeTimePoint(Clock::now()),
       translationUnits(filePath),
-      needsToBeReparsedChangeTimePoint(lastProjectPartChangeTimePoint)
+      isDirtyChangeTimePoint(lastProjectPartChangeTimePoint)
 {
     dependedFilePaths.insert(filePath);
     translationUnits.createAndAppend();
@@ -107,7 +110,7 @@ Document::Document(const Utf8String &filePath,
                                        fileArguments,
                                        documents))
 {
-    if (fileExistsCheck == CheckIfFileExists)
+    if (fileExistsCheck == FileExistsCheck::Check)
         checkIfFileExists();
 }
 
@@ -163,17 +166,10 @@ FileContainer Document::fileContainer() const
     checkIfNull();
 
     return FileContainer(d->filePath,
-                         d->projectPart.projectPartId(),
+                         d->projectPart.id(),
                          Utf8String(),
                          false,
                          d->documentRevision);
-}
-
-Utf8String Document::projectPartId() const
-{
-    checkIfNull();
-
-    return d->projectPart.projectPartId();
 }
 
 const ProjectPart &Document::projectPart() const
@@ -211,6 +207,23 @@ void Document::setDocumentRevision(uint revision)
     d->documentRevision = revision;
 }
 
+bool Document::isResponsivenessIncreased() const
+{
+    return d->translationUnits.size() > 1;
+}
+
+bool Document::isResponsivenessIncreaseNeeded() const
+{
+    checkIfNull();
+
+    return d->increaseResponsiveness;
+}
+
+void Document::setResponsivenessIncreaseNeeded(bool responsivenessIncreaseNeeded)
+{
+    d->increaseResponsiveness = responsivenessIncreaseNeeded;
+}
+
 bool Document::isUsedByCurrentEditor() const
 {
     checkIfNull();
@@ -239,24 +252,28 @@ void Document::setIsVisibleInEditor(bool isVisibleInEditor)
     d->isVisibleInEditor = isVisibleInEditor;
 }
 
-TimePoint Document::isNeededReparseChangeTimePoint() const
+bool Document::isDirty() const
 {
     checkIfNull();
 
-    return d->needsToBeReparsedChangeTimePoint;
+    return d->isDirty;
 }
 
-bool Document::isNeedingReparse() const
+TimePoint Document::isDirtyTimeChangePoint() const
 {
     checkIfNull();
 
-    return d->needsToBeReparsed;
+    return d->isDirtyChangeTimePoint;
 }
 
-void Document::setDirtyIfProjectPartIsOutdated()
+bool Document::setDirtyIfProjectPartIsOutdated()
 {
-    if (isProjectPartOutdated())
+    if (isProjectPartOutdated()) {
         setDirty();
+        return true;
+    }
+
+    return false;
 }
 
 void Document::setDirtyIfDependencyIsMet(const Utf8String &filePath)
@@ -269,12 +286,12 @@ TranslationUnitUpdateInput Document::createUpdateInput() const
 {
     TranslationUnitUpdateInput updateInput;
     updateInput.parseNeeded = isProjectPartOutdated();
-    updateInput.reparseNeeded = isNeedingReparse();
-    updateInput.needsToBeReparsedChangeTimePoint = d->needsToBeReparsedChangeTimePoint;
+    updateInput.reparseNeeded = d->isDirty;
+    updateInput.needsToBeReparsedChangeTimePoint = d->isDirtyChangeTimePoint;
     updateInput.filePath = filePath();
     updateInput.fileArguments = fileArguments();
     updateInput.unsavedFiles = d->documents.unsavedFiles();
-    updateInput.projectId = projectPart().projectPartId();
+    updateInput.projectId = projectPart().id();
     updateInput.projectArguments = projectPart().arguments();
 
     return updateInput;
@@ -302,7 +319,7 @@ void Document::incorporateUpdaterResult(const TranslationUnitUpdateResult &resul
 {
     d->hasParseOrReparseFailed = result.hasParseOrReparseFailed;
     if (d->hasParseOrReparseFailed) {
-        d->needsToBeReparsed = false;
+        d->isDirty = false;
         return;
     }
 
@@ -319,8 +336,8 @@ void Document::incorporateUpdaterResult(const TranslationUnitUpdateResult &resul
     d->documents.addWatchedFiles(d->dependedFilePaths);
 
     if (result.hasReparsed()
-            && result.needsToBeReparsedChangeTimePoint == d->needsToBeReparsedChangeTimePoint) {
-        d->needsToBeReparsed = false;
+            && result.needsToBeReparsedChangeTimePoint == d->isDirtyChangeTimePoint) {
+        d->isDirty = false;
     }
 }
 
@@ -371,8 +388,8 @@ void Document::setDependedFilePaths(const QSet<Utf8String> &filePaths)
 
 void Document::setDirty()
 {
-    d->needsToBeReparsedChangeTimePoint = Clock::now();
-    d->needsToBeReparsed = true;
+    d->isDirtyChangeTimePoint = Clock::now();
+    d->isDirty = true;
 }
 
 void Document::checkIfNull() const
@@ -402,14 +419,15 @@ bool Document::isMainFileAndExistsOrIsOtherFile(const Utf8String &filePath) cons
 
 bool operator==(const Document &first, const Document &second)
 {
-    return first.filePath() == second.filePath() && first.projectPartId() == second.projectPartId();
+    return first.filePath() == second.filePath()
+        && first.projectPart().id() == second.projectPart().id();
 }
 
 void PrintTo(const Document &document, ::std::ostream *os)
 {
     *os << "Document("
         << document.filePath().constData() << ", "
-        << document.projectPartId().constData() << ", "
+        << document.projectPart().id().constData() << ", "
         << document.documentRevision() << ")";
 }
 

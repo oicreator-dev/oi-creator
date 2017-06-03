@@ -212,15 +212,8 @@ NavigationWidget *MainWindow::navigationWidget(Side side) const
 
 void MainWindow::setSidebarVisible(bool visible, Side side)
 {
-    if (NavigationWidgetPlaceHolder::current(side)) {
-        NavigationWidget *navWidget = navigationWidget(side);
-        if (navWidget->isSuppressed() && visible) {
-            navWidget->setShown(true);
-            navWidget->setSuppressed(false);
-        } else {
-            navWidget->setShown(visible);
-        }
-    }
+    if (NavigationWidgetPlaceHolder::current(side))
+        navigationWidget(side)->setShown(visible);
 }
 
 void MainWindow::setOverrideColor(const QColor &color)
@@ -923,7 +916,7 @@ void MainWindow::updateFocusWidget(QWidget *old, QWidget *now)
         return;
 
     QList<IContext *> newContext;
-    if (QWidget *p = qApp->focusWidget()) {
+    if (QWidget *p = QApplication::focusWidget()) {
         IContext *context = nullptr;
         while (p) {
             context = m_contextWidgets.value(p);
@@ -934,7 +927,7 @@ void MainWindow::updateFocusWidget(QWidget *old, QWidget *now)
     }
 
     // ignore toplevels that define no context, like popups without parent
-    if (!newContext.isEmpty() || qApp->focusWidget() == focusWidget())
+    if (!newContext.isEmpty() || QApplication::focusWidget() == focusWidget())
         updateContextObject(newContext);
 }
 

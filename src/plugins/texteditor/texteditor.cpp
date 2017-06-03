@@ -3280,7 +3280,7 @@ QString TextEditorWidgetPrivate::copyBlockSelection()
                     selection += QString(-startOffset, QLatin1Char(' '));
                 if (endOffset < 0)
                     --endPos;
-                selection += text.mid(startPos, endPos - startPos);
+                selection += text.midRef(startPos, endPos - startPos);
                 if (endOffset < 0)
                     selection += QString(ts.m_tabSize + endOffset, QLatin1Char(' '));
                 else if (endOffset > 0)
@@ -3488,7 +3488,7 @@ void TextEditorWidgetPrivate::disableBlockSelection(BlockSelectionUpdateKind kin
 void TextEditorWidgetPrivate::resetCursorFlashTimer()
 {
     m_cursorVisible = true;
-    const int flashTime = qApp->cursorFlashTime();
+    const int flashTime = QApplication::cursorFlashTime();
     if (flashTime > 0) {
         m_cursorFlashTimer.stop();
         m_cursorFlashTimer.start(flashTime / 2, q);
@@ -4187,10 +4187,10 @@ void TextEditorWidget::paintEvent(QPaintEvent *e)
                         if (right.endsWith(QLatin1Char(';'))) {
                             right.chop(1);
                             right = right.trimmed();
-                            replacement.append(right.right(right.endsWith(QLatin1Char('/')) ? 2 : 1));
+                            replacement.append(right.rightRef(right.endsWith('/') ? 2 : 1));
                             replacement.append(QLatin1Char(';'));
                         } else {
-                            replacement.append(right.right(right.endsWith(QLatin1Char('/')) ? 2 : 1));
+                            replacement.append(right.rightRef(right.endsWith('/') ? 2 : 1));
                         }
                     }
                 }
@@ -6264,6 +6264,13 @@ void TextEditorWidget::deleteLine()
     textCursor().removeSelectedText();
 }
 
+void TextEditorWidget::deleteEndOfLine()
+{
+    moveCursor(QTextCursor::EndOfLine, QTextCursor::KeepAnchor);
+    textCursor().removeSelectedText();
+    setTextCursor(textCursor());
+}
+
 void TextEditorWidget::deleteEndOfWord()
 {
     moveCursor(QTextCursor::EndOfWord, QTextCursor::KeepAnchor);
@@ -6277,6 +6284,13 @@ void TextEditorWidget::deleteEndOfWordCamelCase()
     d->camelCaseRight(c, QTextCursor::KeepAnchor);
     c.removeSelectedText();
     setTextCursor(c);
+}
+
+void TextEditorWidget::deleteStartOfLine()
+{
+    moveCursor(QTextCursor::StartOfLine, QTextCursor::KeepAnchor);
+    textCursor().removeSelectedText();
+    setTextCursor(textCursor());
 }
 
 void TextEditorWidget::deleteStartOfWord()
@@ -7798,7 +7812,6 @@ public:
         q(parent),
         m_widgetCreator([]() { return new TextEditorWidget; }),
         m_editorCreator([]() { return new BaseTextEditor; }),
-        m_commentStyle(CommentDefinition::NoStyle),
         m_completionAssistProvider(0),
         m_useGenericHighlighter(false),
         m_duplicatedSupported(true),
@@ -7823,7 +7836,7 @@ public:
     TextEditorFactory::AutoCompleterCreator m_autoCompleterCreator;
     TextEditorFactory::IndenterCreator m_indenterCreator;
     TextEditorFactory::SyntaxHighLighterCreator m_syntaxHighlighterCreator;
-    CommentDefinition::Style m_commentStyle;
+    CommentDefinition m_commentDefinition;
     QList<BaseHoverHandler *> m_hoverHandlers; // owned
     CompletionAssistProvider * m_completionAssistProvider; // owned
     bool m_useGenericHighlighter;
@@ -7883,12 +7896,12 @@ void TextEditorFactory::setAutoCompleterCreator(const AutoCompleterCreator &crea
 
 void TextEditorFactory::setEditorActionHandlers(Id contextId, uint optionalActions)
 {
-    new TextEditorActionHandler(this, contextId, optionalActions);
+    new TextEditorActionHandler(this, id(), contextId, optionalActions);
 }
 
 void TextEditorFactory::setEditorActionHandlers(uint optionalActions)
 {
-    new TextEditorActionHandler(this, id(), optionalActions);
+    new TextEditorActionHandler(this, id(), id(), optionalActions);
 }
 
 void TextEditorFactory::addHoverHandler(BaseHoverHandler *handler)
@@ -7901,9 +7914,9 @@ void TextEditorFactory::setCompletionAssistProvider(CompletionAssistProvider *pr
     d->m_completionAssistProvider = provider;
 }
 
-void TextEditorFactory::setCommentStyle(CommentDefinition::Style style)
+void TextEditorFactory::setCommentDefinition(CommentDefinition definition)
 {
-    d->m_commentStyle = style;
+    d->m_commentDefinition = definition;
 }
 
 void TextEditorFactory::setDuplicatedSupported(bool on)
@@ -7963,7 +7976,7 @@ BaseTextEditor *TextEditorFactoryPrivate::createEditorHelper(const TextDocumentP
     widget->d->m_hoverHandlers = m_hoverHandlers;
 
     widget->d->m_codeAssistant.configure(widget);
-    widget->d->m_commentDefinition.setStyle(m_commentStyle);
+    widget->d->m_commentDefinition = m_commentDefinition;
 
     QObject::connect(widget, &TextEditorWidget::activateEditor,
                      [editor]() { EditorManager::activateEditor(editor); });

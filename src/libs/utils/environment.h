@@ -32,6 +32,8 @@
 #include <QMap>
 #include <QStringList>
 
+#include <functional>
+
 QT_FORWARD_DECLARE_CLASS(QProcessEnvironment)
 
 namespace Utils {
@@ -99,9 +101,10 @@ public:
     Environment::const_iterator constEnd() const;
     Environment::const_iterator constFind(const QString &name) const;
 
+    using PathFilter = std::function<bool(const QString &)>;
     FileName searchInPath(const QString &executable,
                           const QStringList &additionalDirs = QStringList(),
-                          bool (*func)(const QString &name) = nullptr) const;
+                          const PathFilter &func = PathFilter()) const;
 
     QStringList path() const;
     QStringList appendExeExtensions(const QString &executable) const;
@@ -115,7 +118,8 @@ public:
     bool operator==(const Environment &other) const;
 
 private:
-    FileName searchInDirectory(const QStringList &execs, QString directory) const;
+    FileName searchInDirectory(const QStringList &execs, QString directory,
+                               QSet<QString> &alreadyChecked) const;
     QMap<QString, QString> m_values;
     OsType m_osType;
 };

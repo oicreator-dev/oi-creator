@@ -63,13 +63,14 @@ public:
 private:
     void identifierKind(const Cursor &cursor, Recursion recursion);
     void referencedTypeKind(const Cursor &cursor);
+    void overloadedDeclRefKind(const Cursor &cursor);
     void variableKind(const Cursor &cursor);
     void fieldKind(const Cursor &cursor);
     bool isVirtualMethodDeclarationOrDefinition(const Cursor &cursor) const;
     void functionKind(const Cursor &cursor, Recursion recursion);
     void memberReferenceKind(const Cursor &cursor);
     HighlightingType punctuationKind(const Cursor &cursor);
-    void collectKinds(CXToken *cxToken, const Cursor &cursor);
+    void collectKinds(CXTranslationUnit cxTranslationUnit, CXToken *cxToken, const Cursor &cursor);
     bool isRealDynamicCall(const Cursor &cursor) const;
     void addExtraTypeIfFirstPass(HighlightingType type, Recursion recursion);
     bool isOutputArgument() const;

@@ -23,40 +23,40 @@
 **
 ****************************************************************************/
 
-#pragma once
+import QtQml 2.2
+import QtQuick 2.4
 
-#include <cplusplus/LookupContext.h>
-#include <cplusplus/Symbol.h>
-#include <cplusplus/TypeOfExpression.h>
+Rectangle {
+    width: 200; height: 200
 
-QT_FORWARD_DECLARE_CLASS(QTextCursor)
+    ListModel {
+        id: fruitModel
+        ListElement {
+            name: "Apple"
+            cost: 2.45
+        }
+        ListElement {
+            name: "Orange"
+            cost: 3.25
+        }
+        ListElement {
+            name: "Banana"
+            cost: 1.95
+        }
+    }
 
-namespace CppEditor {
-namespace Internal {
+    Component {
+        id: fruitDelegate
+        Row {
+            spacing: 10
+            Text { text: name }
+            Text { text: '$' + cost }
+        }
+    }
 
-class CanonicalSymbol
-{
-public:
-    CanonicalSymbol(const CPlusPlus::Document::Ptr &document,
-                    const CPlusPlus::Snapshot &snapshot);
-
-    const CPlusPlus::LookupContext &context() const;
-
-    CPlusPlus::Scope *getScopeAndExpression(const QTextCursor &cursor, QString *code);
-
-    CPlusPlus::Symbol *operator()(const QTextCursor &cursor);
-    CPlusPlus::Symbol *operator()(CPlusPlus::Scope *scope, const QString &code);
-
-public:
-    static CPlusPlus::Symbol *canonicalSymbol(CPlusPlus::Scope *scope,
-                                              const QString &code,
-                                              CPlusPlus::TypeOfExpression &typeOfExpression);
-
-private:
-    CPlusPlus::Document::Ptr m_document;
-    CPlusPlus::Snapshot m_snapshot;
-    CPlusPlus::TypeOfExpression m_typeOfExpression;
-};
-
-} // namespace Internal
-} // namespace CppEditor
+    ListView {
+        anchors.fill: parent
+        model: fruitModel
+        delegate: fruitDelegate
+    }
+}

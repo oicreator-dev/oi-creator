@@ -26,7 +26,6 @@
 #include "qttesttreeitem.h"
 #include "qttestconfiguration.h"
 #include "qttestparser.h"
-#include "../autotest_utils.h"
 
 #include <projectexplorer/session.h>
 #include <utils/qtcassert.h>
@@ -244,13 +243,13 @@ bool QtTestTreeItem::modify(const TestParseResult *result)
 
     switch (type()) {
     case TestCase:
-        return modifyTestCaseContent(result->name, result->line, result->column);
+        return modifyTestCaseContent(result);
     case TestFunctionOrSet:
     case TestDataFunction:
     case TestSpecialFunction:
         return modifyTestFunctionContent(result);
     case TestDataTag:
-        return modifyDataTagContent(result->name, result->fileName, result->line, result->column);
+        return modifyDataTagContent(result);
     default:
         return false;
     }

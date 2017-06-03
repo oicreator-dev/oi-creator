@@ -23,33 +23,18 @@
 **
 ****************************************************************************/
 
-#pragma once
+import QtQuick 2.8
 
-#include <cpptools/cppmodelmanager.h>
-#include <cpptools/projectpart.h>
-
-#include <QString>
-
-namespace Autotest {
-namespace Internal {
-
-class TestUtils
-{
-public:
-    static QString getCMakeDisplayNameIfNecessary(const QString &filePath, const QString &proFile)
-    {
-        static const QString CMAKE_LISTS("CMakeLists.txt");
-        if (!proFile.endsWith(CMAKE_LISTS))
-            return QString();
-
-        const QList<CppTools::ProjectPart::Ptr> &projectParts
-                = CppTools::CppModelManager::instance()->projectPart(filePath);
-        if (projectParts.size())
-            return projectParts.first()->displayName;
-
-        return QString();
+Rectangle {
+    VisualItemModel {
+        id: itemModel
+        Rectangle { height: 30; width: 80; color: "red" }
+        Rectangle { height: 30; width: 80; color: "green" }
+        Rectangle { height: 30; width: 80; color: "blue" }
     }
-};
 
-} // namespace Internal
-} // namespace Autotest
+    ListView {
+        anchors.fill: parent
+        model: itemModel
+    }
+}

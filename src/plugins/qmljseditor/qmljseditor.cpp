@@ -42,6 +42,7 @@
 #include <qmljs/qmljsmodelmanagerinterface.h>
 #include <qmljs/qmljsutils.h>
 
+#include <qmljstools/qmljsindenter.h>
 #include <qmljstools/qmljstoolsconstants.h>
 #include <projectexplorer/projectexplorerconstants.h>
 
@@ -1030,7 +1031,7 @@ bool QmlJSEditor::isDesignModePreferred() const
 QmlJSEditorFactory::QmlJSEditorFactory()
 {
     setId(Constants::C_QMLJSEDITOR_ID);
-    setDisplayName(qApp->translate("OpenWith::Editors", Constants::C_QMLJSEDITOR_DISPLAY_NAME));
+    setDisplayName(QCoreApplication::translate("OpenWith::Editors", Constants::C_QMLJSEDITOR_DISPLAY_NAME));
 
     addMimeType(QmlJSTools::Constants::QML_MIMETYPE);
     addMimeType(QmlJSTools::Constants::QMLPROJECT_MIMETYPE);
@@ -1043,7 +1044,7 @@ QmlJSEditorFactory::QmlJSEditorFactory()
     setEditorWidgetCreator([]() { return new QmlJSEditorWidget; });
     setEditorCreator([]() { return new QmlJSEditor; });
     setAutoCompleterCreator([]() { return new AutoCompleter; });
-    setCommentStyle(Utils::CommentDefinition::CppStyle);
+    setCommentDefinition(Utils::CommentDefinition::CppStyle);
     setParenthesesMatchingEnabled(true);
     setMarksVisible(true);
     setCodeFoldingSupported(true);
@@ -1054,7 +1055,14 @@ QmlJSEditorFactory::QmlJSEditorFactory()
     setEditorActionHandlers(TextEditorActionHandler::Format
         | TextEditorActionHandler::UnCommentSelection
         | TextEditorActionHandler::UnCollapseAll
-        | TextEditorActionHandler::FollowSymbolUnderCursor);
+                            | TextEditorActionHandler::FollowSymbolUnderCursor);
+}
+
+void QmlJSEditorFactory::decorateEditor(TextEditorWidget *editor)
+{
+    editor->textDocument()->setSyntaxHighlighter(new QmlJSHighlighter);
+    editor->textDocument()->setIndenter(new Indenter);
+    editor->setAutoCompleter(new AutoCompleter);
 }
 
 } // namespace Internal

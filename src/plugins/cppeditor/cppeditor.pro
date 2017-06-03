@@ -3,7 +3,6 @@ include(../../qtcreatorplugin.pri)
 
 HEADERS += \
     cppautocompleter.h \
-    cppcanonicalsymbol.h \
     cppcodemodelinspectordialog.h \
     cppdocumentationcommenthelper.h \
     cppeditor.h \
@@ -27,7 +26,6 @@ HEADERS += \
     cppquickfix.h \
     cppquickfixassistant.h \
     cppquickfixes.h \
-    cppsnippetprovider.h \
     cpptypehierarchy.h \
     cppuseselectionsupdater.h \
     cppvirtualfunctionassistprovider.h \
@@ -36,7 +34,6 @@ HEADERS += \
 
 SOURCES += \
     cppautocompleter.cpp \
-    cppcanonicalsymbol.cpp \
     cppcodemodelinspectordialog.cpp \
     cppdocumentationcommenthelper.cpp \
     cppeditor.cpp \
@@ -57,7 +54,6 @@ SOURCES += \
     cppquickfix.cpp \
     cppquickfixassistant.cpp \
     cppquickfixes.cpp \
-    cppsnippetprovider.cpp \
     cpptypehierarchy.cpp \
     cppuseselectionsupdater.cpp \
     cppvirtualfunctionassistprovider.cpp \

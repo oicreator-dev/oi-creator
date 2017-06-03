@@ -28,9 +28,8 @@
 #include <projectexplorer/runconfiguration.h>
 
 namespace Android {
-class AndroidRunConfiguration;
-
 namespace Internal {
+
 class AndroidRunner;
 
 class AndroidRunControl : public ProjectExplorer::RunControl
@@ -38,11 +37,11 @@ class AndroidRunControl : public ProjectExplorer::RunControl
     Q_OBJECT
 
 public:
-    explicit AndroidRunControl(AndroidRunConfiguration *runConfig);
+    explicit AndroidRunControl(ProjectExplorer::RunConfiguration *runConfig);
     ~AndroidRunControl() override;
 
     void start() override;
-    StopResult stop() override;
+    void stop() override;
     QString displayName() const override;
 
 private:

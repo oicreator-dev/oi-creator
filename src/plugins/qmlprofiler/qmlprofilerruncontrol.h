@@ -27,31 +27,27 @@
 
 #include "qmlprofilerstatemanager.h"
 
-#include <debugger/analyzer/analyzerruncontrol.h>
+#include <projectexplorer/runconfiguration.h>
 #include <utils/outputformat.h>
 
 namespace QmlProfiler {
 
-namespace Internal { class QmlProfilerTool; }
-
-class QmlProfilerRunControl : public Debugger::AnalyzerRunControl
+class QmlProfilerRunner : public ProjectExplorer::RunWorker
 {
     Q_OBJECT
 
 public:
-    QmlProfilerRunControl(ProjectExplorer::RunConfiguration *runConfiguration,
-                          Internal::QmlProfilerTool *tool);
-    ~QmlProfilerRunControl() override;
+    QmlProfilerRunner(ProjectExplorer::RunControl *runControl);
+    ~QmlProfilerRunner() override;
 
     void registerProfilerStateManager( QmlProfilerStateManager *profilerState );
 
-    void notifyRemoteSetupDone(Utils::Port port) override;
-    void notifyRemoteSetupFailed(const QString &errorMessage) override;
+    void notifyRemoteSetupDone(Utils::Port port);
+    void notifyRemoteSetupFailed(const QString &errorMessage);
     void start() override;
-    StopResult stop() override;
+    void stop() override;
     void cancelProcess();
-    void notifyRemoteFinished() override;
-    bool supportsReRunning() const override { return false; }
+    void notifyRemoteFinished();
 
 signals:
     void processRunning(Utils::Port port);
@@ -60,8 +56,8 @@ private:
     void wrongSetupMessageBoxFinished(int);
     void profilerStateChanged();
 
-    class QmlProfilerRunControlPrivate;
-    QmlProfilerRunControlPrivate *d;
+    class QmlProfilerRunnerPrivate;
+    QmlProfilerRunnerPrivate *d;
 };
 
 } // namespace QmlProfiler

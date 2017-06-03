@@ -63,6 +63,7 @@
 
 #include <projectexplorer/devicesupport/deviceprocess.h>
 #include <projectexplorer/itaskhandler.h>
+#include <projectexplorer/projectexplorer.h>
 #include <projectexplorer/taskhub.h>
 
 #include <utils/algorithm.h>
@@ -203,8 +204,7 @@ private:
 //
 ///////////////////////////////////////////////////////////////////////
 
-GdbEngine::GdbEngine(const DebuggerRunParameters &startParameters)
-  : DebuggerEngine(startParameters)
+GdbEngine::GdbEngine(bool useTerminal)
 {
     setObjectName("GdbEngine");
 
@@ -221,7 +221,7 @@ GdbEngine::GdbEngine(const DebuggerRunParameters &startParameters)
     m_pendingBreakpointRequests = 0;
     m_commandsDoneCallback = 0;
     m_stackNeeded = false;
-    m_terminalTrap = startParameters.useTerminal;
+    m_terminalTrap = useTerminal;
     m_systemDumpersLoaded = false;
     m_rerunPending = false;
     m_inUpdateLocals = false;
@@ -272,7 +272,7 @@ QString GdbEngine::errorMessage(QProcess::ProcessError error)
                 "permissions to invoke the program.\n%2")
                 .arg(runParameters().debugger.executable, m_gdbProc.errorString());
         case QProcess::Crashed:
-            if (targetState() == DebuggerFinished)
+            if (isDying())
                 return tr("The gdb process crashed some time after starting "
                     "successfully.");
             else
@@ -829,7 +829,7 @@ void GdbEngine::interruptInferior()
         if (HostOsInfo::isWindowsHost() && !m_isQnxGdb) {
             QTC_ASSERT(state() == InferiorStopRequested, qDebug() << state(); notifyInferiorStopFailed());
             QTC_ASSERT(!m_signalOperation, notifyInferiorStopFailed());
-            m_signalOperation = runParameters().device->signalOperation();
+            m_signalOperation = runTool()->device()->signalOperation();
             QTC_ASSERT(m_signalOperation, notifyInferiorStopFailed());
             connect(m_signalOperation.data(), &DeviceProcessSignalOperation::finished,
                     this, &GdbEngine::handleInterruptDeviceInferior);
@@ -3330,7 +3330,9 @@ void GdbEngine::handleMakeSnapshot(const DebuggerResponse &response, const QStri
         }
         rp.displayName = function + ": " + QDateTime::currentDateTime().toString();
         rp.isSnapshot = true;
-        createAndScheduleRun(rp, 0);
+        auto rc = new RunControl(runControl()->runConfiguration(), ProjectExplorer::Constants::DEBUG_RUN_MODE);
+        (void) new DebuggerRunTool(rc, rp);
+        ProjectExplorerPlugin::startRunControl(rc);
     } else {
         QString msg = response.data["msg"].data();
         AsynchronousMessageBox::critical(tr("Snapshot Creation Error"),
@@ -4083,7 +4085,7 @@ void GdbEngine::handleGdbFinished(int exitCode, QProcess::ExitStatus exitStatus)
 
 void GdbEngine::abortDebugger()
 {
-    if (targetState() == DebuggerFinished) {
+    if (isDying()) {
         // We already tried. Try harder.
         showMessage("ABORTING DEBUGGER. SECOND TIME.");
         m_gdbProc.kill();
@@ -4297,26 +4299,6 @@ void GdbEngine::requestDebugInformation(const DebugInfoTask &task)
     QProcess::startDetached(task.command);
 }
 
-bool GdbEngine::prepareCommand()
-{
-    if (HostOsInfo::isWindowsHost()) {
-        DebuggerRunParameters &rp = runParameters();
-        QtcProcess::SplitError perr;
-        rp.inferior.commandLineArguments =
-                QtcProcess::prepareArgs(rp.inferior.commandLineArguments, &perr,
-                                        HostOsInfo::hostOs(), nullptr,
-                                        &rp.inferior.workingDirectory).toWindowsArgs();
-        if (perr != QtcProcess::SplitOk) {
-            // perr == BadQuoting is never returned on Windows
-            // FIXME? QTCREATORBUG-2809
-            handleAdapterStartFailed(QCoreApplication::translate("DebuggerEngine", // Same message in CdbEngine
-                                                                 "Debugging complex command lines is currently not supported on Windows."), Id());
-            return false;
-        }
-    }
-    return true;
-}
-
 QString GdbEngine::msgGdbStopFailed(const QString &why)
 {
     return tr("The gdb process could not be stopped:\n%1").arg(why);
@@ -4372,20 +4354,20 @@ void GdbEngine::debugLastCommand()
 // Factory
 //
 
-DebuggerEngine *createGdbEngine(const DebuggerRunParameters &rp)
+DebuggerEngine *createGdbEngine(bool useTerminal, DebuggerStartMode sm)
 {
-    switch (rp.startMode) {
+    switch (sm) {
     case AttachCore:
-        return new GdbCoreEngine(rp);
+        return new GdbCoreEngine(useTerminal);
     case StartRemoteProcess:
     case AttachToRemoteServer:
-        return new GdbRemoteServerEngine(rp);
+        return new GdbRemoteServerEngine(useTerminal);
     case AttachExternal:
-        return new GdbAttachEngine(rp);
+        return new GdbAttachEngine(useTerminal);
     default:
-        if (rp.useTerminal)
-            return new GdbTermEngine(rp);
-        return new GdbPlainEngine(rp);
+        if (useTerminal)
+            return new GdbTermEngine(useTerminal);
+        return new GdbPlainEngine(useTerminal);
     }
 }
 

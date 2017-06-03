@@ -133,21 +133,23 @@ void QnxAttachDebugSupport::attachToProcess()
     if (qtVersion)
         sp.solibSearchPath = QnxUtils::searchPaths(qtVersion);
 
-    QString errorMessage;
-    Debugger::DebuggerRunControl *runControl = Debugger::createDebuggerRunControl(sp, 0, &errorMessage);
-    if (!errorMessage.isEmpty()) {
-        handleError(errorMessage);
-        stopPDebug();
-        return;
-    }
+    auto runControl = new RunControl(nullptr, ProjectExplorer::Constants::DEBUG_RUN_MODE);
     if (!runControl) {
         handleError(tr("Attaching failed."));
         stopPDebug();
         return;
     }
-    connect(runControl, &Debugger::DebuggerRunControl::stateChanged,
-            this, &QnxAttachDebugSupport::handleDebuggerStateChanged);
-    ProjectExplorerPlugin::startRunControl(runControl, ProjectExplorer::Constants::DEBUG_RUN_MODE);
+    QString errorMessage;
+    (void) new Debugger::DebuggerRunTool(runControl, sp, &errorMessage);
+    if (!errorMessage.isEmpty()) {
+        handleError(errorMessage);
+        stopPDebug();
+        return;
+    }
+//    connect(qobject_cast<Debugger::DebuggerRunTool *>(runControl->toolRunner()),
+//            &Debugger::DebuggerRunTool::stateChanged,
+//            this, &QnxAttachDebugSupport::handleDebuggerStateChanged);
+    ProjectExplorerPlugin::startRunControl(runControl);
 }
 
 void QnxAttachDebugSupport::handleDebuggerStateChanged(Debugger::DebuggerState state)
@@ -158,20 +160,20 @@ void QnxAttachDebugSupport::handleDebuggerStateChanged(Debugger::DebuggerState s
 
 void QnxAttachDebugSupport::handleError(const QString &message)
 {
-    if (m_runControl)
-        m_runControl->showMessage(message, Debugger::AppError);
+    if (m_runTool)
+        m_runTool->showMessage(message, Debugger::AppError);
 }
 
 void QnxAttachDebugSupport::handleProgressReport(const QString &message)
 {
-    if (m_runControl)
-        m_runControl->showMessage(message + QLatin1Char('\n'), Debugger::AppStuff);
+    if (m_runTool)
+        m_runTool->showMessage(message + QLatin1Char('\n'), Debugger::AppStuff);
 }
 
 void QnxAttachDebugSupport::handleRemoteOutput(const QByteArray &output)
 {
-    if (m_runControl)
-        m_runControl->showMessage(QString::fromUtf8(output), Debugger::AppOutput);
+    if (m_runTool)
+        m_runTool->showMessage(QString::fromUtf8(output), Debugger::AppOutput);
 }
 
 void QnxAttachDebugSupport::stopPDebug()

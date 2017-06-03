@@ -25,16 +25,7 @@
 
 #pragma once
 
-#include "genericprojectnodes.h"
-
 #include <projectexplorer/project.h>
-#include <projectexplorer/projectnodes.h>
-#include <projectexplorer/target.h>
-#include <projectexplorer/toolchain.h>
-#include <projectexplorer/buildconfiguration.h>
-#include <coreplugin/idocument.h>
-
-#include <QFuture>
 
 namespace CppTools { class CppProjectUpdater; }
 
@@ -48,10 +39,6 @@ class GenericProject : public ProjectExplorer::Project
 public:
     explicit GenericProject(const Utils::FileName &filename);
     ~GenericProject() override;
-
-    QString filesFileName() const;
-    QString includesFileName() const;
-    QString configFileName() const;
 
     QStringList buildTargets() const;
 
@@ -67,8 +54,6 @@ public:
     };
 
     void refresh(RefreshOptions options);
-
-    QStringList projectIncludePaths() const;
 
 protected:
     RestoreResult fromMap(const QVariantMap &map, QString *errorMessage) override;

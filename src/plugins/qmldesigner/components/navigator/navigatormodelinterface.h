@@ -1,3 +1,4 @@
+
 /****************************************************************************
 **
 ** Copyright (C) 2016 The Qt Company Ltd.
@@ -23,36 +24,26 @@
 **
 ****************************************************************************/
 
-#include "cppsnippetprovider.h"
+#pragma once
 
-#include "cpphighlighter.h"
-#include "cppautocompleter.h"
-#include "cppeditorconstants.h"
+#include <modelnode.h>
 
-#include <cpptools/cppqtstyleindenter.h>
+QT_BEGIN_NAMESPACE
+class QItemSelection;
+class QModelIndex;
+QT_END_NAMESPACE
 
-#include <texteditor/snippets/snippeteditor.h>
-#include <texteditor/textdocument.h>
+namespace QmlDesigner {
 
-#include <QLatin1String>
-#include <QCoreApplication>
-
-using namespace CppEditor;
-using namespace CppEditor::Internal;
-
-QString CppSnippetProvider::groupId() const
+class NavigatorModelInterface
 {
-    return QLatin1String(Constants::CPP_SNIPPETS_GROUP_ID);
-}
+public:
+    virtual QModelIndex indexForModelNode(const ModelNode &modelNode) const = 0;
+    virtual void notifyDataChanged(const ModelNode &modelNode) = 0;
+    virtual void notifyModelNodesRemoved(const QList<ModelNode> &modelNodes) = 0;
+    virtual void notifyModelNodesInserted(const QList<ModelNode> &modelNodes) = 0;
+    virtual void notifyModelNodesMoved(const QList<ModelNode> &modelNodes) = 0;
+};
 
-QString CppSnippetProvider::displayName() const
-{
-    return QCoreApplication::translate("CppEditor::Internal::CppSnippetProvider", "C++");
-}
+} //QmlDesigner
 
-void CppSnippetProvider::decorateEditor(TextEditor::SnippetEditorWidget *editor) const
-{
-    editor->textDocument()->setSyntaxHighlighter(new CppHighlighter);
-    editor->textDocument()->setIndenter(new CppTools::CppQtStyleIndenter);
-    editor->setAutoCompleter(new CppAutoCompleter);
-}

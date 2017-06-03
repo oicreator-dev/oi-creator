@@ -81,11 +81,9 @@ static int &currentToken()
 //
 ///////////////////////////////////////////////////////////////////////
 
-LldbEngine::LldbEngine(const DebuggerRunParameters &startParameters)
-    : DebuggerEngine(startParameters), m_continueAtNextSpontaneousStop(false)
+LldbEngine::LldbEngine()
 {
-    m_lastAgentId = 0;
-    setObjectName(QLatin1String("LldbEngine"));
+    setObjectName("LldbEngine");
 
     connect(action(AutoDerefPointers), &SavedAction::valueChanged,
             this, &LldbEngine::updateLocals);
@@ -165,7 +163,7 @@ void LldbEngine::shutdownEngine()
 
 void LldbEngine::abortDebugger()
 {
-    if (targetState() == DebuggerFinished) {
+    if (isDying()) {
         // We already tried. Try harder.
         showMessage("ABORTING DEBUGGER. SECOND TIME.");
         m_lldbProc.kill();
@@ -174,25 +172,6 @@ void LldbEngine::abortDebugger()
         showMessage("ABORTING DEBUGGER. FIRST TIME.");
         quitDebugger();
     }
-}
-
-// FIXME: Merge with GdbEngine/QtcProcess
-bool LldbEngine::prepareCommand()
-{
-    if (HostOsInfo::isWindowsHost()) {
-        DebuggerRunParameters &rp = runParameters();
-        QtcProcess::SplitError perr;
-        rp.inferior.commandLineArguments
-                = QtcProcess::prepareArgs(rp.inferior.commandLineArguments, &perr, HostOsInfo::hostOs(),
-                                          nullptr, &rp.inferior.workingDirectory).toWindowsArgs();
-        if (perr != QtcProcess::SplitOk) {
-            // perr == BadQuoting is never returned on Windows
-            // FIXME? QTCREATORBUG-2809
-            notifyEngineSetupFailed();
-            return false;
-        }
-    }
-    return true;
 }
 
 void LldbEngine::setupEngine()
@@ -226,10 +205,8 @@ void LldbEngine::setupEngine()
     //    m_stubProc.stop();
     //    m_stubProc.blockSignals(false);
 
-        if (!prepareCommand()) {
-            notifyEngineSetupFailed();
+        if (!prepareCommand())
             return;
-        }
 
         m_stubProc.setWorkingDirectory(runParameters().inferior.workingDirectory);
         // Set environment + dumper preload.
@@ -1137,9 +1114,9 @@ bool LldbEngine::hasCapability(unsigned cap) const
     return false;
 }
 
-DebuggerEngine *createLldbEngine(const DebuggerRunParameters &startParameters)
+DebuggerEngine *createLldbEngine()
 {
-    return new LldbEngine(startParameters);
+    return new LldbEngine;
 }
 
 void LldbEngine::notifyEngineRemoteSetupFinished(const RemoteSetupResult &result)

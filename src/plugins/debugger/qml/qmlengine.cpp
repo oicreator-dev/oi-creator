@@ -135,7 +135,7 @@ struct LookupData
 
 typedef QHash<int, LookupData> LookupItems; // id -> (iname, exp)
 
-class QmlEnginePrivate : QmlDebugClient
+class QmlEnginePrivate : public QmlDebugClient
 {
 public:
     QmlEnginePrivate(QmlEngine *engine_, QmlDebugConnection *connection_)
@@ -188,6 +188,17 @@ public:
     void checkForFinishedUpdate();
     ConsoleItem *constructLogItemTree(const QmlV8ObjectData &objectData);
 
+    void filterApplicationMessage(ProjectExplorer::RunControl *runControl,
+                                  const QString &msg, Utils::OutputFormat format)
+    {
+        if (runControl != engine->runControl())
+            return;
+        if (format == StdErrFormatSameLine
+                || format == StdOutFormatSameLine
+                || format == DebugFormat)
+            outputParser.processOutput(msg);
+    }
+
 public:
     QHash<int, QmlV8ObjectData> refVals; // The mapping of target object handles to retrieved values.
     int sequence = -1;
@@ -225,6 +236,8 @@ public:
     QmlDebug::QDebugMessageClient *msgClient = 0;
 
     QHash<int, QmlCallback> callbackForToken;
+    QMetaObject::Connection startupMessageFilterConnection;
+
 private:
     ConsoleItem *constructLogItemTree(const QmlV8ObjectData &objectData, QList<int> &seenHandles);
     void constructChildLogItems(ConsoleItem *item, const QmlV8ObjectData &objectData,
@@ -244,17 +257,11 @@ static void updateDocument(IDocument *document, const QTextDocument *textDocumen
 //
 ///////////////////////////////////////////////////////////////////////
 
-QmlEngine::QmlEngine(const DebuggerRunParameters &startParameters, DebuggerEngine *masterEngine)
-  : DebuggerEngine(startParameters),
-    d(new QmlEnginePrivate(this, new QmlDebugConnection(this)))
+QmlEngine::QmlEngine(bool useTerminal)
+  :  d(new QmlEnginePrivate(this, new QmlDebugConnection(this)))
 {
     setObjectName("QmlEngine");
 
-    if (masterEngine)
-        setMasterEngine(masterEngine);
-
-    connect(this, &DebuggerEngine::stateChanged,
-            this, &QmlEngine::updateCurrentContext);
     connect(stackHandler(), &StackHandler::stackChanged,
             this, &QmlEngine::updateCurrentContext);
     connect(stackHandler(), &StackHandler::currentIndexChanged,
@@ -265,7 +272,7 @@ QmlEngine::QmlEngine(const DebuggerRunParameters &startParameters, DebuggerEngin
     connect(&d->applicationLauncher, &ApplicationLauncher::processExited,
             this, &QmlEngine::disconnected);
     connect(&d->applicationLauncher, &ApplicationLauncher::appendMessage,
-            this, &QmlEngine::appendMessage);
+            this, &QmlEngine::appMessage);
     connect(&d->applicationLauncher, &ApplicationLauncher::processStarted,
             this, &QmlEngine::handleLauncherStarted);
 
@@ -285,7 +292,7 @@ QmlEngine::QmlEngine(const DebuggerRunParameters &startParameters, DebuggerEngin
             this, [this] { tryToConnect(); });
 
     // we won't get any debug output
-    if (startParameters.useTerminal) {
+    if (useTerminal) {
         d->noDebugOutputTimer.setInterval(0);
         d->retryOnConnectFail = true;
         d->automaticConnect = true;
@@ -326,6 +333,7 @@ QmlEngine::QmlEngine(const DebuggerRunParameters &startParameters, DebuggerEngin
 
 QmlEngine::~QmlEngine()
 {
+    QObject::disconnect(d->startupMessageFilterConnection);
     QSet<IDocument *> documentsToClose;
 
     QHash<QString, QWeakPointer<BaseTextEditor> >::iterator iter;
@@ -337,6 +345,21 @@ QmlEngine::~QmlEngine()
     EditorManager::closeDocuments(documentsToClose.toList());
 
     delete d;
+}
+
+void QmlEngine::setState(DebuggerState state, bool forced)
+{
+    DebuggerEngine::setState(state, forced);
+    updateCurrentContext();
+}
+
+void QmlEngine::setRunTool(DebuggerRunTool *runTool)
+{
+    DebuggerEngine::setRunTool(runTool);
+
+    d->startupMessageFilterConnection = connect(
+                runTool->runControl(), &RunControl::appendMessageRequested,
+                d, &QmlEnginePrivate::filterApplicationMessage);
 }
 
 void QmlEngine::setupInferior()
@@ -357,7 +380,7 @@ void QmlEngine::handleLauncherStarted()
     d->noDebugOutputTimer.start();
 }
 
-void QmlEngine::appendMessage(const QString &msg, Utils::OutputFormat /* format */)
+void QmlEngine::appMessage(const QString &msg, Utils::OutputFormat /* format */)
 {
     showMessage(msg, AppOutput); // FIXME: Redirect to RunControl
 }
@@ -397,6 +420,8 @@ void QmlEngine::beginConnection(Utils::Port port)
         return;
 
     QTC_ASSERT(state() == EngineRunRequested, return);
+
+    QObject::disconnect(d->startupMessageFilterConnection);
 
     QString host = runParameters().qmlServer.host;
     // Use localhost as default
@@ -493,18 +518,6 @@ void QmlEngine::errorMessageBoxFinished(int result)
     }
 }
 
-void QmlEngine::filterApplicationMessage(const QString &output, int /*channel*/) const
-{
-    d->outputParser.processOutput(output);
-}
-
-void QmlEngine::showMessage(const QString &msg, int channel, int timeout) const
-{
-    if (channel == AppOutput || channel == AppError)
-        filterApplicationMessage(msg, channel);
-    DebuggerEngine::showMessage(msg, channel, timeout);
-}
-
 void QmlEngine::gotoLocation(const Location &location)
 {
     const QString fileName = location.fileName();
@@ -563,10 +576,10 @@ void QmlEngine::startApplicationLauncher()
 {
     if (!d->applicationLauncher.isRunning()) {
         StandardRunnable runnable = runParameters().inferior;
-        appendMessage(tr("Starting %1 %2").arg(
-                          QDir::toNativeSeparators(runnable.executable),
-                          runnable.commandLineArguments) + '\n',
-                      Utils::NormalMessageFormat);
+        runTool()->appendMessage(tr("Starting %1 %2").arg(
+                                     QDir::toNativeSeparators(runnable.executable),
+                                     runnable.commandLineArguments),
+                                 Utils::NormalMessageFormat);
         d->applicationLauncher.start(runnable);
     }
 }
@@ -582,6 +595,7 @@ void QmlEngine::stopApplicationLauncher()
 
 void QmlEngine::notifyEngineRemoteSetupFinished(const RemoteSetupResult &result)
 {
+    QObject::disconnect(d->startupMessageFilterConnection);
     DebuggerEngine::notifyEngineRemoteSetupFinished(result);
 
     if (result.success) {
@@ -1132,6 +1146,8 @@ void QmlEngine::disconnected()
 
 void QmlEngine::updateCurrentContext()
 {
+    d->inspectorAgent.enableTools(state() == InferiorRunOk);
+
     QString context;
     switch (state()) {
     case InferiorStopOk:
@@ -2565,9 +2581,9 @@ void QmlEnginePrivate::flushSendBuffer()
     sendBuffer.clear();
 }
 
-DebuggerEngine *createQmlEngine(const DebuggerRunParameters &sp)
+DebuggerEngine *createQmlEngine(bool useTerminal)
 {
-    return new QmlEngine(sp);
+    return new QmlEngine(useTerminal);
 }
 
 } // Internal

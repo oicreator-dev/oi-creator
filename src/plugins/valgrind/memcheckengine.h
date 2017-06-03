@@ -34,16 +34,15 @@
 namespace Valgrind {
 namespace Internal {
 
-class MemcheckRunControl : public ValgrindRunControl
+class MemcheckToolRunner : public ValgrindToolRunner
 {
     Q_OBJECT
 
 public:
-    MemcheckRunControl(ProjectExplorer::RunConfiguration *runConfiguration,
-                       Core::Id runMode);
+    explicit MemcheckToolRunner(ProjectExplorer::RunControl *runControl);
 
     void start() override;
-    StopResult stop() override;
+    void stop() override;
 
     QStringList suppressionFiles() const;
 
@@ -62,13 +61,12 @@ protected:
     Memcheck::MemcheckRunner m_runner;
 };
 
-class MemcheckWithGdbRunControl : public MemcheckRunControl
+class MemcheckWithGdbToolRunner : public MemcheckToolRunner
 {
     Q_OBJECT
 
 public:
-    MemcheckWithGdbRunControl(ProjectExplorer::RunConfiguration *runConfiguration,
-                              Core::Id runMode);
+    explicit MemcheckWithGdbToolRunner(ProjectExplorer::RunControl *runControl);
 
 protected:
     QStringList toolArguments() const override;

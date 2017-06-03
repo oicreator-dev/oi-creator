@@ -51,14 +51,15 @@ using namespace ProjectExplorer;
 namespace Ios {
 namespace Internal {
 
-IosRunner::IosRunner(QObject *parent, IosRunConfiguration *runConfig, bool cppDebug,
+IosRunner::IosRunner(QObject *parent, RunControl *runControl, bool cppDebug,
                      QmlDebug::QmlDebugServicesPreset qmlDebugServices)
-    : QObject(parent), m_toolHandler(0), m_bundleDir(runConfig->bundleDirectory().toString()),
-      m_arguments(runConfig->commandLineArguments()),
-      m_device(DeviceKitInformation::device(runConfig->target()->kit())),
-      m_cppDebug(cppDebug), m_qmlDebugServices(qmlDebugServices), m_cleanExit(false),
-      m_pid(0)
+    : QObject(parent),
+      m_cppDebug(cppDebug), m_qmlDebugServices(qmlDebugServices)
 {
+    auto runConfig = qobject_cast<IosRunConfiguration *>(runControl->runConfiguration());
+    m_bundleDir = runConfig->bundleDirectory().toString();
+    m_arguments = QStringList(runConfig->commandLineArguments());
+    m_device = DeviceKitInformation::device(runConfig->target()->kit());
     m_deviceType = runConfig->deviceType();
 }
 
@@ -158,13 +159,8 @@ void IosRunner::start()
 
 void IosRunner::stop()
 {
-    if (m_toolHandler) {
-#ifdef Q_OS_UNIX
-        if (m_pid > 0)
-            kill(m_pid, SIGKILL);
-#endif
+    if (m_toolHandler && m_toolHandler->isRunning())
         m_toolHandler->stop();
-    }
 }
 
 void IosRunner::handleDidStartApp(IosToolHandler *handler, const QString &bundlePath,

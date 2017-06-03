@@ -51,44 +51,47 @@ using namespace Valgrind::XmlProtocol;
 namespace Valgrind {
 namespace Internal {
 
-MemcheckRunControl::MemcheckRunControl(RunConfiguration *runConfiguration, Core::Id runMode)
-    : ValgrindRunControl(runConfiguration, runMode)
+MemcheckToolRunner::MemcheckToolRunner(RunControl *runControl)
+    : ValgrindToolRunner(runControl)
 {
+    setDisplayName("MemcheckToolRunner");
     connect(&m_parser, &XmlProtocol::ThreadedParser::error,
-            this, &MemcheckRunControl::parserError);
+            this, &MemcheckToolRunner::parserError);
     connect(&m_parser, &XmlProtocol::ThreadedParser::suppressionCount,
-            this, &MemcheckRunControl::suppressionCount);
+            this, &MemcheckToolRunner::suppressionCount);
     connect(&m_parser, &XmlProtocol::ThreadedParser::internalError,
-            this, &MemcheckRunControl::internalParserError);
+            this, &MemcheckToolRunner::internalParserError);
 }
 
-QString MemcheckRunControl::progressTitle() const
+QString MemcheckToolRunner::progressTitle() const
 {
     return tr("Analyzing Memory");
 }
 
-ValgrindRunner *MemcheckRunControl::runner()
+ValgrindRunner *MemcheckToolRunner::runner()
 {
     return &m_runner;
 }
 
-void MemcheckRunControl::start()
+void MemcheckToolRunner::start()
 {
+//    MemcheckTool::engineStarting(this);
+
     m_runner.setParser(&m_parser);
 
     appendMessage(tr("Analyzing memory of %1").arg(executable()) + QLatin1Char('\n'),
                         Utils::NormalMessageFormat);
-    ValgrindRunControl::start();
+    ValgrindToolRunner::start();
 }
 
-RunControl::StopResult MemcheckRunControl::stop()
+void MemcheckToolRunner::stop()
 {
     disconnect(&m_parser, &ThreadedParser::internalError,
-               this, &MemcheckRunControl::internalParserError);
-    return ValgrindRunControl::stop();
+               this, &MemcheckToolRunner::internalParserError);
+    ValgrindToolRunner::stop();
 }
 
-QStringList MemcheckRunControl::toolArguments() const
+QStringList MemcheckToolRunner::toolArguments() const
 {
     QStringList arguments;
     arguments << QLatin1String("--gen-suppressions=all");
@@ -123,35 +126,35 @@ QStringList MemcheckRunControl::toolArguments() const
     return arguments;
 }
 
-QStringList MemcheckRunControl::suppressionFiles() const
+QStringList MemcheckToolRunner::suppressionFiles() const
 {
     return m_settings->suppressionFiles();
 }
 
-MemcheckWithGdbRunControl::MemcheckWithGdbRunControl(RunConfiguration *runConfiguration, Core::Id runMode)
-    : MemcheckRunControl(runConfiguration, runMode)
+MemcheckWithGdbToolRunner::MemcheckWithGdbToolRunner(RunControl *runControl)
+    : MemcheckToolRunner(runControl)
 {
     connect(&m_runner, &Memcheck::MemcheckRunner::started,
-            this, &MemcheckWithGdbRunControl::startDebugger);
+            this, &MemcheckWithGdbToolRunner::startDebugger);
     connect(&m_runner, &Memcheck::MemcheckRunner::logMessageReceived,
-            this, &MemcheckWithGdbRunControl::appendLog);
+            this, &MemcheckWithGdbToolRunner::appendLog);
     disconnect(&m_parser, &ThreadedParser::internalError,
-               this, &MemcheckRunControl::internalParserError);
+               this, &MemcheckToolRunner::internalParserError);
     m_runner.disableXml();
 }
 
-QStringList MemcheckWithGdbRunControl::toolArguments() const
+QStringList MemcheckWithGdbToolRunner::toolArguments() const
 {
-    return MemcheckRunControl::toolArguments()
+    return MemcheckToolRunner::toolArguments()
             << QLatin1String("--vgdb=yes") << QLatin1String("--vgdb-error=0");
 }
 
-void MemcheckWithGdbRunControl::startDebugger()
+void MemcheckWithGdbToolRunner::startDebugger()
 {
     const qint64 valgrindPid = runner()->valgrindProcess()->pid();
 
     Debugger::DebuggerStartParameters sp;
-    sp.inferior = runnable().as<StandardRunnable>();
+    sp.inferior = runControl()->runnable().as<StandardRunnable>();
     sp.startMode = Debugger::AttachToRemoteServer;
     sp.displayName = QString::fromLatin1("VGdb %1").arg(valgrindPid);
     sp.remoteChannel = QString::fromLatin1("| vgdb --pid=%1").arg(valgrindPid);
@@ -159,14 +162,14 @@ void MemcheckWithGdbRunControl::startDebugger()
     sp.expectedSignals.append("SIGTRAP");
 
     QString errorMessage;
-    RunControl *gdbRunControl = Debugger::createDebuggerRunControl(sp, runConfiguration(), &errorMessage);
-    QTC_ASSERT(gdbRunControl, return);
+    auto *gdbRunControl = new RunControl(nullptr, ProjectExplorer::Constants::DEBUG_RUN_MODE);
+    (void) new Debugger::DebuggerRunTool(gdbRunControl, sp, &errorMessage);
     connect(gdbRunControl, &RunControl::finished,
             gdbRunControl, &RunControl::deleteLater);
-    gdbRunControl->start();
+    gdbRunControl->initiateStart();
 }
 
-void MemcheckWithGdbRunControl::appendLog(const QByteArray &data)
+void MemcheckWithGdbToolRunner::appendLog(const QByteArray &data)
 {
     appendMessage(QString::fromUtf8(data), Utils::StdOutFormat);
 }

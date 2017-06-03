@@ -41,6 +41,7 @@
 #include <languageutils/fakemetaobject.h>
 
 #include <utils/qtcassert.h>
+#include <utils/algorithm.h>
 
 namespace QmlDesigner {
 
@@ -84,8 +85,8 @@ static TypeName resolveTypeName(const ASTPropertyReference *ref, const ContextPt
 {
     TypeName type = "unknown";
 
-    if (!ref->ast()->memberType.isEmpty()) {
-        type = ref->ast()->memberType.toUtf8();
+    if (ref->ast()->isValid()) {
+        type = ref->ast()->memberTypeName().toUtf8();
 
         if (type == "alias") {
             const Value *value = context->lookupReference(ref);
@@ -285,13 +286,13 @@ public:
         if (ref) {
             QVector<PropertyInfo> dotProperties;
             const TypeName type = resolveTypeName(ref, m_context, dotProperties);
-            m_properties.append(qMakePair(propertyName, type));
+            m_properties.append({propertyName, type});
             if (!dotProperties.isEmpty()) {
                 foreach (const PropertyInfo &propertyInfo, dotProperties) {
                     PropertyName dotName = propertyInfo.first;
                     TypeName type = propertyInfo.second;
                     dotName = propertyName + '.' + dotName;
-                    m_properties.append(qMakePair(dotName, type));
+                    m_properties.append({dotName, type});
                 }
             }
         } else {
@@ -299,7 +300,7 @@ public:
             if (const CppComponentValue * cppComponentValue = value_cast<CppComponentValue>(value)) {
                 TypeName qualifiedTypeName = qualifiedTypeNameForContext(cppComponentValue,
                     m_context->viewerContext(), *m_context->snapshot().importDependencies()).toUtf8();
-                m_properties.append(qMakePair(propertyName, qualifiedTypeName));
+                m_properties.append({propertyName, qualifiedTypeName});
             } else {
                 TypeId typeId;
                 TypeName typeName = typeId(value).toUtf8();
@@ -310,7 +311,7 @@ public:
                         typeName = "real";
                     }
                 }
-                m_properties.append(qMakePair(propertyName, typeName));
+                m_properties.append({propertyName, typeName});
             }
         }
         return true;
@@ -423,7 +424,7 @@ QVector<PropertyInfo> getQmlTypes(const CppComponentValue *objectValue, const Co
                 foreach (const PropertyInfo &propertyInfo, dotProperties) {
                     const PropertyName dotName = name + '.' + propertyInfo.first;
                     const TypeName type = propertyInfo.second;
-                    propertyList.append(qMakePair(dotName, type));
+                    propertyList.append({dotName, type});
                 }
             }
         }
@@ -434,7 +435,7 @@ QVector<PropertyInfo> getQmlTypes(const CppComponentValue *objectValue, const Co
                 foreach (const PropertyInfo &propertyInfo, dotProperties) {
                     const PropertyName dotName = name + '.' + propertyInfo.first;
                     const TypeName type = propertyInfo.second;
-                    propertyList.append(qMakePair(dotName, type));
+                    propertyList.append({dotName, type});
                 }
             }
         }
@@ -445,7 +446,7 @@ QVector<PropertyInfo> getQmlTypes(const CppComponentValue *objectValue, const Co
         if (type == "unknown" && objectValue->hasProperty(nameAsString))
             type = objectValue->propertyType(nameAsString).toUtf8();
 
-        propertyList.append(qMakePair(name, type));
+        propertyList.append({name, type});
     }
 
     if (!local)
@@ -1250,7 +1251,7 @@ void NodeMetaInfoPrivate::setupPrototypes()
             }
             m_prototypes.append(description);
         } else {
-            if (context()->lookupType(document(), QStringList() << ov->className())) {
+            if (context()->lookupType(document(), {ov->className()})) {
                 const Imports *allImports = context()->imports(document());
                 ImportInfo importInfo = allImports->info(description.className, context().data());
 
@@ -1449,32 +1450,24 @@ QVariant NodeMetaInfo::propertyCastedValue(const PropertyName &propertyName, con
     return Internal::PropertyParser::variantFromString(variant.toString());
 }
 
+QList<NodeMetaInfo> NodeMetaInfo::classHierarchy() const
+{
+    QList<NodeMetaInfo> hierarchy = {*this};
+    hierarchy.append(superClasses());
+    return hierarchy;
+}
+
 QList<NodeMetaInfo> NodeMetaInfo::superClasses() const
 {
-    QList<NodeMetaInfo> list;
-
-    foreach (const Internal::TypeDescription &type,  m_privateData->prototypes()) {
-        list.append(NodeMetaInfo(m_privateData->model(), type.className.toUtf8(), type.majorVersion, type.minorVersion));
-    }
-    return list;
+    Model *model = m_privateData->model();
+    return Utils::transform(m_privateData->prototypes(), [model](const Internal::TypeDescription &type) {
+        return NodeMetaInfo(model, type.className.toUtf8(), type.majorVersion, type.minorVersion);
+    });
 }
 
 NodeMetaInfo NodeMetaInfo::directSuperClass() const
 {
-    QList<NodeMetaInfo> superClassesList = superClasses();
-    if (superClassesList.count() > 1)
-        return superClassesList.at(1);
-    return NodeMetaInfo();
-}
-
-QStringList NodeMetaInfo::superClassNames() const
-{
-    QStringList list;
-
-    foreach (const Internal::TypeDescription &type,  m_privateData->prototypes()) {
-        list.append(type.className);
-    }
-    return list;
+    return superClasses().value(1, NodeMetaInfo());
 }
 
 bool NodeMetaInfo::defaultPropertyIsComponent() const

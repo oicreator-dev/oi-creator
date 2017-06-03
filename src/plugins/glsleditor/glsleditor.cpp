@@ -312,7 +312,7 @@ AssistInterface *GlslEditorWidget::createAssistInterface(
 GlslEditorFactory::GlslEditorFactory()
 {
     setId(Constants::C_GLSLEDITOR_ID);
-    setDisplayName(qApp->translate("OpenWith::Editors", Constants::C_GLSLEDITOR_DISPLAY_NAME));
+    setDisplayName(QCoreApplication::translate("OpenWith::Editors", Constants::C_GLSLEDITOR_DISPLAY_NAME));
     addMimeType(Constants::GLSL_MIMETYPE);
     addMimeType(Constants::GLSL_MIMETYPE_VERT);
     addMimeType(Constants::GLSL_MIMETYPE_FRAG);
@@ -323,7 +323,7 @@ GlslEditorFactory::GlslEditorFactory()
     setEditorWidgetCreator([]() { return new GlslEditorWidget; });
     setIndenterCreator([]() { return new GlslIndenter; });
     setSyntaxHighlighterCreator([]() { return new GlslHighlighter; });
-    setCommentStyle(Utils::CommentDefinition::CppStyle);
+    setCommentDefinition(Utils::CommentDefinition::CppStyle);
     setCompletionAssistProvider(new GlslCompletionAssistProvider);
     setParenthesesMatchingEnabled(true);
     setMarksVisible(true);

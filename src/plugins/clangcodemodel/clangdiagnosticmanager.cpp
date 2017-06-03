@@ -26,6 +26,7 @@
 #include "clangdiagnosticfilter.h"
 #include "clangdiagnosticmanager.h"
 #include "clangisdiagnosticrelatedtolocation.h"
+#include "clangutils.h"
 
 #include <coreplugin/actionmanager/actionmanager.h>
 #include <coreplugin/actionmanager/command.h>
@@ -60,9 +61,11 @@ QTextEdit::ExtraSelection createExtraSelections(const QTextCharFormat &mainforma
 int positionInText(QTextDocument *textDocument,
                    const ClangBackEnd::SourceLocationContainer &sourceLocationContainer)
 {
-    auto textBlock = textDocument->findBlockByNumber(int(sourceLocationContainer.line()) - 1);
-
-    return textBlock.position() + int(sourceLocationContainer.column()) - 1;
+    auto textBlock = textDocument->findBlockByNumber(
+                static_cast<int>(sourceLocationContainer.line()) - 1);
+    int column = static_cast<int>(sourceLocationContainer.column()) - 1;
+    column -= ClangCodeModel::Utils::extraUtf8CharsShift(textBlock.text(), column);
+    return textBlock.position() + column;
 }
 
 void addRangeSelections(const ClangBackEnd::DiagnosticContainer &diagnostic,
@@ -81,12 +84,44 @@ void addRangeSelections(const ClangBackEnd::DiagnosticContainer &diagnostic,
     }
 }
 
+QChar selectionEndChar(const QChar startSymbol)
+{
+    if (startSymbol == '"')
+        return QLatin1Char('"');
+    if (startSymbol == '<')
+        return QLatin1Char('>');
+    return QChar();
+}
+
+void selectToLocationEnd(QTextCursor &cursor)
+{
+    const QTextBlock textBlock = cursor.document()->findBlock(cursor.position());
+    const QString simplifiedStr = textBlock.text().simplified();
+    if (!simplifiedStr.startsWith("#include") && !simplifiedStr.startsWith("# include")) {
+        // General case, not the line with #include
+        cursor.movePosition(QTextCursor::EndOfWord, QTextCursor::KeepAnchor);
+        return;
+    }
+
+    const QChar endChar = selectionEndChar(cursor.document()->characterAt(cursor.position()));
+    if (endChar.isNull()) {
+        cursor.movePosition(QTextCursor::EndOfWord, QTextCursor::KeepAnchor);
+    } else {
+        const int endPosition = textBlock.text().indexOf(endChar, cursor.position()
+                                                         - textBlock.position() + 1);
+        if (endPosition >= 0)
+            cursor.setPosition(textBlock.position() + endPosition + 1, QTextCursor::KeepAnchor);
+        else
+            cursor.movePosition(QTextCursor::EndOfLine, QTextCursor::KeepAnchor);
+    }
+}
+
 QTextCursor createSelectionCursor(QTextDocument *textDocument,
                                   const ClangBackEnd::SourceLocationContainer &sourceLocationContainer)
 {
     QTextCursor cursor(textDocument);
     cursor.setPosition(positionInText(textDocument, sourceLocationContainer));
-    cursor.movePosition(QTextCursor::EndOfWord, QTextCursor::KeepAnchor);
+    selectToLocationEnd(cursor);
 
     if (!cursor.hasSelection()) {
         cursor.setPosition(positionInText(textDocument, sourceLocationContainer) - 1);

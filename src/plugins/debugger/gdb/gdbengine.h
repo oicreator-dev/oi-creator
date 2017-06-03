@@ -66,7 +66,7 @@ class GdbEngine : public DebuggerEngine
     Q_OBJECT
 
 public:
-    explicit GdbEngine(const DebuggerRunParameters &runParameters);
+    explicit GdbEngine(bool useTerminal);
     ~GdbEngine() override;
 
 private: ////////// General Interface //////////
@@ -418,7 +418,6 @@ protected:
     DebuggerCommand m_lastDebuggableCommand;
 
 protected:
-    bool prepareCommand();
     void interruptLocalInferior(qint64 pid);
 
 protected:

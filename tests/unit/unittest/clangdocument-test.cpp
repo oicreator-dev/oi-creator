@@ -108,13 +108,15 @@ TEST_F(Document, DefaultDocumentIsNotIntact)
 
 TEST_F(Document, ThrowExceptionForNonExistingFilePath)
 {
-    ASSERT_THROW(::Document(Utf8StringLiteral("file.cpp"), projectPart, Utf8StringVector(), documents),
+    ASSERT_THROW(::Document(Utf8StringLiteral("file.cpp"), projectPart, Utf8StringVector(),
+                            documents),
                  ClangBackEnd::DocumentFileDoesNotExistException);
 }
 
 TEST_F(Document, ThrowNoExceptionForNonExistingFilePathIfDoNotCheckIfFileExistsIsSet)
 {
-    ASSERT_NO_THROW(::Document(Utf8StringLiteral("file.cpp"), projectPart, Utf8StringVector(), documents, ::Document::DoNotCheckIfFileExists));
+    ASSERT_NO_THROW(::Document(Utf8StringLiteral("file.cpp"), projectPart, Utf8StringVector(),
+                               documents, ::Document::FileExistsCheck::DoNotCheck));
 }
 
 TEST_F(Document, DocumentIsValid)
@@ -211,12 +213,12 @@ TEST_F(Document, DeletedFileShouldNotNeedReparsing)
 
     document.setDirtyIfDependencyIsMet(document.filePath());
 
-    ASSERT_FALSE(document.isNeedingReparse());
+    ASSERT_FALSE(document.isDirty());
 }
 
 TEST_F(Document, NeedsNoReparseAfterCreation)
 {
-    ASSERT_FALSE(document.isNeedingReparse());
+    ASSERT_FALSE(document.isDirty());
 }
 
 TEST_F(DocumentSlowTest, NeedsReparseAfterChangeOfMainFile)
@@ -225,7 +227,7 @@ TEST_F(DocumentSlowTest, NeedsReparseAfterChangeOfMainFile)
 
     document.setDirtyIfDependencyIsMet(documentFilePath);
 
-    ASSERT_TRUE(document.isNeedingReparse());
+    ASSERT_TRUE(document.isDirty());
 }
 
 TEST_F(DocumentSlowTest, NoNeedForReparsingForIndependendFile)
@@ -234,7 +236,7 @@ TEST_F(DocumentSlowTest, NoNeedForReparsingForIndependendFile)
 
     document.setDirtyIfDependencyIsMet(Utf8StringLiteral(TESTDATA_DIR"/otherfiles.h"));
 
-    ASSERT_FALSE(document.isNeedingReparse());
+    ASSERT_FALSE(document.isDirty());
 }
 
 TEST_F(DocumentSlowTest, NeedsReparsingForDependendFile)
@@ -243,7 +245,7 @@ TEST_F(DocumentSlowTest, NeedsReparsingForDependendFile)
 
     document.setDirtyIfDependencyIsMet(Utf8StringLiteral(TESTDATA_DIR"/translationunits.h"));
 
-    ASSERT_TRUE(document.isNeedingReparse());
+    ASSERT_TRUE(document.isDirty());
 }
 
 TEST_F(DocumentSlowTest, NeedsNoReparsingAfterReparsing)
@@ -253,7 +255,7 @@ TEST_F(DocumentSlowTest, NeedsNoReparsingAfterReparsing)
 
     document.reparse();
 
-    ASSERT_FALSE(document.isNeedingReparse());
+    ASSERT_FALSE(document.isDirty());
 }
 
 TEST_F(DocumentSlowTest, IsIntactAfterParsing)
@@ -274,7 +276,7 @@ TEST_F(DocumentSlowTest, DoesNotNeedReparseAfterParse)
 {
     document.parse();
 
-    ASSERT_FALSE(document.isNeedingReparse());
+    ASSERT_FALSE(document.isDirty());
 }
 
 TEST_F(DocumentSlowTest, NeedsReparseAfterMainFileChanged)
@@ -283,7 +285,7 @@ TEST_F(DocumentSlowTest, NeedsReparseAfterMainFileChanged)
 
     document.setDirtyIfDependencyIsMet(documentFilePath);
 
-    ASSERT_TRUE(document.isNeedingReparse());
+    ASSERT_TRUE(document.isDirty());
 }
 
 TEST_F(DocumentSlowTest, NeedsReparseAfterIncludedFileChanged)
@@ -292,7 +294,7 @@ TEST_F(DocumentSlowTest, NeedsReparseAfterIncludedFileChanged)
 
     document.setDirtyIfDependencyIsMet(Utf8StringLiteral(TESTDATA_DIR"/translationunits.h"));
 
-    ASSERT_TRUE(document.isNeedingReparse());
+    ASSERT_TRUE(document.isDirty());
 }
 
 TEST_F(DocumentSlowTest, DoesNotNeedReparseAfterNotIncludedFileChanged)
@@ -301,7 +303,7 @@ TEST_F(DocumentSlowTest, DoesNotNeedReparseAfterNotIncludedFileChanged)
 
     document.setDirtyIfDependencyIsMet(Utf8StringLiteral(TESTDATA_DIR"/otherfiles.h"));
 
-    ASSERT_FALSE(document.isNeedingReparse());
+    ASSERT_FALSE(document.isDirty());
 }
 
 TEST_F(DocumentSlowTest, DoesNotNeedReparseAfterReparse)
@@ -311,7 +313,7 @@ TEST_F(DocumentSlowTest, DoesNotNeedReparseAfterReparse)
 
     document.reparse();
 
-    ASSERT_FALSE(document.isNeedingReparse());
+    ASSERT_FALSE(document.isDirty());
 }
 
 TEST_F(Document, SetDirtyIfProjectPartIsOutdated)
@@ -320,18 +322,20 @@ TEST_F(Document, SetDirtyIfProjectPartIsOutdated)
     document.parse();
     projects.createOrUpdate({ProjectPartContainer(projectPartId, {Utf8StringLiteral("-DNEW")})});
 
-    document.setDirtyIfProjectPartIsOutdated();
+    const bool wasOutdated = document.setDirtyIfProjectPartIsOutdated();
 
-    ASSERT_TRUE(document.isNeedingReparse());
+    ASSERT_TRUE(wasOutdated);
+    ASSERT_TRUE(document.isDirty());
 }
 
 TEST_F(DocumentSlowTest, SetNotDirtyIfProjectPartIsNotOutdated)
 {
     document.parse();
 
-    document.setDirtyIfProjectPartIsOutdated();
+    const bool wasOutdated = document.setDirtyIfProjectPartIsOutdated();
 
-    ASSERT_FALSE(document.isNeedingReparse());
+    ASSERT_FALSE(wasOutdated);
+    ASSERT_FALSE(document.isDirty());
 }
 
 TEST_F(Document, IncorporateUpdaterResultResetsDirtyness)
@@ -339,12 +343,12 @@ TEST_F(Document, IncorporateUpdaterResultResetsDirtyness)
     document.setDirtyIfDependencyIsMet(document.filePath());
     TranslationUnitUpdateResult result;
     result.reparseTimePoint = Clock::now();
-    result.needsToBeReparsedChangeTimePoint = document.isNeededReparseChangeTimePoint();
+    result.needsToBeReparsedChangeTimePoint = document.isDirtyTimeChangePoint();
     result.translationUnitId = document.translationUnit().id();
 
     document.incorporateUpdaterResult(result);
 
-    ASSERT_FALSE(document.isNeedingReparse());
+    ASSERT_FALSE(document.isDirty());
 }
 
 TEST_F(Document, IncorporateUpdaterResultDoesNotResetDirtynessIfItWasChanged)
@@ -357,7 +361,7 @@ TEST_F(Document, IncorporateUpdaterResultDoesNotResetDirtynessIfItWasChanged)
 
     document.incorporateUpdaterResult(result);
 
-    ASSERT_TRUE(document.isNeedingReparse());
+    ASSERT_TRUE(document.isDirty());
 }
 
 TEST_F(Document, IncorporateUpdaterResultUpdatesTranslationUnitsReparseTimePoint)

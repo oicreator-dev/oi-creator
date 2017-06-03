@@ -37,7 +37,7 @@ class QmlCppEngine : public DebuggerEngine
     Q_OBJECT
 
 public:
-    QmlCppEngine(const DebuggerRunParameters &sp, QStringList *errors);
+    QmlCppEngine(DebuggerEngine *cppEngine, bool useTerminal);
     ~QmlCppEngine() override;
 
     bool canDisplayTooltip() const override;
@@ -80,13 +80,11 @@ public:
 
     DebuggerEngine *cppEngine() override { return m_cppEngine; }
     DebuggerEngine *qmlEngine() const;
+    DebuggerEngine *activeEngine() override { return m_activeEngine; }
+    void setRunTool(DebuggerRunTool *runTool) override;
 
     void notifyEngineRemoteSetupFinished(const RemoteSetupResult &result) override;
-
-    void showMessage(const QString &msg, int channel = LogDebug,
-        int timeout = -1) const override;
     void resetLocation() override;
-
     void notifyInferiorIll() override;
 
 protected:
@@ -134,9 +132,9 @@ private:
     void setActiveEngine(DebuggerEngine *engine);
 
 private:
-    QmlEngine *m_qmlEngine;
-    DebuggerEngine *m_cppEngine;
-    DebuggerEngine *m_activeEngine;
+    QPointer<QmlEngine> m_qmlEngine;
+    QPointer<DebuggerEngine> m_cppEngine;
+    QPointer<DebuggerEngine> m_activeEngine;
 };
 
 } // namespace Internal
