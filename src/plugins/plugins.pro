@@ -55,7 +55,8 @@ SUBDIRS   = \
     updateinfo \
 #    scxmleditor \
 #    welcome \
-    silversearcher
+    silversearcher \
+    lmakeprojectmanger
 
 qtHaveModule(quick) {
     #SUBDIRS += qmlprofiler
