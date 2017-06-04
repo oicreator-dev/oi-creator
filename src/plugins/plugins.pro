@@ -20,14 +20,14 @@ SUBDIRS   = \
 #    cvs \
     cpptools \
     qtsupport \
-    qmakeprojectmanager \
+#    qmakeprojectmanager \
     debugger \
     cpaster \
-    cmakeprojectmanager \
+#    cmakeprojectmanager \
     autotoolsprojectmanager \
     fakevim \
     emacskeys \
-    resourceeditor \
+#    resourceeditor \
     genericprojectmanager \
 #    qmljseditor \
 #    qmlprojectmanager \
@@ -57,6 +57,11 @@ SUBDIRS   = \
 #    welcome \
     silversearcher \
     lmakeprojectmanager
+
+!isEmpty(NoRemoveQmakeProjectManager) {
+    SUBDIRS+=qmakeprojectmanager
+}
+
 
 qtHaveModule(quick) {
     #SUBDIRS += qmlprofiler
@@ -125,3 +130,5 @@ for(p, SUBDIRS) {
 linux-* {
      SUBDIRS += debugger/ptracepreload.pro
 }
+
+
