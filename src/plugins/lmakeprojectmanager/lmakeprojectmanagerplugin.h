@@ -7,6 +7,9 @@
 class LmakeProjectManagerPlugin : public ExtensionSystem::IPlugin
 {
     Q_OBJECT
+	Q_PLUGIN_METADATA(IID "org.qt-project.Qt.QtCreatorPlugin" FILE "LmakeProjectManager.json")
+public:
+    bool initialize(const QStringList &arguments, QString *errorMessage) override;
 public:
     LmakeProjectManagerPlugin();
 };

@@ -1,0 +1,9 @@
+{
+    \"Name\" : \"LmakeProjectManager\",
+    \"Version\" : \"$$QTCREATOR_VERSION\",
+    \"CompatVersion\" : \"$$QTCREATOR_COMPAT_VERSION\",
+    \"Category\" : \"Build Systems\",
+    \"Description\" : \"Provides project type for Qt/QMake .pro files and tools.\",
+    $$dependencyList,
+    \"
+}
