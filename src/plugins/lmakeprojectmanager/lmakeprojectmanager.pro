@@ -4,7 +4,9 @@ DEFINES += \
     LMAKEPROJECTMANAGER_LIBRARY
 
 HEADERS += \
-    lmakeprojectmanagerplugin.h
+    lmakeprojectmanagerplugin.h \
+    lmakeprojectmanager.h
 
 SOURCES += \
-    lmakeprojectmanagerplugin.cpp
+    lmakeprojectmanagerplugin.cpp \
+    lmakeprojectmanager.cpp
