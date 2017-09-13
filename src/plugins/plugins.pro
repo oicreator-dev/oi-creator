@@ -20,14 +20,14 @@ SUBDIRS   = \
 #    cvs \
     cpptools \
     qtsupport \
-#    qmakeprojectmanager \
+    qmakeprojectmanager \
     debugger \
     cpaster \
 #    cmakeprojectmanager \
     autotoolsprojectmanager \
     fakevim \
     emacskeys \
-#    resourceeditor \
+    resourceeditor \
     genericprojectmanager \
 #    qmljseditor \
 #    qmlprojectmanager \

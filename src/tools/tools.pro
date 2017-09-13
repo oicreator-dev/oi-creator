@@ -26,8 +26,8 @@ exists($$LLVM_INSTALL_DIR) {
 
     QTC_NO_CLANG_LIBTOOLING=$$(QTC_NO_CLANG_LIBTOOLING)
     isEmpty(QTC_NO_CLANG_LIBTOOLING) {
-        SUBDIRS += clangrefactoringbackend
-        SUBDIRS += clangpchmanagerbackend
+        #SUBDIRS += clangrefactoringbackend
+        #SUBDIRS += clangpchmanagerbackend
     } else {
         warning("Building the Clang refactoring back end and the pch manager plugins are disabled.")
     }
