@@ -11,6 +11,8 @@ class LmakeManager : public QObject
 public:
     explicit LmakeManager(QObject *parent = 0);
 
+    void runLMake();
+
 signals:
 
 public slots:

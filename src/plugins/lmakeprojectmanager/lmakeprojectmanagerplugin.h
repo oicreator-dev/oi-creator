@@ -1,10 +1,10 @@
-#ifndef LMAKEPROJECTMANAGERPLUGIN_H
-#define LMAKEPROJECTMANAGERPLUGIN_H
+#pragma once
 
 #include <extensionsystem/iplugin.h>
 #include <coreplugin/icontext.h>
 namespace LmakeProjectManager
 {
+class LmakeManager;
 class LmakeProjectManagerPlugin : public ExtensionSystem::IPlugin
 {
     Q_OBJECT
@@ -14,7 +14,9 @@ public:
     void extensionsInitialized() override;
 public:
     LmakeProjectManagerPlugin();
+private:
+    QAction *m_runLMakeAction=nullptr;
+    LmakeManager *m_lmakeProjectManager=nullptr;
 };
 }
 
-#endif // LMAKEPROJECTMANAGERPLUGIN_H
