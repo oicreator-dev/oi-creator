@@ -58,7 +58,7 @@ void ClangStaticAnalyzerUnitTests::initTestCase()
     if (!toolchain)
         QSKIP("This test requires that there is a kit with a toolchain.");
     bool hasClangExecutable;
-    clangExecutableFromSettings(toolchain->typeId(), &hasClangExecutable);
+    clangExecutableFromSettings(&hasClangExecutable);
     if (!hasClangExecutable)
         QSKIP("No clang suitable for analyzing found");
 
@@ -75,6 +75,13 @@ void ClangStaticAnalyzerUnitTests::testProject()
 {
     QFETCH(QString, projectFilePath);
     QFETCH(int, expectedDiagCount);
+    if (projectFilePath.contains("mingw")) {
+        const ToolChain * const toolchain
+                = ToolChainKitInformation::toolChain(KitManager::kits().first(),
+                                                     Constants::CXX_LANGUAGE_ID);
+        if (toolchain->typeId() != ProjectExplorer::Constants::MINGW_TOOLCHAIN_TYPEID)
+            QSKIP("This test is mingw specific, does not run for other toolchais");
+    }
 
     CppTools::Tests::ProjectOpenerAndCloser projectManager;
     const CppTools::ProjectInfo projectInfo = projectManager.open(projectFilePath, true);
@@ -107,6 +114,9 @@ void ClangStaticAnalyzerUnitTests::testProject_data()
 
     addTestRow("qt-essential-includes/qt-essential-includes.qbs", 0);
     addTestRow("qt-essential-includes/qt-essential-includes.pro", 0);
+
+    addTestRow("mingw-includes/mingw-includes.qbs", 0);
+    addTestRow("mingw-includes/mingw-includes.pro", 0);
 }
 
 void ClangStaticAnalyzerUnitTests::addTestRow(const QByteArray &relativeFilePath,

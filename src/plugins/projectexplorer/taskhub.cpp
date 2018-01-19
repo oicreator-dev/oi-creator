@@ -28,8 +28,12 @@
 
 #include <coreplugin/coreicons.h>
 #include <coreplugin/ioutputpane.h>
+#include <texteditor/textmark.h>
 #include <utils/qtcassert.h>
 #include <utils/theme/theme.h>
+#include <utils/utilsicons.h>
+
+#include <QApplication>
 
 namespace ProjectExplorer {
 
@@ -55,12 +59,19 @@ static Core::Id categoryForType(Task::TaskType type)
 class TaskMark : public TextEditor::TextMark
 {
 public:
-    TaskMark(unsigned int id, const QString &fileName, int lineNumber,
-             Task::TaskType type, bool visible) :
-        TextMark(fileName, lineNumber, categoryForType(type)),
-        m_id(id)
+    TaskMark(const Task &task) :
+        TextMark(task.file.toString(), task.line, categoryForType(task.type)),
+        m_id(task.taskId)
     {
-        setVisible(visible);
+        setColor(task.type == Task::Error ? Utils::Theme::ProjectExplorer_TaskError_TextMarkColor
+                                          : Utils::Theme::ProjectExplorer_TaskWarn_TextMarkColor);
+        setDefaultToolTip(task.type == Task::Error ? QApplication::translate("TaskHub", "Error")
+                                                   : QApplication::translate("TaskHub", "Warning"));
+        setPriority(task.type == Task::Error ? TextEditor::TextMark::NormalPriority
+                                             : TextEditor::TextMark::LowPriority);
+        setToolTip(task.description);
+        setIcon(task.icon);
+        setVisible(!task.icon.isNull());
     }
 
     bool isClickable() const;
@@ -105,12 +116,6 @@ TaskHub::TaskHub()
     m_instance = this;
     qRegisterMetaType<ProjectExplorer::Task>("ProjectExplorer::Task");
     qRegisterMetaType<QList<ProjectExplorer::Task> >("QList<ProjectExplorer::Task>");
-    TaskMark::setCategoryColor(TASK_MARK_ERROR,
-                               Utils::Theme::ProjectExplorer_TaskError_TextMarkColor);
-    TaskMark::setCategoryColor(TASK_MARK_WARNING,
-                               Utils::Theme::ProjectExplorer_TaskWarn_TextMarkColor);
-    TaskMark::setDefaultToolTip(TASK_MARK_ERROR, tr("Error"));
-    TaskMark::setDefaultToolTip(TASK_MARK_WARNING, tr("Warning"));
 }
 
 TaskHub::~TaskHub()
@@ -147,13 +152,8 @@ void TaskHub::addTask(Task task)
         task.line = -1;
     task.movedLine = task.line;
 
-    if (task.line != -1) {
-        auto mark = new TaskMark(task.taskId, task.file.toString(), task.line, task.type, !task.icon.isNull());
-        mark->setIcon(task.icon);
-        mark->setPriority(TextEditor::TextMark::LowPriority);
-        mark->setToolTip(task.description);
-        task.setMark(mark);
-    }
+    if (task.line != -1)
+        task.setMark(new TaskMark(task));
     emit m_instance->taskAdded(task);
 }
 

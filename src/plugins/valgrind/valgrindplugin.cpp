@@ -28,7 +28,6 @@
 
 #include "callgrindtool.h"
 #include "memchecktool.h"
-#include "valgrindruncontrolfactory.h"
 #include "valgrindsettings.h"
 #include "valgrindconfigwidget.h"
 
@@ -40,6 +39,7 @@
 #include <coreplugin/dialogs/ioptionspage.h>
 #include <coreplugin/icontext.h>
 #include <coreplugin/icore.h>
+#include <debugger/analyzer/analyzerrunconfigwidget.h>
 
 #include <projectexplorer/projectexplorer.h>
 
@@ -88,6 +88,23 @@ private:
     QPointer<QWidget> m_widget;
 };
 
+class ValgrindRunConfigurationAspect : public IRunConfigurationAspect
+{
+public:
+    ValgrindRunConfigurationAspect(RunConfiguration *parent)
+        : IRunConfigurationAspect(parent)
+    {
+        setProjectSettings(new ValgrindProjectSettings());
+        setGlobalSettings(ValgrindPlugin::globalSettings());
+        setId(ANALYZER_VALGRIND_SETTINGS);
+        setDisplayName(QCoreApplication::translate("Valgrind::Internal::ValgrindRunConfigurationAspect",
+                                                   "Valgrind Settings"));
+        setUsingGlobalSettings(true);
+        resetProjectToGlobalSettings();
+        setRunConfigWidgetCreator([this] { return new Debugger::AnalyzerRunConfigWidget(this); });
+    }
+};
+
 ValgrindPlugin::~ValgrindPlugin()
 {
     delete theGlobalSettings;
@@ -100,6 +117,8 @@ bool ValgrindPlugin::initialize(const QStringList &, QString *)
     theGlobalSettings->readSettings();
 
     addAutoReleasedObject(new ValgrindOptionsPage);
+
+    RunConfiguration::registerAspect<ValgrindRunConfigurationAspect>();
 
     return true;
 }

@@ -1,11 +1,18 @@
 !isEmpty(QTCREATOR_PRI_INCLUDED):error("qtcreator.pri already included")
 QTCREATOR_PRI_INCLUDED = 1
 
-QTCREATOR_VERSION = 4.3.82
-QTCREATOR_COMPAT_VERSION = 4.3.82
+QTCREATOR_VERSION = 4.6.82
+QTCREATOR_COMPAT_VERSION = 4.6.82
 VERSION = $$QTCREATOR_VERSION
-QTCREATOR_DISPLAY_VERSION = 4.4.0-beta1
+QTCREATOR_DISPLAY_VERSION = 4.7.0-beta1
+QTCREATOR_COPYRIGHT_YEAR = 2017
 BINARY_ARTIFACTS_BRANCH = master
+
+isEmpty(IDE_DISPLAY_NAME):           IDE_DISPLAY_NAME = Qt Creator
+isEmpty(IDE_ID):                     IDE_ID = qtcreator
+isEmpty(IDE_CASED_ID):               IDE_CASED_ID = QtCreator
+
+isEmpty(PRODUCT_BUNDLE_IDENTIFIER): PRODUCT_BUNDLE_IDENTIFIER = org.qt-project.$$IDE_ID
 
 CONFIG += c++14
 
@@ -59,7 +66,7 @@ defineReplace(stripSrcDir) {
     return($$relative_path($$absolute_path($$1, $$OUT_PWD), $$_PRO_FILE_PWD_))
 }
 
-macos:!minQtVersion(5, 7, 0) {
+darwin:!minQtVersion(5, 7, 0) {
     # Qt 5.6 still sets deployment target 10.7, which does not work
     # with all C++11/14 features (e.g. std::future)
     QMAKE_MACOSX_DEPLOYMENT_TARGET = 10.8
@@ -95,7 +102,7 @@ isEmpty(IDE_BUILD_TREE) {
 
 IDE_APP_PATH = $$IDE_BUILD_TREE/bin
 osx {
-    IDE_APP_TARGET   = "Qt Creator"
+    IDE_APP_TARGET   = "$$IDE_DISPLAY_NAME"
 
     # check if IDE_BUILD_TREE is actually an existing Qt Creator.app,
     # for building against a binary package
@@ -125,7 +132,7 @@ osx {
     INSTALL_APP_PATH     = $$QTC_PREFIX/
 } else {
     contains(TEMPLATE, vc.*):vcproj = 1
-    IDE_APP_TARGET   = qtcreator
+    IDE_APP_TARGET   = $$IDE_ID
 
     # target output path if not set manually
     isEmpty(IDE_OUTPUT_PATH): IDE_OUTPUT_PATH = $$IDE_BUILD_TREE
@@ -155,6 +162,8 @@ osx {
     INSTALL_BIN_PATH     = $$QTC_PREFIX/bin
     INSTALL_APP_PATH     = $$QTC_PREFIX/bin
 }
+
+gcc:!clang: QMAKE_CXXFLAGS += -Wno-noexcept-type
 
 RELATIVE_PLUGIN_PATH = $$relative_path($$IDE_PLUGIN_PATH, $$IDE_BIN_PATH)
 RELATIVE_LIBEXEC_PATH = $$relative_path($$IDE_LIBEXEC_PATH, $$IDE_BIN_PATH)

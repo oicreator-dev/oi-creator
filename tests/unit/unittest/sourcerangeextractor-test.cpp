@@ -24,27 +24,22 @@
 ****************************************************************************/
 
 #include "googletest.h"
+#include "sourcerangecontainer-matcher.h"
 #include "testclangtool.h"
 
+#include <refactoringdatabaseinitializer.h>
 #include <sourcerangeextractor.h>
 #include <sourcerangescontainer.h>
+#include <filepathcaching.h>
 
-#if defined(__GNUC__)
-#    pragma GCC diagnostic push
-#    pragma GCC diagnostic ignored "-Wunused-parameter"
-#elif defined(_MSC_VER)
-#    pragma warning(push)
-#    pragma warning( disable : 4100 )
-#endif
+#include <sqlitedatabase.h>
 
 #include <clang/Basic/SourceManager.h>
 #include <clang/Lex/Lexer.h>
 
-#if defined(__GNUC__)
-#    pragma GCC diagnostic pop
-#elif defined(_MSC_VER)
-#    pragma warning(pop)
-#endif
+#include <QDir>
+
+#include <mutex>
 
 using testing::Contains;
 using ::testing::Eq;
@@ -65,7 +60,10 @@ protected:
     TestClangTool clangTool{TESTDATA_DIR, "sourcerangeextractor_location.cpp", "",  {"cc", "sourcerangeextractor_location.cpp"}};
     ClangBackEnd::SourceRangesContainer sourceRangesContainer;
     const clang::SourceManager &sourceManager{clangTool.sourceManager()};
-    ClangBackEnd::SourceRangeExtractor extractor{sourceManager, clangTool.languageOptions(), sourceRangesContainer};
+    Sqlite::Database database{":memory:", Sqlite::JournalMode::Memory};
+    ClangBackEnd::RefactoringDatabaseInitializer<Sqlite::Database> databaseInitializer{database};
+    ClangBackEnd::FilePathCaching filePathCache{database};
+    ClangBackEnd::SourceRangeExtractor extractor{sourceManager, clangTool.languageOptions(), filePathCache, sourceRangesContainer};
     clang::SourceLocation startLocation = sourceManager.getLocForStartOfFile(sourceManager.getMainFileID());
     clang::SourceLocation endLocation = sourceManager.getLocForStartOfFile(sourceManager.getMainFileID()).getLocWithOffset(4);
     clang::SourceRange sourceRange{startLocation, endLocation};
@@ -76,11 +74,12 @@ using SourceRangeExtractorSlowTest = SourceRangeExtractor;
 
 TEST_F(SourceRangeExtractorSlowTest, ExtractSourceRangeContainer)
 {
-    SourceRangeWithTextContainer sourceRangeContainer{1, 1, 1, 0, 1, 10, 9, Utils::SmallString("int value;")};
+    SourceRangeWithTextContainer sourceRangeContainer{{1, 1}, 1, 1, 0, 1, 10, 9, Utils::SmallString("int value;")};
 
     extractor.addSourceRange(sourceRange);
 
-    ASSERT_THAT(extractor.sourceRangeWithTextContainers(), Contains(sourceRangeContainer));
+    ASSERT_THAT(extractor.sourceRangeWithTextContainers(),
+                Contains(IsSourceRangeWithText(1, 1, 1, 10, "int value;")));
 }
 
 TEST_F(SourceRangeExtractorSlowTest, ExtendedSourceRange)
@@ -177,7 +176,7 @@ TEST_F(SourceRangeExtractorSlowTest, EpandText)
 
     auto expandedText = ::SourceRangeExtractor::getExpandedText(text, 15, 25);
 
-    ASSERT_THAT(expandedText, StrEq("second line\nthird line"));
+    ASSERT_THAT(expandedText, Eq("second line\nthird line"));
 }
 
 void SourceRangeExtractor::SetUp()

@@ -61,6 +61,8 @@ static QIcon testResultIcon(Result::Type result) {
         Icons::RESULT_MESSAGEWARN.icon(),
         Icons::RESULT_MESSAGEFATAL.icon(),
         Icons::RESULT_MESSAGEFATAL.icon(), // System gets same handling as Fatal for now
+        Icons::RESULT_MESSAGEPASSWARN.icon(),
+        Icons::RESULT_MESSAGEFAILWARN.icon(),
     }; // provide an icon for unknown??
 
     if (result < 0 || result >= Result::MessageInternal) {
@@ -69,8 +71,10 @@ static QIcon testResultIcon(Result::Type result) {
             return icons[Result::Pass];
         case Result::MessageTestCaseFail:
             return icons[Result::Fail];
-        case Result::MessageTestCaseWarn:
-            return icons[Result::MessageWarn];
+        case Result::MessageTestCaseSuccessWarn:
+            return icons[13];
+        case Result::MessageTestCaseFailWarn:
+            return icons[14];
         default:
             return QIcon();
         }
@@ -97,44 +101,48 @@ void TestResultItem::updateDescription(const QString &description)
     m_testResult->setDescription(description);
 }
 
-void TestResultItem::updateResult()
+void TestResultItem::updateResult(bool &changed, Result::Type addedChildType)
 {
-    if (!TestResult::isMessageCaseStart(m_testResult->result()))
+    changed = false;
+    const Result::Type old = m_testResult->result();
+    if (old == Result::MessageTestCaseFailWarn) // can't become worse
+        return;
+    if (!TestResult::isMessageCaseStart(old))
         return;
 
     Result::Type newResult = Result::MessageTestCaseSuccess;
-    for (Utils::TreeItem *child : *this) {
-        const TestResult *current = static_cast<TestResultItem *>(child)->testResult();
-        if (current) {
-            switch (current->result()) {
-            case Result::Fail:
-            case Result::MessageFatal:
-            case Result::UnexpectedPass:
-            case Result::MessageTestCaseFail:
-                m_testResult->setResult(Result::MessageTestCaseFail);
-                return;
-            case Result::ExpectedFail:
-            case Result::MessageWarn:
-            case Result::Skip:
-            case Result::BlacklistedFail:
-            case Result::BlacklistedPass:
-            case Result::MessageTestCaseWarn:
-                newResult = Result::MessageTestCaseWarn;
-                break;
-            default: {}
-            }
-        }
+    switch (addedChildType) {
+    case Result::Fail:
+    case Result::MessageFatal:
+    case Result::MessageSystem:
+    case Result::UnexpectedPass:
+    case Result::MessageTestCaseFail:
+        newResult = (old == Result::MessageTestCaseSuccessWarn) ? Result::MessageTestCaseFailWarn
+                                                                : Result::MessageTestCaseFail;
+        break;
+    case Result::MessageTestCaseFailWarn:
+        newResult = Result::MessageTestCaseFailWarn;
+        break;
+    case Result::ExpectedFail:
+    case Result::MessageWarn:
+    case Result::Skip:
+    case Result::BlacklistedFail:
+    case Result::BlacklistedPass:
+    case Result::MessageTestCaseSuccessWarn:
+        newResult = (old == Result::MessageTestCaseFail) ? Result::MessageTestCaseFailWarn
+                                                         : Result::MessageTestCaseSuccessWarn;
+        break;
+    case Result::Pass:
+    case Result::MessageTestCaseSuccess:
+        newResult = (old == Result::MessageIntermediate || old == Result::MessageTestCaseStart)
+                ? Result::MessageTestCaseSuccess : old;
+        break;
+    default:
+        return;
     }
-    m_testResult->setResult(newResult);
-}
-
-void TestResultItem::updateIntermediateChildren()
-{
-    for (Utils::TreeItem *child : *this) {
-        TestResultItem *childItem = static_cast<TestResultItem *>(child);
-        if (childItem->testResult()->result() == Result::MessageIntermediate)
-            childItem->updateResult();
-    }
+    changed = old != newResult;
+    if (changed)
+        m_testResult->setResult(newResult);
 }
 
 TestResultItem *TestResultItem::intermediateFor(const TestResultItem *item) const
@@ -169,6 +177,22 @@ TestResultModel::TestResultModel(QObject *parent)
 {
 }
 
+void TestResultModel::updateParent(const TestResultItem *item)
+{
+    QTC_ASSERT(item, return);
+    QTC_ASSERT(item->testResult(), return);
+    Utils::TreeItem *parentItem = item->parent();
+    if (parentItem == rootItem()) // do not update invisible root item
+        return;
+    bool changed = false;
+    TestResultItem *parentResultItem = static_cast<TestResultItem *>(parentItem);
+    parentResultItem->updateResult(changed, item->testResult()->result());
+    if (!changed)
+        return;
+    emit dataChanged(parentItem->index(), parentItem->index());
+    updateParent(parentResultItem);
+}
+
 void TestResultModel::addTestResult(const TestResultPtr &testResult, bool autoExpand)
 {
     const int lastRow = rootItem()->childCount() - 1;
@@ -199,15 +223,7 @@ void TestResultModel::addTestResult(const TestResultPtr &testResult, bool autoEx
         parentItem->appendChild(newItem);
         if (autoExpand)
             parentItem->expand();
-        if (testResult->result() == Result::MessageTestCaseEnd) {
-            if (parentItem->childCount()) {
-                parentItem->updateIntermediateChildren();
-                emit dataChanged(parentItem->firstChild()->index(),
-                                 parentItem->lastChild()->index());
-            }
-            parentItem->updateResult();
-            emit dataChanged(parentItem->index(), parentItem->index());
-        }
+        updateParent(newItem);
     } else {
         if (lastRow >= 0) {
             TestResultItem *current = static_cast<TestResultItem *>(rootItem()->childAt(lastRow));
@@ -295,11 +311,13 @@ TestResultItem *TestResultModel::findParentItemFor(const TestResultItem *item,
     TestResultItem *root = startItem ? const_cast<TestResultItem *>(startItem) : nullptr;
     const TestResult *result = item->testResult();
     const QString &name = result->name();
+    const QString &executable = result->executable();
 
     if (root == nullptr && !name.isEmpty()) {
         for (int row = rootItem()->childCount() - 1; row >= 0; --row) {
             TestResultItem *tmp = static_cast<TestResultItem *>(rootItem()->childAt(row));
-            if (tmp->testResult()->name() == name) {
+            auto tmpTestResult = tmp->testResult();
+            if (tmpTestResult->executable() == executable && tmpTestResult->name() == name) {
                 root = tmp;
                 break;
             }
@@ -313,7 +331,7 @@ TestResultItem *TestResultModel::findParentItemFor(const TestResultItem *item,
         TestResultItem *currentItem = static_cast<TestResultItem *>(it);
         return currentItem->testResult()->isDirectParentOf(result, &needsIntermediate);
     };
-    TestResultItem *parent = static_cast<TestResultItem *>(root->findAnyChild(predicate));
+    TestResultItem *parent = static_cast<TestResultItem *>(root->reverseFindAnyChild(predicate));
     if (parent) {
         if (needsIntermediate) {
             // check if the intermediate is present already
@@ -344,8 +362,9 @@ void TestResultFilterModel::enableAllResultTypes()
               << Result::MessageFatal << Result::Invalid << Result::BlacklistedPass
               << Result::BlacklistedFail << Result::Benchmark << Result::MessageIntermediate
               << Result::MessageCurrentTest << Result::MessageTestCaseStart
-              << Result::MessageTestCaseSuccess << Result::MessageTestCaseWarn
-              << Result::MessageTestCaseFail << Result::MessageTestCaseEnd
+              << Result::MessageTestCaseSuccess << Result::MessageTestCaseSuccessWarn
+              << Result::MessageTestCaseFail << Result::MessageTestCaseFailWarn
+              << Result::MessageTestCaseEnd
               << Result::MessageInfo << Result::MessageSystem;
     invalidateFilter();
 }
@@ -393,7 +412,8 @@ bool TestResultFilterModel::filterAcceptsRow(int sourceRow, const QModelIndex &s
     case Result::MessageTestCaseSuccess:
         return m_enabled.contains(Result::Pass);
     case Result::MessageTestCaseFail:
-    case Result::MessageTestCaseWarn:
+    case Result::MessageTestCaseSuccessWarn:
+    case Result::MessageTestCaseFailWarn:
         return acceptTestCaseResult(index);
     default:
         return m_enabled.contains(resultType);
@@ -407,7 +427,8 @@ bool TestResultFilterModel::acceptTestCaseResult(const QModelIndex &srcIndex) co
         Result::Type type = m_sourceModel->testResult(child)->result();
         if (type == Result::MessageTestCaseSuccess)
             type = Result::Pass;
-        if (type == Result::MessageTestCaseFail || type == Result::MessageTestCaseWarn) {
+        if (type == Result::MessageTestCaseFail || type == Result::MessageTestCaseFailWarn
+                || type == Result::MessageTestCaseSuccessWarn) {
             if (acceptTestCaseResult(child))
                 return true;
         } else if (m_enabled.contains(type)) {

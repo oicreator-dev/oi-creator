@@ -37,6 +37,8 @@
 #endif // Q_CC_MSVC
 #endif // Q_OS_WIN
 
+#include <utils/asconst.h>
+
 #include <QtTest>
 #include <math.h>
 
@@ -58,7 +60,7 @@ static bool generateEnvironmentSettings(Utils::Environment &env,
     // Note, can't just use a QTemporaryFile all the way through as it remains open
     // internally so it can't be streamed to later.
     QString tempOutFile;
-    QTemporaryFile* pVarsTempFile = new QTemporaryFile(QDir::tempPath() + QLatin1String("/XXXXXX.txt"));
+    QTemporaryFile* pVarsTempFile = new QTemporaryFile(QDir::tempPath() + "/XXXXXX.txt");
     pVarsTempFile->setAutoRemove(false);
     pVarsTempFile->open();
     pVarsTempFile->close();
@@ -66,7 +68,7 @@ static bool generateEnvironmentSettings(Utils::Environment &env,
     delete pVarsTempFile;
 
     // Create a batch file to create and save the env settings
-    Utils::TempFileSaver saver(QDir::tempPath() + QLatin1String("/XXXXXX.bat"));
+    Utils::TempFileSaver saver(QDir::tempPath() + "/XXXXXX.bat");
 
     QByteArray call = "call ";
     call += Utils::QtcProcess::quoteArg(batchFile).toLocal8Bit();
@@ -88,13 +90,11 @@ static bool generateEnvironmentSettings(Utils::Environment &env,
     // As of WinSDK 7.1, there is logic preventing the path from being set
     // correctly if "ORIGINALPATH" is already set. That can cause problems
     // if Creator is launched within a session set up by setenv.cmd.
-    env.unset(QLatin1String("ORIGINALPATH"));
+    env.unset("ORIGINALPATH");
     run.setEnvironment(env);
     const QString cmdPath = QString::fromLocal8Bit(qgetenv("COMSPEC"));
     // Windows SDK setup scripts require command line switches for environment expansion.
-    QString cmdArguments = QLatin1String(" /E:ON /V:ON /c \"");
-    cmdArguments += QDir::toNativeSeparators(saver.fileName());
-    cmdArguments += QLatin1Char('"');
+    QString cmdArguments = " /E:ON /V:ON /c \"" + QDir::toNativeSeparators(saver.fileName()) + '"';
     run.setCommand(cmdPath, cmdArguments);
     run.start();
 
@@ -119,7 +119,7 @@ static bool generateEnvironmentSettings(Utils::Environment &env,
     if (!varsFile.open(QIODevice::ReadOnly))
         return false;
 
-    QRegExp regexp(QLatin1String("(\\w*)=(.*)"));
+    QRegExp regexp("(\\w*)=(.*)");
     while (!varsFile.atEnd()) {
         const QString line = QString::fromLocal8Bit(varsFile.readLine()).trimmed();
         if (regexp.exactMatch(line)) {
@@ -282,7 +282,7 @@ static QString parentIName(const QString &iname)
 struct Value
 {
     Value() : value(noValue) {}
-    Value(const char *str) : value(QLatin1String(str)) {}
+    Value(const char *str) : value(str) {}
     Value(const QString &str) : value(str) {}
 
     bool matches(const QString &actualValue0, const Context &context) const
@@ -671,6 +671,7 @@ struct ForceC {};
 struct EigenProfile {};
 struct UseDebugImage {};
 struct DwarfProfile { explicit DwarfProfile(int v) : version(v) {} int version; };
+struct CoreFoundationProfile {};
 
 struct CoreProfile {};
 struct CorePrivateProfile {};
@@ -903,6 +904,19 @@ public:
         return *this;
     }
 
+    const Data &operator+(const CoreFoundationProfile &) const
+    {
+        profileExtra +=
+            "CXX_FLAGS += -g -O0\n"
+            "LIBS += -framework CoreFoundation -framework Foundation\n"
+            "CONFIG -= app_bundle qt\n";
+
+        useQt = false;
+        useQHash = false;
+        mainFile = "main.mm";
+        return *this;
+    }
+
     const Data &operator+(const ForceC &) const
     {
         mainFile = "main.c";
@@ -945,11 +959,10 @@ public:
 
 struct TempStuff
 {
-    TempStuff(const char *tag) : buildTemp(QLatin1String("qt_tst_dumpers_")
-                                           + QLatin1String(tag)
-                                           + QLatin1Char('_'))
+    TempStuff(const char *tag)
+        : buildTemp(QDir::currentPath() + "/qt_tst_dumpers_" + tag + "_XXXXXX")
     {
-        buildPath = QDir::currentPath() + QLatin1Char('/')  + buildTemp.path();
+        buildPath = buildTemp.path();
         buildTemp.setAutoRemove(false);
         QVERIFY(!buildPath.isEmpty());
     }
@@ -1016,7 +1029,7 @@ void tst_Dumpers::initTestCase()
     if (base.startsWith("lldb"))
         m_debuggerEngine = LldbEngine;
 
-    m_qmakeBinary = QString::fromLocal8Bit(qgetenv("QTC_QMAKE_PATH_FOR_TEST"));
+    m_qmakeBinary = QDir::fromNativeSeparators(QString::fromLocal8Bit(qgetenv("QTC_QMAKE_PATH_FOR_TEST")));
     if (m_qmakeBinary.isEmpty())
         m_qmakeBinary = "qmake";
     qDebug() << "QMake              : " << m_qmakeBinary;
@@ -1029,13 +1042,13 @@ void tst_Dumpers::initTestCase()
 
     if (m_debuggerEngine == GdbEngine) {
         QProcess debugger;
-        debugger.start(m_debuggerBinary + " -i mi -quiet -nx");
+        debugger.start(m_debuggerBinary, {"-i", "mi", "-quiet", "-nx"});
         bool ok = debugger.waitForStarted();
         debugger.write("set confirm off\npython print 43\nshow version\nquit\n");
         ok = debugger.waitForFinished();
         QVERIFY(ok);
         QByteArray output = debugger.readAllStandardOutput();
-        //qDebug() << "stdout: " << output;
+        //qDebug().noquote() << "stdout: " << output;
         bool usePython = !output.contains("Python scripting is not supported in this copy of GDB");
         qDebug() << "Python             : " << (usePython ? "ok" : "*** not ok ***");
         qDebug() << "Dumper dir         : " << DUMPERDIR;
@@ -1051,18 +1064,19 @@ void tst_Dumpers::initTestCase()
         version = version.mid(pos1, pos2 - pos1);
         extractGdbVersion(version, &m_debuggerVersion,
             &m_gdbBuildVersion, &m_isMacGdb, &m_isQnxGdb);
-        m_env = QProcessEnvironment::systemEnvironment();
-        m_makeBinary = QString::fromLocal8Bit(qgetenv("QTC_MAKE_PATH_FOR_TEST"));
+        m_makeBinary = QDir::fromNativeSeparators(QString::fromLocal8Bit(qgetenv("QTC_MAKE_PATH_FOR_TEST")));
 #ifdef Q_OS_WIN
+        Utils::Environment env = Utils::Environment::systemEnvironment();
         if (m_makeBinary.isEmpty())
             m_makeBinary = "mingw32-make";
+        if (m_makeBinary != "mingw32-make")
+            env.prependOrSetPath(QDir::toNativeSeparators(QFileInfo(m_makeBinary).absolutePath()));
         // if qmake is not in PATH make sure the correct libs for inferior are prepended to PATH
-        if (m_qmakeBinary != "qmake") {
-            Utils::Environment env = Utils::Environment::systemEnvironment();
+        if (m_qmakeBinary != "qmake")
             env.prependOrSetPath(QDir::toNativeSeparators(QFileInfo(m_qmakeBinary).absolutePath()));
-            m_env = env.toProcessEnvironment();
-        }
+        m_env = env.toProcessEnvironment();
 #else
+        m_env = QProcessEnvironment::systemEnvironment();
         if (m_makeBinary.isEmpty())
             m_makeBinary = "make";
 #endif
@@ -1079,14 +1093,14 @@ void tst_Dumpers::initTestCase()
         QByteArray cdbextPath = qgetenv("QTC_CDBEXT_PATH");
         if (cdbextPath.isEmpty())
             cdbextPath = CDBEXT_PATH "\\qtcreatorcdbext64";
-        QVERIFY(QFile::exists(QString::fromLatin1(cdbextPath + QByteArray("\\qtcreatorcdbext.dll"))));
-        env.set(QLatin1String("_NT_DEBUGGER_EXTENSION_PATH"), QString::fromLatin1(cdbextPath));
+        QVERIFY(QFile::exists(cdbextPath + "\\qtcreatorcdbext.dll"));
+        env.set("_NT_DEBUGGER_EXTENSION_PATH", cdbextPath);
         env.prependOrSetPath(QDir::toNativeSeparators(QFileInfo(m_qmakeBinary).absolutePath()));
-        m_makeBinary = env.searchInPath(QLatin1String("nmake.exe")).toString();
+        m_makeBinary = env.searchInPath("nmake.exe").toString();
         m_env = env.toProcessEnvironment();
 
         QProcess cl;
-        cl.start(env.searchInPath(QLatin1String("cl.exe")).toString(), QStringList());
+        cl.start(env.searchInPath("cl.exe").toString(), QStringList());
         QVERIFY(cl.waitForFinished());
         QString output = cl.readAllStandardError();
         int pos = output.indexOf('\n');
@@ -1101,8 +1115,7 @@ void tst_Dumpers::initTestCase()
     } else if (m_debuggerEngine == LldbEngine) {
         qDebug() << "Dumper dir         : " << DUMPERDIR;
         QProcess debugger;
-        QString cmd = m_debuggerBinary + " -v";
-        debugger.start(cmd);
+        debugger.start(m_debuggerBinary, {"-v"});
         bool ok = debugger.waitForFinished(2000);
         QVERIFY(ok);
         QByteArray output = debugger.readAllStandardOutput();
@@ -1141,7 +1154,7 @@ void tst_Dumpers::init()
 void tst_Dumpers::cleanup()
 {
     if (!t->buildTemp.autoRemove()) {
-        QFile logger(t->buildPath + QLatin1String("/input.txt"));
+        QFile logger(t->buildPath + "/input.txt");
         logger.open(QIODevice::ReadWrite);
         logger.write(t->input.toUtf8());
     }
@@ -1173,22 +1186,20 @@ void tst_Dumpers::dumper()
                 + QByteArray::number(data.neededLldbVersion.max));
     }
 
-    QString cmd;
     QByteArray output;
     QByteArray error;
 
     if (data.neededQtVersion.isRestricted) {
         QProcess qmake;
         qmake.setWorkingDirectory(t->buildPath);
-        cmd = m_qmakeBinary;
-        qmake.start(cmd, QStringList(QLatin1String("--version")));
+        qmake.start(m_qmakeBinary, {"--version"});
         QVERIFY(qmake.waitForFinished());
         output = qmake.readAllStandardOutput();
         error = qmake.readAllStandardError();
         int pos0 = output.indexOf("Qt version");
         if (pos0 == -1) {
-            qDebug() << "Output: " << output;
-            qDebug() << "Error: " << error;
+            qDebug().noquote() << "Output: " << output;
+            qDebug().noquote() << "Error: " << error;
             QVERIFY(false);
         }
         pos0 += 11;
@@ -1211,8 +1222,7 @@ void tst_Dumpers::dumper()
     if (data.neededGccVersion.isRestricted) {
         QProcess gcc;
         gcc.setWorkingDirectory(t->buildPath);
-        cmd = QLatin1String("gcc");
-        gcc.start(cmd, QStringList(QLatin1String("--version")));
+        gcc.start("gcc", {"--version"});
         QVERIFY(gcc.waitForFinished());
         output = gcc.readAllStandardOutput();
         error = gcc.readAllStandardError();
@@ -1290,17 +1300,25 @@ void tst_Dumpers::dumper()
     }
     proFile.close();
 
-    QFile source(t->buildPath + QLatin1Char('/') + data.mainFile);
+    QFile source(t->buildPath + '/' + data.mainFile);
     QVERIFY(source.open(QIODevice::ReadWrite));
     QString fullCode = QString() +
-            "\n\n#if defined(_MSC_VER)" + (data.useQt ?
+            "\n\n#ifdef _WIN32" + (data.useQt ?
                 "\n#include <qt_windows.h>" :
-                "\n#define NOMINMAX\n#include <Windows.h>") +
+                "\n#define NOMINMAX\n#include <windows.h>") +
+            "\n#endif"
+            "\n#if defined(_MSC_VER)"
                 "\nvoid qtcDebugBreakFunction() { return; }"
                 "\n#define BREAK qtcDebugBreakFunction();"
                 "\n\nvoid unused(const void *first,...) { (void) first; }"
             "\n#else"
-                "\n#include <stdint.h>\n";
+                "\n#include <stdint.h>"
+                "\n#ifndef _WIN32"
+                    "\ntypedef char CHAR;"
+                    "\ntypedef char *PCHAR;"
+                    "\ntypedef wchar_t WCHAR;"
+                    "\ntypedef wchar_t *PWCHAR;"
+                "\n#endif\n";
 
     if (m_debuggerEngine == LldbEngine)
 //#ifdef Q_OS_MAC
@@ -1369,14 +1387,13 @@ void tst_Dumpers::dumper()
 
     QProcess qmake;
     qmake.setWorkingDirectory(t->buildPath);
-    cmd = m_qmakeBinary;
-    //qDebug() << "Starting qmake: " << cmd;
+    //qDebug() << "Starting qmake: " << m_qmakeBinary;
     QStringList options;
 #ifdef Q_OS_MAC
     if (m_qtVersion && m_qtVersion < 0x050000)
         options << "-spec" << "unsupported/macx-clang";
 #endif
-    qmake.start(cmd, options);
+    qmake.start(m_qmakeBinary, options);
     QVERIFY(qmake.waitForFinished());
     output = qmake.readAllStandardOutput();
     error = qmake.readAllStandardError();
@@ -1398,11 +1415,12 @@ void tst_Dumpers::dumper()
     error = make.readAllStandardError();
     //qDebug() << "stdout: " << output;
     if (make.exitCode()) {
-        qDebug() << error;
+        qDebug().noquote() << error;
         qDebug() << "\n------------------ CODE --------------------";
-        qDebug() << fullCode;
+        qDebug().noquote() << fullCode;
         qDebug() << "\n------------------ CODE --------------------";
-        qDebug() << "Project file: " << proFile.fileName();
+        qDebug().noquote() << "Project file: " << proFile.fileName();
+        QCOMPARE(make.exitCode(), 0);
     }
 
     if (data.neededDwarfVersion.isRestricted) {
@@ -1431,7 +1449,7 @@ void tst_Dumpers::dumper()
 
     QSet<QString> expandedINames;
     expandedINames.insert("local");
-    foreach (const Check &check, data.checks) {
+    for (const Check &check : Utils::asConst(data.checks)) {
         QString parent = check.iname;
         while (true) {
             parent = parentIName(parent);
@@ -1443,7 +1461,7 @@ void tst_Dumpers::dumper()
 
     QString expanded;
     QString expandedq;
-    foreach (const QString &iname, expandedINames) {
+    for (const QString &iname : Utils::asConst(expandedINames)) {
         if (!expanded.isEmpty()) {
             expanded.append(',');
             expandedq.append(',');
@@ -1492,14 +1510,15 @@ void tst_Dumpers::dumper()
         cmds += "quit\n";
 
     } else if (m_debuggerEngine == CdbEngine) {
-        args << QLatin1String("-aqtcreatorcdbext.dll")
-             << QLatin1String("-G")
-             << QLatin1String("-xn")
-             << QLatin1String("0x4000001f")
-             << QLatin1String("-c")
-             << QLatin1String("bm doit!qtcDebugBreakFunction;g")
-             << QLatin1String("debug\\doit.exe");
-        cmds += "!qtcreatorcdbext.script sys.path.insert(1, '" + dumperDir + "')\n"
+        args << "-aqtcreatorcdbext.dll"
+             << "-G"
+             << "-xn"
+             << "0x4000001f"
+             << "-c"
+             << "bm doit!qtcDebugBreakFunction;g"
+             << "debug\\doit.exe";
+        cmds += ".symopt+0x8000\n"
+                "!qtcreatorcdbext.script sys.path.insert(1, '" + dumperDir + "')\n"
                 "!qtcreatorcdbext.script from cdbbridge import *\n"
                 "!qtcreatorcdbext.script theDumper = Dumper()\n"
                 "!qtcreatorcdbext.script theDumper.setupDumpers()\n"
@@ -1512,7 +1531,7 @@ void tst_Dumpers::dumper()
                 "'expanded':[" + expandedq + "]})\n"
                 "q\n";
     } else if (m_debuggerEngine == LldbEngine) {
-        QFile fullLldb(t->buildPath + QLatin1String("/lldbcommand.txt"));
+        QFile fullLldb(t->buildPath + "/lldbcommand.txt");
         fullLldb.setPermissions(QFile::ReadOwner|QFile::WriteOwner|QFile::ExeOwner|QFile::ReadGroup|QFile::ReadOther);
         fullLldb.open(QIODevice::WriteOnly);
         fullLldb.write((exe + ' ' + args.join(' ') + '\n').toUtf8());
@@ -1554,7 +1573,7 @@ void tst_Dumpers::dumper()
         qDebug() << error;
 
     if (keepTemp()) {
-        QFile logger(t->buildPath + QLatin1String("/output.txt"));
+        QFile logger(t->buildPath + "/output.txt");
         logger.open(QIODevice::ReadWrite);
         logger.write("=== STDOUT ===\n");
         logger.write(output);
@@ -1568,7 +1587,7 @@ void tst_Dumpers::dumper()
     if (m_debuggerEngine == GdbEngine) {
         int posDataStart = output.indexOf("data=");
         if (posDataStart == -1) {
-            qDebug() << "NO \"data=\" IN OUTPUT: " << output;
+            qDebug().noquote() << "NO \"data=\" IN OUTPUT: " << output;
             QVERIFY(posDataStart != -1);
         }
         contents = output.mid(posDataStart);
@@ -1580,7 +1599,7 @@ void tst_Dumpers::dumper()
         //qDebug() << "FOUND NS: " << context.nameSpace;
 
     } else if (m_debuggerEngine == LldbEngine) {
-        //qDebug() << "GOT OUTPUT: " << output;
+        //qDebug().noquote() << "GOT OUTPUT: " << output;
         int pos = output.indexOf("data=[{");
         QVERIFY(pos != -1);
         output = output.mid(pos);
@@ -1588,7 +1607,7 @@ void tst_Dumpers::dumper()
 
         int posNameSpaceStart = output.indexOf("@NS@");
         if (posNameSpaceStart == -1)
-            qDebug() << "OUTPUT: " << output;
+            qDebug().noquote() << "OUTPUT: " << output;
         QVERIFY(posNameSpaceStart != -1);
         posNameSpaceStart += sizeof("@NS@") - 1;
         int posNameSpaceEnd = output.indexOf("@", posNameSpaceStart);
@@ -1604,7 +1623,7 @@ void tst_Dumpers::dumper()
         QByteArray locals("|script|");
         int localsBeginPos = output.indexOf(locals, output.indexOf(localsAnswerStart));
         if (localsBeginPos == -1)
-            qDebug() << "OUTPUT: " << output;
+            qDebug().noquote() << "OUTPUT: " << output;
         QVERIFY(localsBeginPos != -1);
         do {
             const int msgStart = localsBeginPos + locals.length();
@@ -1621,7 +1640,7 @@ void tst_Dumpers::dumper()
     WatchItem local;
     local.iname = "local";
 
-    foreach (const GdbMi &child, actual.children()) {
+    for (const GdbMi &child : Utils::asConst(actual.children())) {
         const QString iname = child["iname"].data();
         if (iname == "local.qtversion")
             context.qtVersion = child["value"].toInt();
@@ -1699,7 +1718,7 @@ void tst_Dumpers::dumper()
 
     if (!data.checks.isEmpty()) {
         qDebug() << "SOME TESTS NOT EXECUTED: ";
-        foreach (const Check &check, data.checks) {
+        for (const Check &check : Utils::asConst(data.checks)) {
             if (check.optionallyPresent) {
                 qDebug() << "  OPTIONAL TEST NOT FOUND FOR INAME: " << check.iname << " IGNORED.";
             } else {
@@ -1735,8 +1754,8 @@ void tst_Dumpers::dumper()
                 break;
             qDebug() << "MSG: " << fullOutput.mid(pos1, pos2 - pos1 - 1);
         }
-        qDebug() << "CONTENTS     : " << contents;
-        qDebug() << "FULL OUTPUT  : " << fullOutput.data();
+        qDebug().noquote() << "CONTENTS     : " << contents;
+        qDebug().noquote() << "FULL OUTPUT  : " << fullOutput.data();
         qDebug() << "Qt VERSION   : " << QString::number(context.qtVersion, 16);
         if (m_debuggerEngine != CdbEngine)
             qDebug() << "GCC VERSION   : " << context.gccVersion;
@@ -3388,7 +3407,7 @@ void tst_Dumpers::dumper_data()
     expected1.append(QChar(1));
     expected1.append("BBB\"");
 
-    QChar oUmlaut = QLatin1Char(char(0xf6));
+    QChar oUmlaut = 0xf6;
 
     QTest::newRow("QString")
             << Data("#include <QByteArray>\n"
@@ -4155,6 +4174,17 @@ void tst_Dumpers::dumper_data()
                + Check("b", "0 + 0 * I", "complex double") % GdbEngine
                + Check("a", "0 + 0i", "_Complex double") % LldbEngine
                + Check("b", "0 + 0i", "_Complex double") % LldbEngine;
+
+    QTest::newRow("StdFunction")
+            << Data("#include <functional>\n"
+                    "void bar(int) {}",
+
+                    "std::function<void(int)> x;\n"
+                    "std::function<void(int)> y = bar;\n"
+                    "std::function<void(int)> z = [](int) {};\n")
+            + GdbEngine
+            + Check("x", "(null)", "std::function<void(int)>")
+            + Check("y", ValuePattern(".* <bar(int)>"), "std::function<void(int)>");
 
 
     QTest::newRow("StdDeque")
@@ -5197,7 +5227,9 @@ void tst_Dumpers::dumper_data()
                     "char s[] = \"aöa\";\n"
                     "char t[] = \"aöax\";\n"
                     "wchar_t w[] = L\"aöa\";\n"
-                    "unused(&s, &t, &w);\n")
+                    "CHAR ch[] = \"aöa\";\n"
+                    "WCHAR wch[] = L\"aöa\";\n"
+                    "unused(&s, &t, &w, &ch, &wch);\n")
 
                + CheckType("s", "char [5]") % NoCdbEngine
                + CheckType("s", "char [4]") % CdbEngine
@@ -5205,7 +5237,12 @@ void tst_Dumpers::dumper_data()
                + CheckType("t", "char [6]") % NoCdbEngine
                + CheckType("t", "char [5]") % CdbEngine
                + Check("t.0", "[0]", "97", "char")
-               + CheckType("w", "wchar_t [4]");
+               + CheckType("w", "wchar_t [4]")
+               + Check("ch.0", "[0]", "97", "CHAR")
+               + CheckType("ch", "CHAR [5]") % NoCdbEngine
+               + CheckType("ch", "CHAR [4]") % CdbEngine
+               + Check("wch.0", "[0]", "97", "WCHAR")
+               + CheckType("wch", "WCHAR [4]");
 
 
     QTest::newRow("CharPointers")
@@ -5309,6 +5346,22 @@ void tst_Dumpers::dumper_data()
                + Check("fthree", "(one | two) (3)", "Flags")
                + Check("fmixed", "(two | unknown:8) (10)", "Flags")
                + Check("fbad", "(unknown:24) (24)", "Flags");
+
+
+    QTest::newRow("EnumInClass")
+            << Data("struct E {\n"
+                    "    enum Enum1 { a1, b1, c1 };\n"
+                    "    typedef enum Enum2 { a2, b2, c2 } Enum2;\n"
+                    "    typedef enum { a3, b3, c3 } Enum3;\n"
+                    "    Enum1 e1 = Enum1(c1 | b1);\n"
+                    "    Enum2 e2 = Enum2(c2 | b2);\n"
+                    "    Enum3 e3 = Enum3(c3 | b3);\n"
+                    "};\n",
+                    "E e;\n")
+                + GdbEngine
+                + Check("e.e1", "E::b1 | E::c1 (0x0003)", "E::Enum1")
+                + Check("e.e2", "E::b2 | E::c2 (0x0003)", "E::Enum2")
+                + Check("e.e3", "E::b3 | E::c3 (0x0003)", "E::Enum3");
 
 
     QTest::newRow("Array")
@@ -5416,7 +5469,7 @@ void tst_Dumpers::dumper_data()
                + Check("s.x", "2", "unsigned int : 3") % NoCdbEngine
                + Check("s.y", "3", "unsigned int : 4") % NoCdbEngine
                + Check("s.z", "39", "unsigned int : 18") % NoCdbEngine
-               + Check("s.e", "1", "E : 3") % NoCdbEngine
+               + Check("s.e", "V2 (1)", "E : 3") % GdbEngine
                + Check("s.x", "2", "unsigned int") % CdbEngine
                + Check("s.y", "3", "unsigned int") % CdbEngine
                + Check("s.z", "39", "unsigned int") % CdbEngine
@@ -6790,6 +6843,85 @@ void tst_Dumpers::dumper_data()
             + Check("tc.3.bar", "15", "int");
 
 
+    QTest::newRow("Internal3")
+        << Data("namespace details\n"
+                "{\n"
+                "    template <int> struct extent_type;\n"
+                "    template <> struct extent_type<-1> { int size_; };\n"
+                "}\n"
+                "\n"
+                "template <class T, int Extent>\n"
+                "struct Span\n"
+                "{\n"
+                "    Span(T *firstElem, int n) : storage_(firstElem, n) {}\n"
+                "\n"
+                "    template <class ExtentType>\n"
+                "    struct Storage : public ExtentType\n"
+                "    {\n"
+                "        template <class OtherExtentType>\n"
+                "        Storage(T *data, OtherExtentType ext)\n"
+                "           : ExtentType{ext}, data_(data)\n"
+                "        {}\n"
+                "\n"
+                "        T *data_;\n"
+                "    };\n"
+                "\n"
+                "    Storage<details::extent_type<Extent>> storage_;\n"
+                "};\n",
+                "int v[4] = { 1, 2, 4, 8 }; \n"
+                "Span<int, -1> s(v, 4); unused(&s); \n")
+        + Check("s.storage_.@1.size_", "4", "int");
+
+
+    QTest::newRow("Internal4")
+            << Data("template<class T>\n"
+                    "struct QtcDumperTest_List\n"
+                    "{\n"
+                    "    struct Node\n"
+                    "    {\n"
+                    "        virtual ~Node() {}\n"
+                    "        Node *prev = nullptr;\n"
+                    "        Node *next = nullptr;\n"
+                    "    };\n\n"
+                    "    QtcDumperTest_List()\n"
+                    "    {\n"
+                    "        root.prev = &root;\n"
+                    "        root.next = &root;\n"
+                    "    }\n\n"
+                    "    void insert(Node *n)\n"
+                    "    {\n"
+                    "        if (n->next)\n"
+                    "            return;\n"
+                    "        Node *r = root.prev;\n"
+                    "        Node *node = r->next;\n"
+                    "        n->next = node;\n"
+                    "        node->prev = n;\n"
+                    "        r->next = n;\n"
+                    "        n->prev = r;\n"
+                    "    }\n"
+                    "    Node root;\n"
+                    "};\n\n"
+                    "struct Base\n"
+                    "{\n"
+                    "    virtual ~Base() {}\n"
+                    "    int foo = 42;\n"
+                    "};\n\n"
+                    "struct Derived : Base, QtcDumperTest_List<Derived>::Node\n"
+                    "{\n"
+                    "    int baz = 84;\n"
+                    "};\n\n",
+                    "Derived d1, d2; unused(&d1, &d2);\n"
+                    "QtcDumperTest_List<Derived> list; unused(&list);\n"
+                    "list.insert(&d1);\n"
+                    "list.insert(&d2);\n")
+            + Cxx11Profile()
+            + Check("d1.@1.foo", "42", "int")
+            + Check("d1.baz", "84", "int")
+            + Check("d2.@1.foo", "42", "int")
+            + Check("d2.baz", "84", "int")
+            //+ Check("list.1.baz", "15", "int")
+            ;
+
     QTest::newRow("BufArray")
             << Data("#include <new>\n"
                     "static int c = 0;\n"
@@ -6814,6 +6946,25 @@ void tst_Dumpers::dumper_data()
                + Check("arr.1.baz", "3", "int")
                + Check("arr.2.bar", "4", "int")
                + Check("arr.2.baz", "5", "int");
+
+
+    QTest::newRow("StringDisplay")
+            << Data("#include <string.h>\n"
+                    "struct QtcDumperTest_String\n"
+                    "{\n"
+                    "   char *first;\n"
+                    "   const char *second = \"second\";\n"
+                    "   const char third[6] = {'t','h','i','r','d','\\0'};\n"
+                    "   QtcDumperTest_String()\n"
+                    "   {\n"
+                    "      first = new char[6];\n"
+                    "      strcpy(first, \"first\");\n"
+                    "   }\n"
+                    "   ~QtcDumperTest_String() { delete[] first; }\n"
+                    "};\n\n",
+                    "QtcDumperTest_String str; unused(&str);\n")
+               + Cxx11Profile()
+               + Check("str", "first, second, third", "QtcDumperTest_String");
 
 
     QTest::newRow("UndefinedStaticMembers")
@@ -6847,6 +6998,40 @@ void tst_Dumpers::dumper_data()
             + Check("d.Log10_2_100000", "30103", "int")
             + Check("p.FlagBit", "<optimized out>", "") % NoCdbEngine
             + Check("p.FlagBit", "", "<Value unavailable error>", "") % CdbEngine;
+#endif
+
+#ifdef Q_OS_MAC
+    QTest::newRow("CFStrings")
+            << Data("#include <CoreFoundation/CoreFoundation.h>\n"
+                    "#include <string>\n"
+                    "#import <Foundation/Foundation.h>\n",
+                    "std::string stdString = \"A std::string\"; (void)stdString;\n\n"
+                    "std::string &stdStringReference = stdString; (void)stdStringReference;\n\n"
+                    "CFStringRef cfStringRef = CFSTR(\"A cfstringref\"); (void)cfStringRef;\n\n"
+                    "NSString *aNSString = (NSString *)cfStringRef; (void)aNSString;\n\n"
+                    "NSString *nsString = @\"A nsstring\"; (void)nsString;\n\n"
+
+                    "NSURL *nsUrl = [NSURL URLWithString:@\"http://example.com\"];\n"
+                    "CFURLRef url = (__bridge CFURLRef)nsUrl; (void)url;\n\n"
+
+                    "CFStringRef& cfStringRefReference = cfStringRef; (void)cfStringRefReference;\n"
+                    "NSString *&aNSStringReference = aNSString; (void)aNSStringReference;\n"
+                    "NSURL *&nsUrlReference = nsUrl; (void)nsUrlReference;\n"
+                    "CFURLRef &urlReference = url; (void)urlReference;\n")
+            + CoreFoundationProfile()
+            + Check("stdString", "\"A std::string\"", "std::string")
+            + Check("stdStringReference", "\"A std::string\"", "std::string &")
+            + Check("cfStringRef", "\"A cfstringref\"", "CFStringRef")
+            + Check("aNSString", "\"A cfstringref\"", "__NSCFConstantString *")
+            + Check("nsString", "\"A nsstring\"", "__NSCFConstantString *")
+            + Check("nsUrl", "\"http://example.com\"", "NSURL *")
+            + Check("url", "\"http://example.com\"", "CFURLRef")
+            + Check("cfStringRefReference", "\"A cfstringref\"", "CFStringRef &")
+            + Check("aNSStringReference", "\"A cfstringref\"", "NSString * &")
+            + Check("nsUrlReference", "\"http://example.com\"", "NSURL * &")
+            // FIXME: Fails.
+            // + Check("urlReference", "\"http://example.com\"", "CFURLRef &")
+            ;
 #endif
 
     QTest::newRow("ArrayOfFunctionPointers")

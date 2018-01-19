@@ -28,6 +28,7 @@
 #include <utils/treemodel.h>
 
 #include <QList>
+#include <QSet>
 #include <QString>
 #include <QMetaType>
 
@@ -39,6 +40,8 @@ namespace {
         EnabledRole
     };
 }
+
+namespace CppTools { class CppModelManager; }
 
 namespace Autotest {
 namespace Internal {
@@ -52,6 +55,7 @@ public:
     enum Type
     {
         Root,
+        GroupNode,
         TestCase,
         TestFunctionOrSet,
         TestDataTag,
@@ -109,10 +113,14 @@ public:
     virtual bool lessThan(const TestTreeItem *other, SortMode mode) const;
     virtual TestTreeItem *find(const TestParseResult *result) = 0;
     virtual bool modify(const TestParseResult *result) = 0;
-
+    virtual bool isGroupNodeFor(const TestTreeItem *other) const;
+    virtual TestTreeItem *createParentGroupNode() const = 0;
+    virtual QSet<QString> internalTargets() const;
 protected:
     typedef std::function<bool(const TestTreeItem *)> CompareFunction;
     TestTreeItem *findChildBy(CompareFunction compare) const;
+    static QSet<QString> dependingInternalTargets(CppTools::CppModelManager *cppMM,
+                                                  const QString &file);
 
 private:
     void revalidateCheckState();
@@ -134,6 +142,8 @@ private:
     unsigned m_column = 0;
     QString m_proFile;
     Status m_status = NewlyAdded;
+
+    friend class TestTreeModel; // grant access to (private) revalidateCheckState()
 };
 
 class TestCodeLocationAndType

@@ -72,7 +72,8 @@ public:
     explicit StartApplicationDialog(QWidget *parent);
     ~StartApplicationDialog();
 
-    static bool run(QWidget *parent, DebuggerRunParameters *rp, ProjectExplorer::Kit **kit);
+    static void attachToRemoteServer();
+    static void startAndDebugApplication();
 
 private:
     void historyIndexChanged(int);
@@ -80,6 +81,8 @@ private:
     StartApplicationParameters parameters() const;
     void setParameters(const StartApplicationParameters &p);
     void setHistory(const QList<StartApplicationParameters> &l);
+    void onChannelOverrideChanged(const QString &channel);
+    static void run(bool);
 
     StartApplicationDialogPrivate *d;
 };

@@ -4,14 +4,33 @@ include(../../shared/clang/clang_installation.pri)
 
 include(../../shared/clang/clang_defines.pri)
 
+requires(!isEmpty(LIBTOOLING_LIBS))
+
 HEADERS += \
-    $$PWD/clangrefactoringplugin.h \
+    clangrefactoringplugin.h \
     qtcreatorsearch.h \
     qtcreatorsearchhandle.h \
-    qtcreatorclangqueryfindfilter.h
+    qtcreatorclangqueryfindfilter.h \
+    clangqueryprojectsfindfilterwidget.h \
+    clangqueryexampletexteditorwidget.h \
+    clangquerytexteditorwidget.h \
+    baseclangquerytexteditorwidget.h \
+    clangqueryhoverhandler.h \
+    symbolquery.h \
+    querysqlitestatementfactory.h \
+    sourcelocations.h
 
 SOURCES += \
-    $$PWD/clangrefactoringplugin.cpp \
+    clangrefactoringplugin.cpp \
     qtcreatorsearch.cpp \
     qtcreatorsearchhandle.cpp \
-    qtcreatorclangqueryfindfilter.cpp
+    qtcreatorclangqueryfindfilter.cpp \
+    clangqueryprojectsfindfilterwidget.cpp \
+    clangqueryexampletexteditorwidget.cpp \
+    clangquerytexteditorwidget.cpp \
+    baseclangquerytexteditorwidget.cpp \
+    clangqueryhoverhandler.cpp \
+    symbolquery.cpp
+
+FORMS += \
+    clangqueryprojectsfindfilter.ui

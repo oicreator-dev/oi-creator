@@ -29,8 +29,8 @@
 #include "qbsbuildstep.h"
 #include "qbscleanstep.h"
 #include "qbsdeployconfigurationfactory.h"
-#include "qbsinfopage.h"
 #include "qbsinstallstep.h"
+#include "qbskitinformation.h"
 #include "qbsnodes.h"
 #include "qbsprofilessettingspage.h"
 #include "qbsproject.h"
@@ -44,6 +44,7 @@
 #include <coreplugin/editormanager/editormanager.h>
 #include <coreplugin/editormanager/ieditor.h>
 #include <coreplugin/featureprovider.h>
+#include <coreplugin/helpmanager.h>
 #include <coreplugin/icore.h>
 #include <coreplugin/idocument.h>
 #include <coreplugin/fileiconprovider.h>
@@ -74,13 +75,13 @@ namespace Internal {
 static Node *currentEditorNode()
 {
     Core::IDocument *doc = Core::EditorManager::currentDocument();
-    return doc ? SessionManager::nodeForFile(doc->filePath()) : 0;
+    return doc ? ProjectTree::nodeForFile(doc->filePath()) : nullptr;
 }
 
 static QbsProject *currentEditorProject()
 {
     Core::IDocument *doc = Core::EditorManager::currentDocument();
-    return doc ? qobject_cast<QbsProject *>(SessionManager::projectForFile(doc->filePath())) : 0;
+    return doc ? qobject_cast<QbsProject *>(SessionManager::projectForFile(doc->filePath())) : nullptr;
 }
 
 bool QbsProjectManagerPlugin::initialize(const QStringList &arguments, QString *errorMessage)
@@ -91,8 +92,10 @@ bool QbsProjectManagerPlugin::initialize(const QStringList &arguments, QString *
     const Core::Context projectContext(::QbsProjectManager::Constants::PROJECT_ID);
 
     Core::FileIconProvider::registerIconOverlayForSuffix(ProjectExplorer::Constants::FILEOVERLAY_QT, "qbs");
+    Core::HelpManager::registerDocumentation({Core::ICore::documentationPath() + "/qbs.qch"});
 
     ProjectManager::registerProjectType<QbsProject>(QmlJSTools::Constants::QBS_MIMETYPE);
+    KitManager::registerKitInformation(new QbsKitInformation);
 
     //create and register objects
     addAutoReleasedObject(new QbsManager);
@@ -103,7 +106,6 @@ bool QbsProjectManagerPlugin::initialize(const QStringList &arguments, QString *
     addAutoReleasedObject(new QbsDeployConfigurationFactory);
     addAutoReleasedObject(new QbsRunConfigurationFactory);
     addAutoReleasedObject(new QbsProfilesSettingsPage);
-    addAutoReleasedObject(new QbsInfoPage);
 
     //menus
     // Build Menu:
@@ -295,23 +297,23 @@ void QbsProjectManagerPlugin::projectWasAdded(Project *project)
     if (!qbsProject)
         return;
 
-    connect(qbsProject, &QbsProject::projectParsingStarted,
+    connect(qbsProject, &Project::parsingStarted,
             this, &QbsProjectManagerPlugin::projectChanged);
-    connect(qbsProject, &QbsProject::projectParsingDone,
+    connect(qbsProject, &Project::parsingFinished,
             this, &QbsProjectManagerPlugin::projectChanged);
 }
 
 void QbsProjectManagerPlugin::updateContextActions()
 {
     QbsProject *project = qobject_cast<Internal::QbsProject *>(ProjectTree::currentProject());
-    Node *node = ProjectTree::currentNode();
+    const Node *node = ProjectTree::findCurrentNode();
     bool isEnabled = !BuildManager::isBuilding(project)
             && project && !project->isParsing()
             && node && node->isEnabled();
 
     bool isFile = project && node && (node->nodeType() == NodeType::File);
-    bool isProduct = project && node && dynamic_cast<QbsProductNode *>(node);
-    QbsProjectNode *subproject = dynamic_cast<QbsProjectNode *>(node);
+    const bool isProduct = project && node && dynamic_cast<const QbsProductNode *>(node);
+    const QbsProjectNode *subproject = dynamic_cast<const QbsProjectNode *>(node);
     bool isSubproject = project && subproject && subproject != project->rootProjectNode();
 
     m_reparseQbsCtx->setEnabled(isEnabled);
@@ -407,7 +409,7 @@ void QbsProjectManagerPlugin::projectChanged()
 
 void QbsProjectManagerPlugin::buildFileContextMenu()
 {
-    Node *node = ProjectTree::currentNode();
+    const Node *node = ProjectTree::findCurrentNode();
     QTC_ASSERT(node, return);
     QbsProject *project = dynamic_cast<QbsProject *>(ProjectTree::currentProject());
     QTC_ASSERT(project, return);
@@ -444,12 +446,12 @@ void QbsProjectManagerPlugin::rebuildProductContextMenu()
 
 void QbsProjectManagerPlugin::runStepsForProductContextMenu(const QList<Core::Id> &stepTypes)
 {
-    Node *node = ProjectTree::currentNode();
+    const Node *node = ProjectTree::findCurrentNode();
     QTC_ASSERT(node, return);
     QbsProject *project = dynamic_cast<QbsProject *>(ProjectTree::currentProject());
     QTC_ASSERT(project, return);
 
-    const QbsProductNode * const productNode = dynamic_cast<QbsProductNode *>(node);
+    const QbsProductNode * const productNode = dynamic_cast<const QbsProductNode *>(node);
     QTC_ASSERT(productNode, return);
 
     runStepsForProducts(project, {QbsProject::uniqueProductName(productNode->qbsProductData())},
@@ -509,12 +511,12 @@ void QbsProjectManagerPlugin::rebuildSubprojectContextMenu()
 
 void QbsProjectManagerPlugin::runStepsForSubprojectContextMenu(const QList<Core::Id> &stepTypes)
 {
-    Node *node = ProjectTree::currentNode();
+    const Node *node = ProjectTree::findCurrentNode();
     QTC_ASSERT(node, return);
     QbsProject *project = dynamic_cast<QbsProject *>(ProjectTree::currentProject());
     QTC_ASSERT(project, return);
 
-    QbsProjectNode *subProject = dynamic_cast<QbsProjectNode *>(node);
+    const QbsProjectNode *subProject = dynamic_cast<const QbsProjectNode *>(node);
     QTC_ASSERT(subProject, return);
 
     QStringList toBuild;
@@ -592,8 +594,7 @@ void QbsProjectManagerPlugin::buildFiles(QbsProject *project, const QStringList 
 
     const Core::Id buildStep = ProjectExplorer::Constants::BUILDSTEPS_BUILD;
 
-    const QString name = ProjectExplorerPlugin::displayNameForStepId(buildStep);
-    BuildManager::buildList(bc->stepList(buildStep), name);
+    BuildManager::buildList(bc->stepList(buildStep));
 
     bc->setChangedFiles(QStringList());
     bc->setActiveFileTags(QStringList());

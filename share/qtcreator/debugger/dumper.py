@@ -32,9 +32,16 @@ import sys
 import base64
 import re
 import time
-import json
 import inspect
 import threading
+
+try:
+    # That's only used in native combined debugging right now, so
+    # we do not need to hard fail in cases of partial python installation
+    # that will never use this.
+    import json
+except:
+    pass
 
 if sys.version_info[0] >= 3:
     xrange = range
@@ -563,6 +570,7 @@ class DumperBase:
                 else:
                     push(inner)
                     inner = ''
+                    break
             elif c == ',':
                 #warn('c: %s level: %s' % (c, level))
                 if level == 1:
@@ -576,6 +584,8 @@ class DumperBase:
         #warn("TARGS: %s %s" % (typename, targs))
         res = []
         for item in targs[::-1]:
+            if len(item) == 0:
+                continue
             c = ord(item[0])
             if c in (45, 46) or (c >= 48 and c < 58): # '-', '.' or digit.
                 if item.find('.') > -1:
@@ -1167,7 +1177,7 @@ class DumperBase:
         n = arrayByteSize // innerType.size()
         p = value.address()
         if displayFormat != RawFormat and p:
-            if innerType.name in ('char', 'wchar_t', 'unsigned char', 'signed char'):
+            if innerType.name in ('char', 'wchar_t', 'unsigned char', 'signed char', 'CHAR', 'WCHAR'):
                 self.putCharArrayHelper(p, n, innerType, self.currentItemFormat(),
                                         makeExpandable = False)
             else:
@@ -1246,7 +1256,7 @@ class DumperBase:
     # This is shared by pointer and array formatting.
     def tryPutSimpleFormattedPointer(self, ptr, typeName, innerType, displayFormat, limit):
         if displayFormat == AutomaticFormat:
-            if innerType.name in ('char', 'signed char', 'unsigned char'):
+            if innerType.name in ('char', 'signed char', 'unsigned char', 'CHAR'):
                 # Use UTF-8 as default for char *.
                 self.putType(typeName)
                 (elided, shown, data) = self.readToFirstZero(ptr, 1, limit)
@@ -1255,7 +1265,7 @@ class DumperBase:
                     self.putArrayData(ptr, shown, innerType)
                 return True
 
-            if innerType.name == 'wchar_t':
+            if innerType.name in ('wchar_t', 'WCHAR'):
                 self.putType(typeName)
                 charSize = self.lookupType('wchar_t').size()
                 (elided, data) = self.encodeCArray(ptr, charSize, limit)
@@ -1405,7 +1415,7 @@ class DumperBase:
         #warn('INNER: %s' % innerType.name)
         if self.autoDerefPointers:
             # Generic pointer type with AutomaticFormat, but never dereference char types:
-            if innerType.name not in ('char', 'signed char', 'unsigned char', 'wchar_t'):
+            if innerType.name not in ('char', 'signed char', 'unsigned char', 'wchar_t', 'CHAR', 'WCHAR'):
                 self.putDerefedPointer(value)
                 return
 
@@ -2704,6 +2714,8 @@ class DumperBase:
 
         if typeobj.code == TypeCodePointer:
             self.putFormattedPointer(value)
+            if value.summary and self.useFancy:
+                self.putValue(self.hexencode(value.summary), 'utf8:1:0')
             return
 
         self.putAddress(value.address())
@@ -2728,9 +2740,15 @@ class DumperBase:
             return
 
         if typeobj.code == TypeCodeBitfield:
-            #warn('BITFIELD VALUE: %s %s' % (value.name, value))
+            #warn('BITFIELD VALUE: %s %d %s' % (value.name, value.lvalue, typeName))
             self.putNumChild(0)
-            self.putValue(value.lvalue)
+            if typeobj.ltarget and typeobj.ltarget.code == TypeCodeEnum:
+                if hasattr(typeobj.ltarget.typeData(), 'enumHexDisplay'):
+                    self.putValue(typeobj.ltarget.typeData().enumHexDisplay(value.lvalue, value.laddress))
+                else:
+                    self.putValue(typeobj.ltarget.typeData().enumDisplay(value.lvalue, value.laddress))
+            else:
+                self.putValue(value.lvalue)
             self.putType(typeName)
             return
 
@@ -2784,6 +2802,12 @@ class DumperBase:
         #warn('INAMES: %s ' % self.expandedINames)
         #warn('EXPANDED: %s ' % (self.currentIName in self.expandedINames))
         self.putType(typeName)
+
+        if value.summary is not None and self.useFancy:
+            self.putValue(self.hexencode(value.summary), 'utf8:1:0')
+            self.putNumChild(0)
+            return
+
         self.putNumChild(1)
         self.putEmptyValue()
         #warn('STRUCT GUTS: %s  ADDRESS: 0x%x ' % (value.name, value.address()))
@@ -2845,6 +2869,7 @@ class DumperBase:
             self.laddress = None    # Own address.
             self.lIsInScope = True
             self.ldisplay = None
+            self.summary = None     # Always hexencoded UTF-8.
             self.lbitpos = None
             self.lbitsize = None
             self.targetValue = None # For references.
@@ -2860,6 +2885,7 @@ class DumperBase:
             val.laddress = self.laddress
             val.lIsInScope = self.lIsInScope
             val.ldisplay = self.ldisplay
+            val.summary = self.summary
             val.lbitpos = self.lbitpos
             val.lbitsize = self.lbitsize
             val.targetValue = self.targetValue
@@ -2885,9 +2911,11 @@ class DumperBase:
                     % (self.name, self.type.name, self.lbitsize, self.lbitpos,
                        self.dumper.hexencode(self.ldata), addr)
 
-        def display(self):
+        def display(self, useHex = 1):
             if self.type.code == TypeCodeEnum:
-                intval = self.extractInteger(self.type.bitsize(), False)
+                intval = self.integer()
+                if useHex and hasattr(self.type.typeData(), 'enumHexDisplay'):
+                    return self.type.typeData().enumHexDisplay(intval, self.laddress)
                 return self.type.typeData().enumDisplay(intval, self.laddress)
             simple = self.value()
             if simple is not None:
@@ -3175,6 +3203,7 @@ class DumperBase:
                 return self.detypedef().dereference()
             val = self.dumper.Value(self.dumper)
             if self.type.code == TypeCodeReference:
+                val.summary = self.summary
                 if self.nativeValue is None:
                     val.laddress = self.pointer()
                     if val.laddress is None and self.laddress is not None:
@@ -3695,15 +3724,16 @@ class DumperBase:
         self.registerType(typeId, tdata)
         return self.Type(self, typeId)
 
-    def createBitfieldType(self, targetTypeId, bitsize):
-        if not isinstance(targetTypeId, str):
+    def createBitfieldType(self, targetType, bitsize):
+        if not isinstance(targetType, self.Type):
             error('Expected type in createBitfieldType(), got %s'
                 % type(targetType))
-        typeId = '%s:%d' % (targetTypeId, bitsize)
+        typeId = '%s:%d' % (targetType.typeId, bitsize)
         tdata = self.TypeData(self)
-        tdata.name = '%s : %d' % (targetTypeId, bitsize)
+        tdata.name = '%s : %d' % (targetType.typeId, bitsize)
         tdata.typeId = typeId
         tdata.code = TypeCodeBitfield
+        tdata.ltarget = targetType
         tdata.lbitsize = bitsize
         self.registerType(typeId, tdata)
         return self.Type(self, typeId)

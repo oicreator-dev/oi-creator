@@ -27,18 +27,19 @@
 #include "savefile.h"
 
 #include "algorithm.h"
-#include "hostosinfo.h"
 #include "qtcassert.h"
 
+#include <QDataStream>
 #include <QDir>
 #include <QDebug>
 #include <QDateTime>
-#include <QDragEnterEvent>
-#include <QDropEvent>
-#include <QMessageBox>
 #include <QRegExp>
 #include <QTimer>
 #include <QUrl>
+
+#ifdef QT_GUI_LIB
+#include <QMessageBox>
+#endif
 
 #ifdef Q_OS_WIN
 #include <qt_windows.h>
@@ -209,7 +210,9 @@ bool FileUtils::isFileNewerThan(const FileName &filePath, const QDateTime &timeS
 
 /*!
   Recursively resolves symlinks if \a filePath is a symlink.
-  To resolve symlinks anywhere in the path, see canonicalPath
+  To resolve symlinks anywhere in the path, see canonicalPath.
+  Unlike QFileInfo::canonicalFilePath(), this function will still return the expected deepest
+  target file even if the symlink is dangling.
 
   \note Maximum recursion depth == 16.
 
@@ -220,7 +223,7 @@ FileName FileUtils::resolveSymlinks(const FileName &path)
     QFileInfo f = path.toFileInfo();
     int links = 16;
     while (links-- && f.isSymLink())
-        f.setFile(f.symLinkTarget());
+        f.setFile(f.dir(), f.symLinkTarget());
     if (links <= 0)
         return FileName();
     return FileName::fromString(f.filePath());
@@ -235,7 +238,7 @@ FileName FileUtils::resolveSymlinks(const FileName &path)
 */
 FileName FileUtils::canonicalPath(const FileName &path)
 {
-    const QString result = QFileInfo(path.toString()).canonicalFilePath();
+    const QString result = path.toFileInfo().canonicalFilePath();
     if (result.isEmpty())
         return path;
     return FileName::fromString(result);
@@ -381,6 +384,7 @@ bool FileReader::fetch(const QString &fileName, QIODevice::OpenMode mode, QStrin
     return false;
 }
 
+#ifdef QT_GUI_LIB
 bool FileReader::fetch(const QString &fileName, QIODevice::OpenMode mode, QWidget *parent)
 {
     if (fetch(fileName, mode))
@@ -389,25 +393,20 @@ bool FileReader::fetch(const QString &fileName, QIODevice::OpenMode mode, QWidge
         QMessageBox::critical(parent, tr("File Error"), m_errorString);
     return false;
 }
-
+#endif // QT_GUI_LIB
 
 FileSaverBase::FileSaverBase()
     : m_hasError(false)
 {
 }
 
-FileSaverBase::~FileSaverBase()
-{
-    delete m_file;
-}
+FileSaverBase::~FileSaverBase() = default;
 
 bool FileSaverBase::finalize()
 {
     m_file->close();
     setResult(m_file->error() == QFile::NoError);
-    // We delete the object, so it is really closed even if it is a QTemporaryFile.
-    delete m_file;
-    m_file = 0;
+    m_file.reset();
     return !m_hasError;
 }
 
@@ -420,6 +419,7 @@ bool FileSaverBase::finalize(QString *errStr)
     return false;
 }
 
+#ifdef QT_GUI_LIB
 bool FileSaverBase::finalize(QWidget *parent)
 {
     if (finalize())
@@ -427,6 +427,7 @@ bool FileSaverBase::finalize(QWidget *parent)
     QMessageBox::critical(parent, tr("File Error"), errorString());
     return false;
 }
+#endif // QT_GUI_LIB
 
 bool FileSaverBase::write(const char *data, int len)
 {
@@ -445,8 +446,13 @@ bool FileSaverBase::write(const QByteArray &bytes)
 bool FileSaverBase::setResult(bool ok)
 {
     if (!ok && !m_hasError) {
-        m_errorString = tr("Cannot write file %1. Disk full?").arg(
-                QDir::toNativeSeparators(m_fileName));
+        if (!m_file->errorString().isEmpty()) {
+            m_errorString = tr("Cannot write file %1: %2").arg(
+                        QDir::toNativeSeparators(m_fileName), m_file->errorString());
+        } else {
+            m_errorString = tr("Cannot write file %1. Disk full?").arg(
+                        QDir::toNativeSeparators(m_fileName));
+        }
         m_hasError = true;
     }
     return ok;
@@ -489,10 +495,10 @@ FileSaver::FileSaver(const QString &filename, QIODevice::OpenMode mode)
         }
     }
     if (mode & (QIODevice::ReadOnly | QIODevice::Append)) {
-        m_file = new QFile(filename);
+        m_file.reset(new QFile{filename});
         m_isSafe = false;
     } else {
-        m_file = new SaveFile(filename);
+        m_file.reset(new SaveFile{filename});
         m_isSafe = true;
     }
     if (!m_file->open(QIODevice::WriteOnly | mode)) {
@@ -508,22 +514,22 @@ bool FileSaver::finalize()
     if (!m_isSafe)
         return FileSaverBase::finalize();
 
-    SaveFile *sf = static_cast<SaveFile *>(m_file);
+    SaveFile *sf = static_cast<SaveFile *>(m_file.get());
     if (m_hasError) {
         if (sf->isOpen())
             sf->rollback();
     } else {
         setResult(sf->commit());
     }
-    delete sf;
-    m_file = 0;
+    m_file.reset();
     return !m_hasError;
 }
 
 TempFileSaver::TempFileSaver(const QString &templ)
     : m_autoRemove(true)
 {
-    QTemporaryFile *tempFile = new QTemporaryFile();
+    m_file.reset(new QTemporaryFile{});
+    QTemporaryFile *tempFile = static_cast<QTemporaryFile *>(m_file.get());
     if (!templ.isEmpty())
         tempFile->setFileTemplate(templ);
     tempFile->setAutoRemove(false);
@@ -533,14 +539,12 @@ TempFileSaver::TempFileSaver(const QString &templ)
                 tempFile->errorString());
         m_hasError = true;
     }
-    m_file = tempFile;
     m_fileName = tempFile->fileName();
 }
 
 TempFileSaver::~TempFileSaver()
 {
-    delete m_file;
-    m_file = 0;
+    m_file.reset();
     if (m_autoRemove)
         QFile::remove(m_fileName);
 }
@@ -588,7 +592,6 @@ QString FileName::fileName(int pathComponents) const
     if (pathComponents < 0)
         return *this;
     const QChar slash = QLatin1Char('/');
-    QTC_CHECK(!endsWith(slash));
     int i = lastIndexOf(slash);
     if (pathComponents == 0 || i == -1)
         return mid(i + 1);
@@ -611,7 +614,7 @@ QString FileName::fileName(int pathComponents) const
 /// FileName exists.
 bool FileName::exists() const
 {
-    return QFileInfo::exists(*this);
+    return !isEmpty() && QFileInfo::exists(*this);
 }
 
 /// Find the parent directory of a given directory.

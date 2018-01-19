@@ -137,14 +137,15 @@ public:
                      int messageLevel, FakeVimHandler *eventFilter)
     {
         if (cursorPos != -1) {
-            m_edit->blockSignals(true);
-            m_label->clear();
-            m_edit->setText(contents);
-            if (anchorPos != -1 && anchorPos != cursorPos)
-                m_edit->setSelection(anchorPos, cursorPos - anchorPos);
-            else
-                m_edit->setCursorPosition(cursorPos);
-            m_edit->blockSignals(false);
+            {
+                QSignalBlocker blocker(m_edit);
+                m_label->clear();
+                m_edit->setText(contents);
+                if (anchorPos != -1 && anchorPos != cursorPos)
+                    m_edit->setSelection(anchorPos, cursorPos - anchorPos);
+                else
+                    m_edit->setCursorPosition(cursorPos);
+            }
             setCurrentWidget(m_edit);
             m_edit->setFocus();
         } else {
@@ -863,11 +864,6 @@ void FakeVimUserCommandsPage::apply()
 class FakeVimCompletionAssistProvider : public CompletionAssistProvider
 {
 public:
-    bool supportsEditor(Id ) const
-    {
-        return false;
-    }
-
     IAssistProcessor *createProcessor() const;
 
     void setActive(const QString &needle, bool forward, FakeVimHandler *handler)
@@ -1090,9 +1086,6 @@ signals:
 
 private:
     FakeVimPlugin *q;
-    FakeVimOptionPage *m_fakeVimOptionsPage = nullptr;
-    FakeVimExCommandsPage *m_fakeVimExCommandsPage = nullptr;
-    FakeVimUserCommandsPage *m_fakeVimUserCommandsPage = nullptr;
     QHash<IEditor *, FakeVimHandler *> m_editorToHandler;
 
     void triggerAction(Id id);
@@ -1178,18 +1171,6 @@ void FakeVimPluginPrivate::onCoreAboutToClose()
 
 void FakeVimPluginPrivate::aboutToShutdown()
 {
-    q->removeObject(m_fakeVimOptionsPage);
-    delete m_fakeVimOptionsPage;
-    m_fakeVimOptionsPage = 0;
-
-    q->removeObject(m_fakeVimExCommandsPage);
-    delete m_fakeVimExCommandsPage;
-    m_fakeVimExCommandsPage = 0;
-
-    q->removeObject(m_fakeVimUserCommandsPage);
-    delete m_fakeVimUserCommandsPage;
-    m_fakeVimUserCommandsPage = 0;
-
     delete m_wordProvider;
     m_wordProvider = 0;
 }
@@ -1210,14 +1191,9 @@ bool FakeVimPluginPrivate::initialize()
 
     Context globalcontext(Core::Constants::C_GLOBAL);
 
-    m_fakeVimOptionsPage = new FakeVimOptionPage;
-    q->addObject(m_fakeVimOptionsPage);
-
-    m_fakeVimExCommandsPage = new FakeVimExCommandsPage(this);
-    q->addObject(m_fakeVimExCommandsPage);
-
-    m_fakeVimUserCommandsPage = new FakeVimUserCommandsPage(this);
-    q->addObject(m_fakeVimUserCommandsPage);
+    q->addAutoReleasedObject(new FakeVimOptionPage);
+    q->addAutoReleasedObject(new FakeVimExCommandsPage(this));
+    q->addAutoReleasedObject(new FakeVimUserCommandsPage(this));
 
     readSettings();
 
@@ -1806,6 +1782,11 @@ void FakeVimPluginPrivate::editorOpened(IEditor *editor)
 
     connect(ICore::instance(), &ICore::saveSettingsRequested,
             this, &FakeVimPluginPrivate::writeSettings);
+
+    connect(handler, &FakeVimHandler::tabNextRequested,
+            this, [this] { triggerAction(Core::Constants::GOTONEXTINHISTORY); });
+    connect(handler, &FakeVimHandler::tabPreviousRequested,
+            this, [this] { triggerAction(Core::Constants::GOTOPREVINHISTORY); });
 
     handler->setCurrentFileName(editor->document()->filePath().toString());
     handler->installEventFilter();

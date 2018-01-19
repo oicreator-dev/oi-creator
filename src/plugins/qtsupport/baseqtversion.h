@@ -36,7 +36,10 @@
 #include <QStringList>
 #include <QVariantMap>
 
-namespace Utils { class Environment; }
+namespace Utils {
+class Environment;
+class FileInProjectFinder;
+}
 namespace Core { class Id; }
 
 namespace ProjectExplorer {
@@ -44,6 +47,7 @@ class IOutputParser;
 class Kit;
 class ToolChain;
 class HeaderPath;
+class Target;
 class Task;
 } // namespace ProjectExplorer
 
@@ -129,7 +133,10 @@ public:
     virtual void addToEnvironment(const ProjectExplorer::Kit *k, Utils::Environment &env) const;
     virtual Utils::Environment qmakeRunEnvironment() const;
 
+    // source path defined by qmake property QT_INSTALL_PREFIX/src or by qmake.stash QT_SOURCE_TREE
     virtual Utils::FileName sourcePath() const;
+    // returns source path for installed qt packages and empty string for self build qt
+    Utils::FileName qtPackageSourcePath() const;
     bool isInSourceDirectory(const Utils::FileName &filePath);
     bool isSubProject(const Utils::FileName &filePath) const;
 
@@ -137,8 +144,6 @@ public:
     virtual QString uicCommand() const;
     virtual QString designerCommand() const;
     virtual QString linguistCommand() const;
-    QString qmlsceneCommand() const;
-    QString qmlviewerCommand() const;
     QString qscxmlcCommand() const;
 
     QString qtVersionString() const;
@@ -209,8 +214,11 @@ public:
     Utils::FileName docsPath() const;
     Utils::FileName libraryPath() const;
     Utils::FileName pluginPath() const;
+    Utils::FileName qmlPath() const;
     Utils::FileName binPath() const;
     Utils::FileName mkspecsPath() const;
+    Utils::FileName qmlBinPath() const;
+    Utils::FileName librarySearchPath() const;
 
     Utils::FileNameList directoriesToIgnoreInProjectTree() const;
 
@@ -225,6 +233,9 @@ public:
     QStringList qtConfigValues() const;
 
     Utils::MacroExpander *macroExpander() const; // owned by the Qt version
+
+    static void populateQmlFileFinder(Utils::FileInProjectFinder *finder,
+                                      const ProjectExplorer::Target *target);
 
 protected:
     BaseQtVersion();
@@ -247,8 +258,8 @@ private:
     void setupExpander();
     void updateSourcePath() const;
     void updateVersionInfo() const;
-    enum Binaries { QmlViewer, QmlScene, Designer, Linguist, Uic, QScxmlc };
-    QString findQtBinary(Binaries binary) const;
+    enum HostBinaries { Designer, Linguist, Uic, QScxmlc };
+    QString findHostBinary(HostBinaries binary) const;
     void updateMkspec() const;
     QHash<ProKey, ProString> versionInfo() const;
     static bool queryQMakeVariables(const Utils::FileName &binary, const Utils::Environment &env,
@@ -284,6 +295,7 @@ private:
     QString m_unexpandedDisplayName;
     QString m_autodetectionSource;
     mutable Utils::FileName m_sourcePath;
+    mutable Utils::FileName m_qtSources;
 
     mutable Utils::FileName m_mkspec;
     mutable Utils::FileName m_mkspecFullPath;
@@ -297,8 +309,6 @@ private:
     mutable QString m_uicCommand;
     mutable QString m_designerCommand;
     mutable QString m_linguistCommand;
-    mutable QString m_qmlsceneCommand;
-    mutable QString m_qmlviewerCommand;
     mutable QString m_qscxmlcCommand;
 
     mutable QList<ProjectExplorer::Abi> m_qtAbis;

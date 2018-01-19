@@ -41,6 +41,7 @@ class MElement;
 class MPackage;
 class MDiagram;
 class DElement;
+class DContainer;
 class DocumentController;
 }
 
@@ -65,7 +66,7 @@ class ModelEditor :
 
 public:
     explicit ModelEditor(UiController *uiController, ActionHandler *actionHandler,
-                         QWidget *parent = 0);
+                         QWidget *parent = nullptr);
     ~ModelEditor();
 
     Core::IDocument *document() override;
@@ -86,7 +87,7 @@ public:
     void openParentDiagram();
     void editProperties();
     void editSelectedItem();
-    void exportDiagram();
+    void exportDiagram(bool selectedElements);
     void zoomIn();
     void zoomOut();
     void resetZoom();
@@ -139,6 +140,8 @@ private:
     void closeAllDiagrams();
 
     void onContentSet();
+
+    void setDiagramClipboard(const qmt::DContainer &dcontainer);
 
     void addDiagramToSelector(const qmt::MDiagram *diagram);
     void updateDiagramSelector();

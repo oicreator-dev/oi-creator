@@ -44,13 +44,14 @@
 
 #include <utils/algorithm.h>
 #include <utils/qtcassert.h>
+#include <utils/qtcfallthrough.h>
 
 namespace QmlDesigner {
 
 FormEditorScene::FormEditorScene(FormEditorWidget *view, FormEditorView *editorView)
         : QGraphicsScene(),
         m_editorView(editorView),
-        m_showBoundingRects(true)
+        m_showBoundingRects(false)
 {
     setupScene();
     view->setScene(this);
@@ -358,6 +359,7 @@ bool FormEditorScene::event(QEvent * event)
                 currentTool()->keyPressEvent(static_cast<QKeyEvent*>(event));
                 return true;
             }
+            Q_FALLTHROUGH();
         default: return QGraphicsScene::event(event);
     }
 

@@ -28,25 +28,36 @@
 #include "abstracteditorsupport.h"
 #include "baseeditordocumentprocessor.h"
 #include "builtinindexingsupport.h"
+#include "cppclassesfilter.h"
 #include "cppcodemodelinspectordumper.h"
+#include "cppcurrentdocumentfilter.h"
 #include "cppfindreferences.h"
+#include "cppfunctionsfilter.h"
+#include "cppincludesfilter.h"
 #include "cppindexingsupport.h"
+#include "cpplocatordata.h"
+#include "cpplocatorfilter.h"
 #include "cppmodelmanagersupportinternal.h"
 #include "cpprefactoringchanges.h"
+#include "cpprefactoringengine.h"
 #include "cppsourceprocessor.h"
 #include "cpptoolsconstants.h"
 #include "cpptoolsplugin.h"
 #include "cpptoolsreuse.h"
 #include "editordocumenthandle.h"
 #include "symbolfinder.h"
+#include "symbolsfindfilter.h"
+#include "followsymbolinterface.h"
 
 #include <coreplugin/documentmanager.h>
 #include <coreplugin/icore.h>
+#include <coreplugin/vcsmanager.h>
 #include <coreplugin/progressmanager/progressmanager.h>
 #include <coreplugin/editormanager/editormanager.h>
 #include <texteditor/textdocument.h>
 #include <projectexplorer/project.h>
 #include <projectexplorer/projectexplorer.h>
+#include <projectexplorer/projectmacro.h>
 #include <projectexplorer/session.h>
 #include <extensionsystem/pluginmanager.h>
 #include <utils/fileutils.h>
@@ -116,9 +127,11 @@ protected:
 #endif // QTCREATOR_WITH_DUMP_AST
 
 namespace CppTools {
+
+using REType = RefactoringEngineType;
+
 namespace Internal {
 
-static QMutex m_instanceMutex;
 static CppModelManager *m_instance;
 
 class CppModelManagerPrivate
@@ -138,7 +151,7 @@ public:
     bool m_dirty;
     QStringList m_projectFiles;
     ProjectPartHeaderPaths m_headerPaths;
-    QByteArray m_definedMacros;
+    ProjectExplorer::Macros m_definedMacros;
 
     // Editor integration
     mutable QMutex m_cppEditorDocumentsMutex;
@@ -163,7 +176,16 @@ public:
     QTimer m_delayedGcTimer;
 
     // Refactoring
-    RefactoringEngineInterface *m_refactoringEngine = nullptr;
+    using REHash = QMap<REType, RefactoringEngineInterface *>;
+    REHash m_refactoringEngines;
+
+    CppLocatorData m_locatorData;
+    std::unique_ptr<Core::ILocatorFilter> m_locatorFilter;
+    std::unique_ptr<Core::ILocatorFilter> m_classesFilter;
+    std::unique_ptr<Core::ILocatorFilter> m_includesFilter;
+    std::unique_ptr<Core::ILocatorFilter> m_functionsFilter;
+    std::unique_ptr<Core::IFindFilter> m_symbolsFindFilter;
+    std::unique_ptr<Core::ILocatorFilter> m_currentDocumentFilter;
 };
 
 } // namespace Internal
@@ -263,14 +285,118 @@ QString CppModelManager::editorConfigurationFileName()
     return QLatin1String("<per-editor-defines>");
 }
 
-void CppModelManager::setRefactoringEngine(RefactoringEngineInterface *refactoringEngine)
+static RefactoringEngineInterface *getRefactoringEngine(
+        CppModelManagerPrivate::REHash &engines, bool excludeClangCodeModel = true)
 {
-    instance()->d->m_refactoringEngine = refactoringEngine;
+    QTC_ASSERT(!engines.empty(), return nullptr;);
+    RefactoringEngineInterface *currentEngine = engines[REType::BuiltIn];
+    if (!excludeClangCodeModel && engines.find(REType::ClangCodeModel) != engines.end()) {
+        currentEngine = engines[REType::ClangCodeModel];
+    } else if (engines.find(REType::ClangRefactoring) != engines.end()) {
+        RefactoringEngineInterface *engine = engines[REType::ClangRefactoring];
+        if (engine->isRefactoringEngineAvailable())
+            currentEngine = engine;
+    }
+    return currentEngine;
 }
 
-RefactoringEngineInterface *CppModelManager::refactoringEngine()
+void CppModelManager::startLocalRenaming(const CursorInEditor &data,
+                                         CppTools::ProjectPart *projectPart,
+                                         RenameCallback &&renameSymbolsCallback)
 {
-    return instance()->d->m_refactoringEngine;
+    RefactoringEngineInterface *engine = getRefactoringEngine(d->m_refactoringEngines,
+                                                              false);
+    QTC_ASSERT(engine, return;);
+    engine->startLocalRenaming(data, projectPart, std::move(renameSymbolsCallback));
+}
+
+void CppModelManager::globalRename(const CursorInEditor &data, UsagesCallback &&renameCallback,
+                                   const QString &replacement)
+{
+    RefactoringEngineInterface *engine = getRefactoringEngine(d->m_refactoringEngines);
+    QTC_ASSERT(engine, return;);
+    engine->globalRename(data, std::move(renameCallback), replacement);
+}
+
+void CppModelManager::findUsages(const CppTools::CursorInEditor &data,
+                                 UsagesCallback &&showUsagesCallback) const
+{
+    RefactoringEngineInterface *engine = getRefactoringEngine(d->m_refactoringEngines);
+    QTC_ASSERT(engine, return;);
+    engine->findUsages(data, std::move(showUsagesCallback));
+}
+
+CppModelManager::Link CppModelManager::globalFollowSymbol(
+        const CursorInEditor &data,
+        const CPlusPlus::Snapshot &snapshot,
+        const CPlusPlus::Document::Ptr &documentFromSemanticInfo,
+        SymbolFinder *symbolFinder,
+        bool inNextSplit) const
+{
+    RefactoringEngineInterface *engine = getRefactoringEngine(d->m_refactoringEngines);
+    QTC_ASSERT(engine, return Link(););
+    return engine->globalFollowSymbol(data, snapshot, documentFromSemanticInfo,
+            symbolFinder, inNextSplit);
+}
+
+void CppModelManager::addRefactoringEngine(RefactoringEngineType type,
+                                           RefactoringEngineInterface *refactoringEngine)
+{
+    instance()->d->m_refactoringEngines[type] = refactoringEngine;
+}
+
+void CppModelManager::removeRefactoringEngine(RefactoringEngineType type)
+{
+    instance()->d->m_refactoringEngines.remove(type);
+}
+
+template<class FilterClass>
+static void setFilter(std::unique_ptr<FilterClass> &filter,
+                      std::unique_ptr<FilterClass> &&newFilter)
+{
+    if (!ExtensionSystem::PluginManager::instance())
+        return;
+    if (filter)
+        ExtensionSystem::PluginManager::removeObject(filter.get());
+    if (!newFilter)
+        return;
+    filter = std::move(newFilter);
+    ExtensionSystem::PluginManager::addObject(filter.get());
+}
+
+void CppModelManager::setLocatorFilter(std::unique_ptr<Core::ILocatorFilter> &&filter)
+{
+    setFilter(d->m_locatorFilter, std::move(filter));
+}
+
+void CppModelManager::setClassesFilter(std::unique_ptr<Core::ILocatorFilter> &&filter)
+{
+    setFilter(d->m_classesFilter, std::move(filter));
+}
+
+void CppModelManager::setIncludesFilter(std::unique_ptr<Core::ILocatorFilter> &&filter)
+{
+    setFilter(d->m_includesFilter, std::move(filter));
+}
+
+void CppModelManager::setFunctionsFilter(std::unique_ptr<Core::ILocatorFilter> &&filter)
+{
+    setFilter(d->m_functionsFilter, std::move(filter));
+}
+
+void CppModelManager::setSymbolsFindFilter(std::unique_ptr<Core::IFindFilter> &&filter)
+{
+    setFilter(d->m_symbolsFindFilter, std::move(filter));
+}
+
+void CppModelManager::setCurrentDocumentFilter(std::unique_ptr<Core::ILocatorFilter> &&filter)
+{
+    setFilter(d->m_currentDocumentFilter, std::move(filter));
+}
+
+FollowSymbolInterface &CppModelManager::followSymbolInterface() const
+{
+    return d->m_activeModelManagerSupport->followSymbolInterface();
 }
 
 QString CppModelManager::configurationFileName()
@@ -302,14 +428,56 @@ void CppModelManager::updateModifiedSourceFiles()
 
 CppModelManager *CppModelManager::instance()
 {
-    if (m_instance)
-        return m_instance;
-
-    QMutexLocker locker(&m_instanceMutex);
-    if (!m_instance)
-        m_instance = new CppModelManager;
-
+    QTC_ASSERT(m_instance, return nullptr;);
     return m_instance;
+}
+
+void CppModelManager::resetFilters()
+{
+    setLocatorFilter();
+    setClassesFilter();
+    setIncludesFilter();
+    setFunctionsFilter();
+    setSymbolsFindFilter();
+    setCurrentDocumentFilter();
+}
+
+void CppModelManager::createCppModelManager(Internal::CppToolsPlugin *parent,
+                                            Internal::StringTable &stringTable)
+{
+    QTC_ASSERT(!m_instance, return;);
+    m_instance = new CppModelManager();
+    m_instance->initCppTools(stringTable);
+    m_instance->setParent(parent);
+}
+
+void CppModelManager::initCppTools(Internal::StringTable &stringTable)
+{
+    // Objects
+    connect(Core::VcsManager::instance(), &Core::VcsManager::repositoryChanged,
+            this, &CppModelManager::updateModifiedSourceFiles);
+    connect(Core::DocumentManager::instance(), &Core::DocumentManager::filesChangedInternally,
+            [this](const QStringList &files) {
+        updateSourceFiles(files.toSet());
+    });
+
+    connect(this, &CppModelManager::documentUpdated,
+            &d->m_locatorData, &CppLocatorData::onDocumentUpdated);
+
+    connect(this, &CppModelManager::aboutToRemoveFiles,
+            &d->m_locatorData, &CppLocatorData::onAboutToRemoveFiles);
+
+    ExtensionSystem::PluginManager *pluginManager = ExtensionSystem::PluginManager::instance();
+    QTC_ASSERT(pluginManager, return;);
+
+    // Set up builtin filters
+    setLocatorFilter(std::make_unique<CppLocatorFilter>(&d->m_locatorData));
+    setClassesFilter(std::make_unique<CppClassesFilter>(&d->m_locatorData));
+    setIncludesFilter(std::make_unique<CppIncludesFilter>());
+    setFunctionsFilter(std::make_unique<CppFunctionsFilter>(&d->m_locatorData));
+    setSymbolsFindFilter(std::make_unique<SymbolsFindFilter>(this));
+    setCurrentDocumentFilter(
+                std::make_unique<Internal::CppCurrentDocumentFilter>(this, stringTable));
 }
 
 void CppModelManager::initializeBuiltinModelManagerSupport()
@@ -317,10 +485,12 @@ void CppModelManager::initializeBuiltinModelManagerSupport()
     d->m_builtinModelManagerSupport
             = ModelManagerSupportProviderInternal().createModelManagerSupport();
     d->m_activeModelManagerSupport = d->m_builtinModelManagerSupport;
+    d->m_refactoringEngines[RefactoringEngineType::BuiltIn] =
+            &d->m_activeModelManagerSupport->refactoringEngineInterface();
 }
 
-CppModelManager::CppModelManager(QObject *parent)
-    : CppModelManagerBase(parent), d(new CppModelManagerPrivate)
+CppModelManager::CppModelManager()
+    : CppModelManagerBase(nullptr), d(new CppModelManagerPrivate)
 {
     d->m_indexingSupporter = 0;
     d->m_enableGC = true;
@@ -369,6 +539,7 @@ CppModelManager::CppModelManager(QObject *parent)
 CppModelManager::~CppModelManager()
 {
     delete d->m_internalIndexingSupport;
+    resetFilters();
     delete d;
 }
 
@@ -446,35 +617,29 @@ ProjectPartHeaderPaths CppModelManager::internalHeaderPaths() const
     return headerPaths;
 }
 
-static void addUnique(const QList<QByteArray> &defs, QByteArray *macros, QSet<QByteArray> *alreadyIn)
+static void addUnique(const ProjectExplorer::Macros &newMacros,
+                      ProjectExplorer::Macros &macros,
+                      QSet<ProjectExplorer::Macro> &alreadyIn)
 {
-    Q_ASSERT(macros);
-    Q_ASSERT(alreadyIn);
-
-    foreach (const QByteArray &def, defs) {
-        if (def.trimmed().isEmpty())
-            continue;
-        if (!alreadyIn->contains(def)) {
-            macros->append(def);
-            macros->append('\n');
-            alreadyIn->insert(def);
+    for (const ProjectExplorer::Macro &macro : newMacros) {
+        if (!alreadyIn.contains(macro)) {
+            macros += macro;
+            alreadyIn.insert(macro);
         }
     }
 }
 
-QByteArray CppModelManager::internalDefinedMacros() const
+ProjectExplorer::Macros CppModelManager::internalDefinedMacros() const
 {
-    QByteArray macros;
-    QSet<QByteArray> alreadyIn;
+    ProjectExplorer::Macros macros;
+    QSet<ProjectExplorer::Macro> alreadyIn;
     QMapIterator<ProjectExplorer::Project *, ProjectInfo> it(d->m_projectToProjectsInfo);
     while (it.hasNext()) {
         it.next();
         const ProjectInfo pinfo = it.value();
-        foreach (const ProjectPart::Ptr &part, pinfo.projectParts()) {
-            addUnique(part->toolchainDefines.split('\n'), &macros, &alreadyIn);
-            addUnique(part->projectDefines.split('\n'), &macros, &alreadyIn);
-            if (!part->projectConfigFile.isEmpty())
-                macros += ProjectPart::readProjectConfigFile(part);
+        for (const ProjectPart::Ptr &part : pinfo.projectParts()) {
+            addUnique(part->toolChainMacros, macros, alreadyIn);
+            addUnique(part->projectMacros, macros, alreadyIn);
         }
     }
     return macros;
@@ -491,7 +656,8 @@ void CppModelManager::dumpModelManagerConfiguration(const QString &logFileId)
     dumper.dumpProjectInfos(projectInfos());
     dumper.dumpSnapshot(globalSnapshot, globalSnapshotTitle, /*isGlobalSnapshot=*/ true);
     dumper.dumpWorkingCopy(workingCopy());
-    dumper.dumpMergedEntities(headerPaths(), definedMacros());
+    dumper.dumpMergedEntities(headerPaths(),
+                              ProjectExplorer:: Macro::toByteArray(definedMacros()));
 }
 
 QSet<AbstractEditorSupport *> CppModelManager::abstractEditorSupports() const
@@ -569,12 +735,12 @@ void CppModelManager::renameUsages(Symbol *symbol,
         d->m_findReferences->renameUsages(symbol, context, replacement);
 }
 
-void CppModelManager::findMacroUsages(const Macro &macro)
+void CppModelManager::findMacroUsages(const CPlusPlus::Macro &macro)
 {
     d->m_findReferences->findMacroUses(macro);
 }
 
-void CppModelManager::renameMacroUsages(const Macro &macro, const QString &replacement)
+void CppModelManager::renameMacroUsages(const CPlusPlus::Macro &macro, const QString &replacement)
 {
     d->m_findReferences->renameMacroUses(macro, replacement);
 }
@@ -603,7 +769,7 @@ WorkingCopy CppModelManager::buildWorkingCopyList()
 
     // Add the project configuration file
     QByteArray conf = codeModelConfiguration();
-    conf += definedMacros();
+    conf += ProjectExplorer::Macro::toByteArray(definedMacros());
     workingCopy.insert(configurationFileName(), conf);
 
     return workingCopy;
@@ -991,7 +1157,7 @@ ProjectPart::Ptr CppModelManager::fallbackProjectPart()
 {
     ProjectPart::Ptr part(new ProjectPart);
 
-    part->projectDefines = definedMacros();
+    part->projectMacros = definedMacros();
     part->headerPaths = headerPaths();
 
     // Do not activate ObjectiveCExtensions since this will lead to the
@@ -1220,6 +1386,8 @@ void CppModelManager::activateClangCodeModel(
     QTC_ASSERT(modelManagerSupportProvider, return);
 
     d->m_activeModelManagerSupport = modelManagerSupportProvider->createModelManagerSupport();
+    d->m_refactoringEngines[RefactoringEngineType::ClangCodeModel] =
+            &d->m_activeModelManagerSupport->refactoringEngineInterface();
 }
 
 CppCompletionAssistProvider *CppModelManager::completionAssistProvider() const
@@ -1227,10 +1395,15 @@ CppCompletionAssistProvider *CppModelManager::completionAssistProvider() const
     return d->m_activeModelManagerSupport->completionAssistProvider();
 }
 
-BaseEditorDocumentProcessor *CppModelManager::editorDocumentProcessor(
-        TextEditor::TextDocument *baseTextDocument) const
+TextEditor::BaseHoverHandler *CppModelManager::createHoverHandler() const
 {
-    return d->m_activeModelManagerSupport->editorDocumentProcessor(baseTextDocument);
+    return d->m_activeModelManagerSupport->createHoverHandler();
+}
+
+BaseEditorDocumentProcessor *CppModelManager::createEditorDocumentProcessor(
+    TextEditor::TextDocument *baseTextDocument) const
+{
+    return d->m_activeModelManagerSupport->createEditorDocumentProcessor(baseTextDocument);
 }
 
 void CppModelManager::setIndexingSupport(CppIndexingSupport *indexingSupport)
@@ -1270,7 +1443,7 @@ void CppModelManager::setHeaderPaths(const ProjectPartHeaderPaths &headerPaths)
     d->m_headerPaths = headerPaths;
 }
 
-QByteArray CppModelManager::definedMacros()
+ProjectExplorer::Macros CppModelManager::definedMacros()
 {
     QMutexLocker locker(&d->m_projectMutex);
     ensureUpdated();

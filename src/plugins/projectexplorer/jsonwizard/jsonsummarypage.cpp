@@ -29,7 +29,10 @@
 #include "../project.h"
 #include "../projectexplorerconstants.h"
 #include "../projectnodes.h"
+#include "../projecttree.h"
 #include "../session.h"
+
+#include "../projecttree.h"
 
 #include <coreplugin/coreconstants.h>
 #include <coreplugin/iversioncontrol.h>
@@ -125,10 +128,19 @@ void JsonSummaryPage::initializePage()
                                  });
     }
 
-    Node *contextNode = m_wizard->value(QLatin1String(Constants::PREFERRED_PROJECT_NODE))
-            .value<Node *>();
-    initializeProjectTree(contextNode, files, kind,
-                          isProject ? AddSubProject : AddNewFile);
+    // Use static cast from void * to avoid qobject_cast (which needs a valid object) in value()
+    // in the following code:
+    auto contextNode = findWizardContextNode(static_cast<Node *>(m_wizard->value(Constants::PREFERRED_PROJECT_NODE).value<void *>()));
+    const ProjectAction currentAction = isProject ? AddSubProject : AddNewFile;
+
+    initializeProjectTree(contextNode, files, kind, currentAction);
+
+    // Refresh combobox on project tree changes:
+    connect(ProjectTree::instance(), &ProjectTree::treeChanged,
+            this, [this, files, kind, currentAction]() {
+        initializeProjectTree(findWizardContextNode(currentNode()), files, kind, currentAction);
+    });
+
 
     bool hideProjectUi = JsonWizard::boolFromVariant(m_hideProjectUiValue, m_wizard->expander());
     setProjectUiVisible(!hideProjectUi);
@@ -207,6 +219,23 @@ void JsonSummaryPage::summarySettingsHaveChanged()
     updateProjectData(currentNode());
 }
 
+Node *JsonSummaryPage::findWizardContextNode(Node *contextNode) const
+{
+    if (contextNode && !ProjectTree::hasNode(contextNode)) {
+        contextNode = nullptr;
+
+        // Static cast from void * to avoid qobject_cast (which needs a valid object) in value().
+        auto project = static_cast<Project *>(m_wizard->value(Constants::PROJECT_POINTER).value<void *>());
+        if (SessionManager::projects().contains(project) && project->rootProjectNode()) {
+            const QString path = m_wizard->value(Constants::PREFERRED_PROJECT_NODE_PATH).toString();
+            contextNode = project->rootProjectNode()->findNode([path](const Node *n) {
+                return path == n->filePath().toString();
+            });
+        }
+    }
+    return contextNode;
+}
+
 void JsonSummaryPage::updateFileList()
 {
     m_fileList = m_wizard->generateFileList();
@@ -217,7 +246,7 @@ void JsonSummaryPage::updateFileList()
 
 void JsonSummaryPage::updateProjectData(FolderNode *node)
 {
-    Project *project = SessionManager::projectForNode(node);
+    Project *project = ProjectTree::projectForNode(node);
 
     m_wizard->setValue(QLatin1String(KEY_SELECTED_PROJECT), QVariant::fromValue(project));
     m_wizard->setValue(QLatin1String(KEY_SELECTED_NODE), QVariant::fromValue(node));

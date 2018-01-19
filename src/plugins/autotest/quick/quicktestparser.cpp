@@ -36,6 +36,7 @@
 #include <qmljs/qmljsdialect.h>
 #include <qmljstools/qmljsmodelmanager.h>
 #include <utils/hostosinfo.h>
+#include <utils/algorithm.h>
 #include <utils/qtcassert.h>
 
 namespace Autotest {
@@ -88,20 +89,21 @@ static bool includesQtQuickTest(const CPlusPlus::Document::Ptr &doc,
 static QString quickTestSrcDir(const CppTools::CppModelManager *cppMM,
                                const QString &fileName)
 {
-    static const QByteArray qtsd(" QUICK_TEST_SOURCE_DIR ");
     const QList<CppTools::ProjectPart::Ptr> parts = cppMM->projectPart(fileName);
     if (parts.size() > 0) {
-        QByteArray projDefines(parts.at(0)->projectDefines);
-        for (const QByteArray &line : projDefines.split('\n')) {
-            if (line.contains(qtsd)) {
-                QByteArray result = line.mid(line.indexOf(qtsd) + qtsd.length());
-                if (result.startsWith('"'))
-                    result.remove(result.length() - 1, 1).remove(0, 1);
-                if (result.startsWith("\\\""))
-                    result.remove(result.length() - 2, 2).remove(0, 2);
-                return QLatin1String(result);
-            }
-        }
+        const ProjectExplorer::Macros &macros = parts.at(0)->projectMacros;
+        auto found = std::find_if(
+                    macros.begin(),
+                    macros.end(),
+                    [] (const ProjectExplorer::Macro &macro) { return macro.key == "QUICK_TEST_SOURCE_DIR"; });
+       if (found != macros.end())  {
+           QByteArray result = found->value;
+           if (result.startsWith('"'))
+               result.remove(result.length() - 1, 1).remove(0, 1);
+           if (result.startsWith("\\\""))
+               result.remove(result.length() - 2, 2).remove(0, 2);
+           return QLatin1String(result);
+       }
     }
     return QString();
 }
@@ -238,6 +240,49 @@ bool QuickTestParser::handleQtQuickTest(QFutureInterface<TestParseResultPtr> fut
     return result;
 }
 
+static QMap<QString, QDateTime> qmlFilesWithMTime(const QString &directory)
+{
+    const QFileInfoList &qmlFiles = QDir(directory).entryInfoList({ "*.qml" },
+                                                                  QDir::Files, QDir::Name);
+    QMap<QString, QDateTime> filesAndDates;
+    for (const QFileInfo &info : qmlFiles)
+        filesAndDates.insert(info.fileName(), info.lastModified());
+    return filesAndDates;
+}
+
+void QuickTestParser::handleDirectoryChanged(const QString &directory)
+{
+    const QMap<QString, QDateTime> &filesAndDates = qmlFilesWithMTime(directory);
+    const QMap<QString, QDateTime> &watched = m_watchedFiles.value(directory);
+    const QStringList &keys = watched.keys();
+    if (filesAndDates.keys() != keys) { // removed or added files
+        m_watchedFiles[directory] = filesAndDates;
+        TestTreeModel::instance()->parser()->emitUpdateTestTree(this);
+    } else { // we might still have different timestamps
+        const bool timestampChanged = Utils::anyOf(keys, [&](const QString &file) {
+            return filesAndDates.value(file) != watched.value(file);
+        });
+        if (timestampChanged) {
+            QmlJS::PathsAndLanguages paths;
+            paths.maybeInsert(Utils::FileName::fromString(directory), QmlJS::Dialect::Qml);
+            QFutureInterface<void> future;
+            QmlJS::ModelManagerInterface *qmlJsMM = QmlJS::ModelManagerInterface::instance();
+            QmlJS::ModelManagerInterface::importScan(future, qmlJsMM->workingCopy(), paths, qmlJsMM,
+                                                     true /*emitDocumentChanges*/,
+                                                     false /*onlyTheLib*/,
+                                                     true /*forceRescan*/ );
+        }
+    }
+}
+
+void QuickTestParser::doUpdateWatchPaths(const QStringList &directories)
+{
+    for (const QString &dir : directories) {
+        m_directoryWatcher.addPath(dir);
+        m_watchedFiles[dir] = qmlFilesWithMTime(dir);
+    }
+}
+
 QuickTestParser::QuickTestParser()
     : CppParser()
 {
@@ -246,22 +291,24 @@ QuickTestParser::QuickTestParser()
         const QStringList &dirs = m_directoryWatcher.directories();
         if (!dirs.isEmpty())
             m_directoryWatcher.removePaths(dirs);
+        m_watchedFiles.clear();
     });
     connect(&m_directoryWatcher, &QFileSystemWatcher::directoryChanged,
-                     [this] { TestTreeModel::instance()->parser()->emitUpdateTestTree(this); });
+            this, &QuickTestParser::handleDirectoryChanged);
     connect(this, &QuickTestParser::updateWatchPaths,
-            &m_directoryWatcher, &QFileSystemWatcher::addPaths, Qt::QueuedConnection);
+            this, &QuickTestParser::doUpdateWatchPaths, Qt::QueuedConnection);
 }
 
 QuickTestParser::~QuickTestParser()
 {
 }
 
-void QuickTestParser::init(const QStringList &filesToParse)
+void QuickTestParser::init(const QStringList &filesToParse, bool fullParse)
 {
     m_qmlSnapshot = QmlJSTools::Internal::ModelManager::instance()->snapshot();
-    m_proFilesForQmlFiles = QuickTestUtils::proFilesForQmlFiles(id(), filesToParse);
-    CppParser::init(filesToParse);
+    if (!fullParse) // in a full parse we get the correct entry points by the respective main
+        m_proFilesForQmlFiles = QuickTestUtils::proFilesForQmlFiles(id(), filesToParse);
+    CppParser::init(filesToParse, fullParse);
 }
 
 void QuickTestParser::release()

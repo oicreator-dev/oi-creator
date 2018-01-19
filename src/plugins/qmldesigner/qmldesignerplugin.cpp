@@ -213,9 +213,9 @@ static QStringList allUiQmlFilesforCurrentProject(const Utils::FileName &fileNam
     ProjectExplorer::Project *currentProject = ProjectExplorer::SessionManager::projectForFile(fileName);
 
     if (currentProject) {
-        foreach (const QString &fileName, currentProject->files(ProjectExplorer::Project::SourceFiles)) {
+        foreach (const Utils::FileName &fileName, currentProject->files(ProjectExplorer::Project::SourceFiles)) {
             if (fileName.endsWith(".ui.qml"))
-                list.append(fileName);
+                list.append(fileName.toString());
         }
     }
 
@@ -286,8 +286,6 @@ void QmlDesignerPlugin::integrateIntoQtCreator(QWidget *modeWidget)
             }
         }
     });
-
-    d->viewManager.designerActionManager().polishActions();
 }
 
 void QmlDesignerPlugin::showDesigner()
@@ -415,7 +413,6 @@ void QmlDesignerPlugin::deactivateAutoSynchronization()
     viewManager().detachViewsExceptRewriterAndComponetView();
     viewManager().detachComponentView();
     viewManager().detachRewriterView();
-    emitCurrentTextEditorChanged(documentManager().currentDesignDocument()->textEditor());
     documentManager().currentDesignDocument()->resetToDocumentModel();
 }
 

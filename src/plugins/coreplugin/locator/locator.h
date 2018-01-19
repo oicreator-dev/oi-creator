@@ -40,9 +40,9 @@ namespace Core {
 namespace Internal {
 
 class CorePlugin;
-class LocatorWidget;
 class OpenDocumentsFilter;
 class FileSystemFilter;
+class JavaScriptFilter;
 class LocatorSettingsPage;
 class ExternalToolsFilter;
 
@@ -54,40 +54,44 @@ public:
     Locator();
     ~Locator();
 
+    static Locator *instance();
+
     void initialize(CorePlugin *corePlugin, const QStringList &arguments, QString *errorMessage);
     void extensionsInitialized();
     bool delayedInitialize();
 
-    QList<ILocatorFilter *> filters();
+    static QList<ILocatorFilter *> filters();
     QList<ILocatorFilter *> customFilters();
     void setFilters(QList<ILocatorFilter *> f);
     void setCustomFilters(QList<ILocatorFilter *> f);
-    int refreshInterval();
+    int refreshInterval() const;
     void setRefreshInterval(int interval);
+
+signals:
+    void filtersChanged();
 
 public slots:
     void refresh(QList<ILocatorFilter *> filters = QList<ILocatorFilter *>());
-    void saveSettings();
-    void openLocator();
+    void saveSettings() const;
 
 private:
-    void updatePlaceholderText(Core::Command *command);
     void loadSettings();
+    void updateFilterActions();
     void updateEditorManagerPlaceholderText();
 
-    LocatorWidget *m_locatorWidget;
-    LocatorSettingsPage *m_settingsPage;
+    LocatorSettingsPage *m_settingsPage = nullptr;
 
     bool m_settingsInitialized = false;
     QList<ILocatorFilter *> m_filters;
     QList<ILocatorFilter *> m_customFilters;
-    int m_refreshInterval;
+    QMap<Id, QAction *> m_filterActionMap;
     QTimer m_refreshTimer;
-    OpenDocumentsFilter *m_openDocumentsFilter;
-    FileSystemFilter *m_fileSystemFilter;
-    ExecuteFilter *m_executeFilter;
+    JavaScriptFilter *m_javaScriptFilter = nullptr;
+    OpenDocumentsFilter *m_openDocumentsFilter = nullptr;
+    FileSystemFilter *m_fileSystemFilter = nullptr;
+    ExecuteFilter *m_executeFilter = nullptr;
     CorePlugin *m_corePlugin = nullptr;
-    ExternalToolsFilter *m_externalToolsFilter;
+    ExternalToolsFilter *m_externalToolsFilter = nullptr;
 };
 
 } // namespace Internal

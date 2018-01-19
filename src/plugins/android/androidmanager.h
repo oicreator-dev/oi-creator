@@ -29,7 +29,6 @@
 
 #include <QPair>
 #include <QObject>
-#include <QStringList>
 
 namespace ProjectExplorer {
 class Kit;
@@ -47,10 +46,6 @@ class ANDROID_EXPORT AndroidManager : public QObject
     Q_OBJECT
 
 public:
-
-    static bool supportsAndroid(const ProjectExplorer::Kit *kit);
-    static bool supportsAndroid(const ProjectExplorer::Target *target);
-
     static QString packageName(ProjectExplorer::Target *target);
     static QString packageName(const Utils::FileName &manifestFile);
 
@@ -87,7 +82,6 @@ public:
                                        const QString &alias);
     static bool checkForQt51Files(Utils::FileName fileName);
     static AndroidQtSupport *androidQtSupport(ProjectExplorer::Target *target);
-    static bool useGradle(ProjectExplorer::Target *target);
     static bool updateGradleProperties(ProjectExplorer::Target *target);
     static int findApiLevel(const Utils::FileName &platformPath);
 };

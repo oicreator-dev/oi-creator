@@ -74,13 +74,14 @@ class BeautifierPlugin : public ExtensionSystem::IPlugin
 public:
     bool initialize(const QStringList &arguments, QString *errorString) override;
     void extensionsInitialized() override;
-    ShutdownFlag aboutToShutdown() override;
 
     void formatCurrentFile(const Command &command, int startPos = -1, int endPos = 0);
 
     static QString msgCannotGetConfigurationFile(const QString &command);
     static QString msgFormatCurrentFile();
     static QString msgFormatSelectedText();
+    static QString msgFormatAtCursor();
+    static QString msgDisableFormattingSelectedText();
     static QString msgCommandPromptDialogTitle(const QString &command);
     static void showError(const QString &error);
 

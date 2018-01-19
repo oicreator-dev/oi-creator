@@ -41,7 +41,8 @@ CodeFormatter::BlockData::BlockData()
 }
 
 CodeFormatter::CodeFormatter()
-    : m_indentDepth(0)
+    : m_tokenIndex(0)
+    , m_indentDepth(0)
     , m_tabSize(4)
 {
 }

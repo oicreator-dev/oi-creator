@@ -31,6 +31,8 @@
 #include "pluginmanager.h"
 
 #include <utils/algorithm.h>
+#include <utils/qtcassert.h>
+#include <utils/stringutils.h>
 
 #include <QCoreApplication>
 #include <QDebug>
@@ -630,29 +632,6 @@ static inline QString msgInvalidFormat(const char *key, const QString &content)
             .arg(QLatin1String(key), content);
 }
 
-static inline bool readMultiLineString(const QJsonValue &value, QString *out)
-{
-    if (!out) {
-        qCWarning(pluginLog) << Q_FUNC_INFO << "missing output parameter";
-        return false;
-    }
-    if (value.isString()) {
-        *out = value.toString();
-    } else if (value.isArray()) {
-        QJsonArray array = value.toArray();
-        QStringList lines;
-        foreach (const QJsonValue &v, array) {
-            if (!v.isString())
-                return false;
-            lines.append(v.toString());
-        }
-        *out = lines.join(QLatin1Char('\n'));
-    } else {
-        return false;
-    }
-    return true;
-}
-
 /*!
     \internal
 */
@@ -737,7 +716,7 @@ bool PluginSpecPrivate::readMetaData(const QJsonObject &pluginMetaData)
     copyright = value.toString();
 
     value = metaData.value(QLatin1String(DESCRIPTION));
-    if (!value.isUndefined() && !readMultiLineString(value, &description))
+    if (!value.isUndefined() && !Utils::readMultiLineString(value, &description))
         return reportError(msgValueIsNotAString(DESCRIPTION));
 
     value = metaData.value(QLatin1String(URL));
@@ -751,7 +730,7 @@ bool PluginSpecPrivate::readMetaData(const QJsonObject &pluginMetaData)
     category = value.toString();
 
     value = metaData.value(QLatin1String(LICENSE));
-    if (!value.isUndefined() && !readMultiLineString(value, &license))
+    if (!value.isUndefined() && !Utils::readMultiLineString(value, &license))
         return reportError(msgValueIsNotAMultilineString(LICENSE));
 
     value = metaData.value(QLatin1String(PLATFORM));
@@ -801,7 +780,7 @@ bool PluginSpecPrivate::readMetaData(const QJsonObject &pluginMetaData)
                 } else if (typeValue.toLower() == QLatin1String(DEPENDENCY_TYPE_TEST)) {
                     dep.type = PluginDependency::Test;
                 } else {
-                    return reportError(tr("Dependency: \"%1\" must be \"%2\" or \"%3\" (is \"%4\")")
+                    return reportError(tr("Dependency: \"%1\" must be \"%2\" or \"%3\" (is \"%4\").")
                                        .arg(QLatin1String(DEPENDENCY_TYPE),
                                             QLatin1String(DEPENDENCY_TYPE_HARD),
                                             QLatin1String(DEPENDENCY_TYPE_SOFT),
@@ -938,19 +917,25 @@ bool PluginSpecPrivate::resolveDependencies(const QList<PluginSpec *> &specs)
     return true;
 }
 
-void PluginSpecPrivate::enableDependenciesIndirectly()
+// returns the plugins that it actually indirectly enabled
+QList<PluginSpec *> PluginSpecPrivate::enableDependenciesIndirectly(bool enableTestDependencies)
 {
     if (!q->isEffectivelyEnabled()) // plugin not enabled, nothing to do
-        return;
+        return {};
+    QList<PluginSpec *> enabled;
     QHashIterator<PluginDependency, PluginSpec *> it(dependencySpecs);
     while (it.hasNext()) {
         it.next();
-        if (it.key().type != PluginDependency::Required)
+        if (it.key().type != PluginDependency::Required
+                && (!enableTestDependencies || it.key().type != PluginDependency::Test))
             continue;
         PluginSpec *dependencySpec = it.value();
-        if (!dependencySpec->isEffectivelyEnabled())
+        if (!dependencySpec->isEffectivelyEnabled()) {
             dependencySpec->d->enabledIndirectly = true;
+            enabled << dependencySpec;
+        }
     }
+    return enabled;
 }
 
 /*!

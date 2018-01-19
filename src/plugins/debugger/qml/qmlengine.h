@@ -43,10 +43,8 @@ class QmlEngine : public DebuggerEngine
     Q_OBJECT
 
 public:
-    explicit QmlEngine(bool useTerminal);
+    QmlEngine();
     ~QmlEngine() override;
-
-    void setRunTool(DebuggerRunTool *runTool) override;
 
     void logServiceStateChange(const QString &service, float version,
                                QmlDebug::QmlDebugClient::State newState);
@@ -59,8 +57,8 @@ private:
     void errorMessageBoxFinished(int result);
     void updateCurrentContext();
 
-    void tryToConnect(Utils::Port port = Utils::Port());
-    void beginConnection(Utils::Port port = Utils::Port());
+    void tryToConnect();
+    void beginConnection();
     void handleLauncherStarted();
     void connectionEstablished();
     void connectionStartupFailed();
@@ -68,9 +66,6 @@ private:
     void appMessage(const QString &msg, Utils::OutputFormat);
 
     void setState(DebuggerState state, bool forced) override;
-
-    void notifyEngineRemoteServerRunning(const QString &, int pid) override;
-    void notifyEngineRemoteSetupFinished(const RemoteSetupResult &result) override;
 
     void gotoLocation(const Internal::Location &location) override;
     void insertBreakpoint(Breakpoint bp) override;
@@ -87,7 +82,6 @@ private:
     void executeNextI() override;
 
     void setupEngine() override;
-    void setupInferior() override;
     void runEngine() override;
     void shutdownInferior() override;
     void shutdownEngine() override;

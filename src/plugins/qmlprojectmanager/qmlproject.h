@@ -48,8 +48,6 @@ public:
 
     bool supportsKit(ProjectExplorer::Kit *k, QString *errorMessage) const override;
 
-    Internal::QmlProjectNode *rootProjectNode() const override;
-
     bool validProjectFile() const;
 
     enum RefreshOption {
@@ -70,11 +68,9 @@ public:
 
     void refreshProjectFile();
 
-    enum QmlImport { UnknownImport, QtQuick1Import, QtQuick2Import };
-    QmlImport defaultImport() const;
-
 protected:
     RestoreResult fromMap(const QVariantMap &map, QString *errorMessage) override;
+    bool setupTarget(ProjectExplorer::Target *t) override;
 
 private:
     void generateProjectTree();
@@ -87,7 +83,6 @@ private:
     // plain format
     void parseProject(RefreshOptions options);
 
-    QmlImport m_defaultImport;
     ProjectExplorer::Target *m_activeTarget = nullptr;
 
     QPointer<QmlProjectItem> m_projectItem;

@@ -1,9 +1,11 @@
 QTC_LIB_DEPENDS += \
-    clangbackendipc
+    clangsupport
 
 include(../../qtcreatortool.pri)
 include(../../shared/clang/clang_installation.pri)
 include(source/clangrefactoringbackend-source.pri)
+
+requires(!isEmpty(LIBTOOLING_LIBS))
 
 win32 {
     LLVM_BUILDMODE = $$system($$llvm_config --build-mode, lines)

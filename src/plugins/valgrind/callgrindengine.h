@@ -25,10 +25,12 @@
 
 #pragma once
 
-#include <valgrind/valgrindengine.h>
+#include "valgrindengine.h"
+#include "valgrindrunner.h"
 
-#include <valgrind/callgrind/callgrindrunner.h>
-#include <valgrind/callgrind/callgrindparsedata.h>
+#include "callgrind/callgrindparsedata.h"
+#include "callgrind/callgrindparser.h"
+#include "callgrind/callgrindcontroller.h"
 
 namespace Valgrind {
 namespace Internal {
@@ -59,16 +61,22 @@ public:
 protected:
     QStringList toolArguments() const override;
     QString progressTitle() const override;
-    Valgrind::ValgrindRunner *runner() override;
 
 signals:
     void parserDataReady(CallgrindToolRunner *engine);
 
 private:
     void slotFinished();
+    void showStatusMessage(const QString &message);
 
-    Valgrind::Callgrind::CallgrindRunner m_runner;
+    void triggerParse();
+    void localParseDataAvailable(const QString &file);
+    void controllerFinished(Callgrind::CallgrindController::Option option);
+
     bool m_markAsPaused = false;
+    Callgrind::CallgrindController m_controller;
+    Callgrind::Parser m_parser;
+    bool m_paused = false;
 
     QString m_argumentForToggleCollect;
 };

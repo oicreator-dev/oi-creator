@@ -47,7 +47,7 @@ class QuickTestParser : public QObject, public CppParser
 public:
     QuickTestParser();
     virtual ~QuickTestParser();
-    void init(const QStringList &filesToParse) override;
+    void init(const QStringList &filesToParse, bool fullParse) override;
     void release() override;
     bool processDocument(QFutureInterface<TestParseResultPtr> futureInterface,
                          const QString &fileName) override;
@@ -56,10 +56,13 @@ signals:
 private:
     bool handleQtQuickTest(QFutureInterface<TestParseResultPtr> futureInterface,
                            CPlusPlus::Document::Ptr document, const Core::Id &id) const;
+    void handleDirectoryChanged(const QString &directory);
+    void doUpdateWatchPaths(const QStringList &directories);
     QList<QmlJS::Document::Ptr> scanDirectoryForQuickTestQmlFiles(const QString &srcDir) const;
     QmlJS::Snapshot m_qmlSnapshot;
     QHash<QString, QString> m_proFilesForQmlFiles;
     QFileSystemWatcher m_directoryWatcher;
+    QMap<QString, QMap<QString, QDateTime> > m_watchedFiles;
 };
 
 } // namespace Internal

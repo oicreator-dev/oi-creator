@@ -5,18 +5,15 @@ import QtcFunctions
 QtcProduct {
     type: ["dynamiclibrary", "pluginSpec", "qtc.dev-module"]
     installDir: qtc.ide_plugin_path
-    installTags: ["dynamiclibrary"]
+    installTags: ["dynamiclibrary", "debuginfo_dll"]
     useGuiPchFile: true
 
     property var pluginJsonReplacements
     property var pluginRecommends: []
     property var pluginTestDepends: []
 
-    property string minimumQtVersion: "5.6.0"
-    condition: QtcFunctions.versionIsAtLeast(Qt.core.version, minimumQtVersion)
-
     targetName: QtcFunctions.qtLibraryName(qbs, name)
-    destinationDirectory: qtc.ide_plugin_path
+    destinationDirectory: FileInfo.joinPaths(buildDirectory, qtc.ide_plugin_path)
 
     Depends { name: "ExtensionSystem" }
     Depends { name: "pluginjson" }

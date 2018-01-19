@@ -51,7 +51,8 @@ public:
     ExecuteFilter();
     QList<LocatorFilterEntry> matchesFor(QFutureInterface<LocatorFilterEntry> &future,
                                          const QString &entry) override;
-    void accept(LocatorFilterEntry selection) const override;
+    void accept(LocatorFilterEntry selection,
+                QString *newText, int *selectionStart, int *selectionLength) const override;
     void refresh(QFutureInterface<void> &) override {}
 
 private:
@@ -64,7 +65,7 @@ private:
 
     QQueue<ExecuteData> m_taskQueue;
     QStringList m_commandHistory;
-    Utils::QtcProcess *m_process;
+    Utils::QtcProcess *m_process = nullptr;
     QTimer m_runTimer;
     QTextCodec::ConverterState m_stdoutState;
     QTextCodec::ConverterState m_stderrState;

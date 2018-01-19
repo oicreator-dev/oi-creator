@@ -119,8 +119,8 @@ static FolderNode *recursiveFindOrCreateFolderNode(FolderNode *folder,
   \sa ProjectExplorer::NodesWatcher
 */
 
-Node::Node(NodeType nodeType, const Utils::FileName &filePath, int line) :
-    m_filePath(filePath), m_line(line), m_nodeType(nodeType)
+Node::Node(NodeType nodeType, const Utils::FileName &filePath, int line, const QByteArray &id) :
+    m_filePath(filePath), m_nodeId(id), m_line(line), m_nodeType(nodeType)
 { }
 
 void Node::setPriority(int p)
@@ -222,6 +222,11 @@ int Node::line() const
     return m_line;
 }
 
+QByteArray Node::id() const
+{
+    return m_nodeId;
+}
+
 QString Node::displayName() const
 {
     return filePath().fileName();
@@ -248,7 +253,7 @@ bool Node::isGenerated() const
     return (m_flags & FlagIsGenerated) == FlagIsGenerated;
 }
 
-bool Node::supportsAction(ProjectAction, Node *) const
+bool Node::supportsAction(ProjectAction, const Node *) const
 {
     return false;
 }
@@ -285,7 +290,8 @@ FileType Node::fileTypeForMimeType(const Utils::MimeType &mt)
             type = FileType::Resource;
         else if (mtName == Constants::SCXML_MIMETYPE)
             type = FileType::StateChart;
-        else if (mtName == Constants::QML_MIMETYPE)
+        else if (mtName == Constants::QML_MIMETYPE
+                 || mtName == Constants::QMLUI_MIMETYPE)
             type = FileType::QML;
     } else {
         type = FileType::Unknown;
@@ -309,9 +315,9 @@ FileType Node::fileTypeForFileName(const Utils::FileName &file)
   \sa ProjectExplorer::FolderNode, ProjectExplorer::ProjectNode
 */
 
-FileNode::FileNode(const Utils::FileName &filePath,
-                   const FileType fileType,
-                   bool generated, int line) : Node(NodeType::File, filePath, line),
+FileNode::FileNode(const Utils::FileName &filePath, const FileType fileType, bool generated,
+                   int line, const QByteArray &id) :
+    Node(NodeType::File, filePath, line, id),
     m_fileType(fileType)
 {
     setListInProject(true);
@@ -324,7 +330,7 @@ FileNode::FileNode(const Utils::FileName &filePath,
 
 FileNode *FileNode::clone() const
 {
-    auto fn = new FileNode(filePath(), fileType(), isGenerated(), line());
+    auto fn = new FileNode(filePath(), fileType(), isGenerated(), line(), id());
     fn->setEnabled(isEnabled());
     fn->setPriority(priority());
     fn->setListInProject(listInProject());
@@ -339,7 +345,8 @@ FileType FileNode::fileType() const
 static QList<FileNode *> scanForFilesRecursively(const Utils::FileName &directory,
                                                  const std::function<FileNode *(const Utils::FileName &)> factory,
                                                  QSet<QString> &visited, QFutureInterface<QList<FileNode*>> *future,
-                                                 double progressStart, double progressRange)
+                                                 double progressStart, double progressRange,
+                                                 const QList<Core::IVersionControl*> &versionControls)
 {
     QList<FileNode *> result;
 
@@ -351,8 +358,6 @@ static QList<FileNode *> scanForFilesRecursively(const Utils::FileName &director
     if (visitedCount == visited.count())
         return result;
 
-    const Core::IVersionControl *vcsControl
-            = Core::VcsManager::findVersionControlForDirectory(baseDir.absolutePath(), nullptr);
     const QList<QFileInfo> entries = baseDir.entryInfoList(QStringList(), QDir::AllEntries|QDir::NoDotAndDotDot);
     double progress = 0;
     const double progressIncrement = progressRange / static_cast<double>(entries.count());
@@ -362,9 +367,11 @@ static QList<FileNode *> scanForFilesRecursively(const Utils::FileName &director
             return result;
 
         const Utils::FileName entryName = Utils::FileName::fromString(entry.absoluteFilePath());
-        if (!vcsControl || !vcsControl->isVcsFileOrDirectory(entryName)) {
+        if (!Utils::contains(versionControls, [&entryName](const Core::IVersionControl *vc) {
+                             return vc->isVcsFileOrDirectory(entryName);
+            })) {
             if (entry.isDir())
-                result.append(scanForFilesRecursively(entryName, factory, visited, future, progress, progressIncrement));
+                result.append(scanForFilesRecursively(entryName, factory, visited, future, progress, progressIncrement, versionControls));
             else if (FileNode *node = factory(entryName))
                 result.append(node);
         }
@@ -382,17 +389,27 @@ static QList<FileNode *> scanForFilesRecursively(const Utils::FileName &director
     return result;
 }
 
+
 QList<FileNode *> FileNode::scanForFiles(const Utils::FileName &directory,
-                                               const std::function<FileNode *(const Utils::FileName &)> factory,
-                                               QFutureInterface<QList<FileNode *>> *future)
+                                         const std::function<FileNode *(const Utils::FileName &)> factory,
+                                         QFutureInterface<QList<FileNode *> > *future)
+{
+    return FileNode::scanForFilesWithVersionControls(directory, factory, QList<Core::IVersionControl *>(), future);
+}
+
+QList<FileNode *>
+FileNode::scanForFilesWithVersionControls(const Utils::FileName &directory,
+                                          const std::function<FileNode *(const Utils::FileName &)> factory,
+                                          const QList<Core::IVersionControl *> &versionControls,
+                                          QFutureInterface<QList<FileNode *>> *future)
 {
     QSet<QString> visited;
     if (future)
         future->setProgressRange(0, 1000000);
-    return scanForFilesRecursively(directory, factory, visited, future, 0.0, 1000000.0);
+    return scanForFilesRecursively(directory, factory, visited, future, 0.0, 1000000.0, versionControls);
 }
 
-bool FileNode::supportsAction(ProjectAction action, Node *node) const
+bool FileNode::supportsAction(ProjectAction action, const Node *node) const
 {
     if (action == InheritedFromParent)
         return true;
@@ -407,8 +424,9 @@ bool FileNode::supportsAction(ProjectAction action, Node *node) const
 
   \sa ProjectExplorer::FileNode, ProjectExplorer::ProjectNode
 */
-FolderNode::FolderNode(const Utils::FileName &folderPath, NodeType nodeType, const QString &displayName) :
-    Node(nodeType, folderPath, -1),
+FolderNode::FolderNode(const Utils::FileName &folderPath, NodeType nodeType,
+                       const QString &displayName, const QByteArray &id) :
+    Node(nodeType, folderPath, -1, id),
     m_displayName(displayName)
 {
     setPriority(DefaultFolderPriority);
@@ -626,13 +644,23 @@ void FolderNode::setIcon(const QIcon &icon)
     m_icon = icon;
 }
 
+void FolderNode::setLocationInfo(const QList<FolderNode::LocationInfo> &info)
+{
+    m_locations = info;
+}
+
+const QList<FolderNode::LocationInfo> FolderNode::locationInfo() const
+{
+    return m_locations;
+}
+
 QString FolderNode::addFileFilter() const
 {
     FolderNode *fn = parentFolderNode();
     return fn ? fn->addFileFilter() : QString();
 }
 
-bool FolderNode::supportsAction(ProjectAction action, Node *node) const
+bool FolderNode::supportsAction(ProjectAction action, const Node *node) const
 {
     if (action == InheritedFromParent)
         return true;
@@ -713,6 +741,11 @@ bool FolderNode::showInSimpleTree() const
     return false;
 }
 
+bool FolderNode::showWhenEmpty() const
+{
+    return false;
+}
+
 /*!
   \class ProjectExplorer::VirtualFolderNode
 
@@ -724,8 +757,9 @@ bool FolderNode::showInSimpleTree() const
 
   \sa ProjectExplorer::FileNode, ProjectExplorer::ProjectNode
 */
-VirtualFolderNode::VirtualFolderNode(const Utils::FileName &folderPath, int priority) :
-    FolderNode(folderPath, NodeType::VirtualFolder, QString())
+VirtualFolderNode::VirtualFolderNode(const Utils::FileName &folderPath, int priority,
+                                     const QByteArray &id) :
+    FolderNode(folderPath, NodeType::VirtualFolder, QString(), id)
 {
     setPriority(priority);
 }
@@ -750,12 +784,11 @@ QString VirtualFolderNode::addFileFilter() const
 /*!
   Creates an uninitialized project node object.
   */
-ProjectNode::ProjectNode(const Utils::FileName &projectFilePath) :
-    FolderNode(projectFilePath, NodeType::Project)
+ProjectNode::ProjectNode(const Utils::FileName &projectFilePath, const QByteArray &id) :
+    FolderNode(projectFilePath, NodeType::Project, projectFilePath.fileName(), id)
 {
     setPriority(DefaultProjectPriority);
     setListInProject(true);
-    setDisplayName(projectFilePath.fileName());
 }
 
 bool ProjectNode::canAddSubProject(const QString &proFilePath) const
@@ -810,7 +843,7 @@ bool ProjectNode::renameFile(const QString &filePath, const QString &newFilePath
     return false;
 }
 
-bool ProjectNode::supportsAction(ProjectAction, Node *) const
+bool ProjectNode::supportsAction(ProjectAction, const Node *) const
 {
     return false;
 }
@@ -865,15 +898,21 @@ QString ContainerNode::displayName() const
     return name;
 }
 
-bool ContainerNode::supportsAction(ProjectAction action, Node *node) const
+bool ContainerNode::supportsAction(ProjectAction action, const Node *node) const
 {
-    Node *rootNode = m_project->rootProjectNode();
+    const Node *rootNode = m_project->rootProjectNode();
     return rootNode && rootNode->supportsAction(action, node);
 }
 
 ProjectNode *ContainerNode::rootProjectNode() const
 {
     return m_project->rootProjectNode();
+}
+
+void ContainerNode::removeAllChildren()
+{
+    qDeleteAll(m_nodes);
+    m_nodes.clear();
 }
 
 } // namespace ProjectExplorer

@@ -49,7 +49,7 @@ class WrapperNode : public Utils::TypedTreeItem<WrapperNode>
 {
 public:
     explicit WrapperNode(Node *node) : m_node(node) {}
-    QPointer<Node> m_node;
+    Node *m_node = nullptr;
 };
 
 class FlatModel : public Utils::TreeModel<WrapperNode, WrapperNode>
@@ -76,6 +76,7 @@ public:
     bool generatedFilesFilterEnabled();
     void setProjectFilterEnabled(bool filter);
     void setGeneratedFilesFilterEnabled(bool filter);
+    void setTrimEmptyDirectories(bool filter);
 
     void onExpanded(const QModelIndex &idx);
     void onCollapsed(const QModelIndex &idx);
@@ -87,20 +88,24 @@ signals:
 private:
     bool m_filterProjects = false;
     bool m_filterGeneratedFiles = true;
+    bool m_trimEmptyDirectories = true;
 
     static const QLoggingCategory &logger();
 
     void updateSubtree(FolderNode *node);
     void rebuildModel();
     void addFolderNode(WrapperNode *parent, FolderNode *folderNode, QSet<Node *> *seen);
+    bool trimEmptyDirectories(WrapperNode *parent);
 
     ExpandData expandDataForNode(const Node *node) const;
     void loadExpandData();
     void saveExpandData();
     void handleProjectAdded(Project *project);
     void handleProjectRemoved(Project *project);
-    WrapperNode *nodeForProject(Project *project);
+    WrapperNode *nodeForProject(const Project *project) const;
     void addOrRebuildProjectModel(Project *project);
+
+    void parsingStateChanged(Project *project);
 
     QTimer m_timer;
     QSet<ExpandData> m_toExpand;

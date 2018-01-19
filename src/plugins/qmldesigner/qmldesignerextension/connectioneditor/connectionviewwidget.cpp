@@ -69,17 +69,13 @@ ConnectionViewWidget::ConnectionViewWidget(QWidget *parent) :
     ui->tabBar->addTab(tr("Backends", "Title of dynamic properties view"));
     ui->tabBar->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
 
-    ui->connectionView->setStyleSheet(Theme::replaceCssColors(
-            QLatin1String(Utils::FileReader::fetchQrc(QLatin1String(":/qmldesigner/scrollbar.css")))));
+    const QString themedScrollBarCss = Theme::replaceCssColors(
+                QLatin1String(Utils::FileReader::fetchQrc(QLatin1String(":/qmldesigner/scrollbar.css"))));
 
-    ui->bindingView->setStyleSheet(Theme::replaceCssColors(
-            QLatin1String(Utils::FileReader::fetchQrc(QLatin1String(":/qmldesigner/scrollbar.css")))));
-
-    ui->dynamicPropertiesView->setStyleSheet(Theme::replaceCssColors(
-                QLatin1String(Utils::FileReader::fetchQrc(QLatin1String(":/qmldesigner/scrollbar.css")))));
-
-    ui->backendView->setStyleSheet(Theme::replaceCssColors(
-                QLatin1String(Utils::FileReader::fetchQrc(QLatin1String(":/qmldesigner/scrollbar.css")))));
+    ui->connectionView->setStyleSheet(themedScrollBarCss);
+    ui->bindingView->setStyleSheet(themedScrollBarCss);
+    ui->dynamicPropertiesView->setStyleSheet(themedScrollBarCss);
+    ui->backendView->setStyleSheet(themedScrollBarCss);
 
     connect(ui->tabBar, &QTabBar::currentChanged,
             ui->stackedWidget, &QStackedWidget::setCurrentIndex);
@@ -235,18 +231,24 @@ void ConnectionViewWidget::handleTabChanged(int)
 void ConnectionViewWidget::removeButtonClicked()
 {
     if (currentTab() == ConnectionTab) {
+        if (ui->connectionView->selectionModel()->selectedRows().isEmpty())
+            return;
         int currentRow =  ui->connectionView->selectionModel()->selectedRows().first().row();
         ConnectionModel *connectionModel = qobject_cast<ConnectionModel*>(ui->connectionView->model());
         if (connectionModel) {
             connectionModel->deleteConnectionByRow(currentRow);
         }
     } else if (currentTab() == BindingTab) {
+        if (ui->bindingView->selectionModel()->selectedRows().isEmpty())
+            return;
         int currentRow =  ui->bindingView->selectionModel()->selectedRows().first().row();
         BindingModel *bindingModel = qobject_cast<BindingModel*>(ui->bindingView->model());
         if (bindingModel) {
             bindingModel->deleteBindindByRow(currentRow);
         }
     } else if (currentTab() == DynamicPropertiesTab) {
+        if (ui->dynamicPropertiesView->selectionModel()->selectedRows().isEmpty())
+            return;
         int currentRow =  ui->dynamicPropertiesView->selectionModel()->selectedRows().first().row();
         DynamicPropertiesModel *dynamicPropertiesModel = qobject_cast<DynamicPropertiesModel*>(ui->dynamicPropertiesView->model());
         if (dynamicPropertiesModel)

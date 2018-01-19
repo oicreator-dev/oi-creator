@@ -58,6 +58,7 @@ public:
     QList<TestConfiguration *> getSelectedTestConfigurations() const override;
     TestTreeItem *find(const TestParseResult *result) override;
     bool modify(const TestParseResult *result) override;
+    TestTreeItem *createParentGroupNode() const override;
 
     void setStates(TestStates states) { m_state = states; }
     void setState(TestState state) { m_state |= state; }
@@ -66,6 +67,7 @@ public:
                                               GTestTreeItem::TestStates state,
                                               const QString &proFile) const;
     QString nameSuffix() const;
+    QSet<QString> internalTargets() const override;
 
 private:
     bool modifyTestSetContent(const GTestParseResult *result);

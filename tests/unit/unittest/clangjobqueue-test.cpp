@@ -66,6 +66,8 @@ protected:
                                 PreferredTranslationUnit preferredTranslationUnit
                                     = PreferredTranslationUnit::RecentlyParsed) const;
 
+    void pretendParsedTranslationUnit();
+
     void updateDocumentRevision();
     void updateUnsavedFiles();
     void updateProject();
@@ -118,6 +120,41 @@ TEST_F(JobQueue, DoNotAddDuplicateForWhichAJobIsAlreadyRunning)
     ASSERT_FALSE(added);
 }
 
+TEST_F(JobQueue, DoNotAddForNotExistingDocument)
+{
+    jobQueue.setCancelJobRequest([](const JobRequest &) {
+       return true;
+    });
+
+    const bool added = jobQueue.add(createJobRequest(Utf8StringLiteral("notExistingDocument.cpp"),
+                                                     JobRequest::Type::UpdateDocumentAnnotations));
+
+    ASSERT_FALSE(added);
+}
+
+TEST_F(JobQueue, DoNotAddForNotIntactDocument)
+{
+    document.setHasParseOrReparseFailed(true);
+    const bool added = jobQueue.add(createJobRequest(filePath1,
+                                                     JobRequest::Type::UpdateDocumentAnnotations));
+
+    ASSERT_FALSE(added);
+}
+
+TEST_F(JobQueue, CancelDuringAddForNotIntactDocument)
+{
+    document.setHasParseOrReparseFailed(true);
+    bool canceled = false;
+    jobQueue.setCancelJobRequest([&canceled](const JobRequest &) {
+        canceled = true;
+    });
+
+
+    jobQueue.add(createJobRequest(filePath1, JobRequest::Type::UpdateDocumentAnnotations));
+
+    ASSERT_TRUE(canceled);
+}
+
 TEST_F(JobQueue, ProcessEmpty)
 {
     jobQueue.processQueue();
@@ -138,7 +175,7 @@ TEST_F(JobQueue, ProcessSingleJob)
 TEST_F(JobQueue, ProcessUntilEmpty)
 {
     jobQueue.add(createJobRequest(filePath1, JobRequest::Type::UpdateDocumentAnnotations));
-    jobQueue.add(createJobRequest(filePath1, JobRequest::Type::CreateInitialDocumentPreamble));
+    jobQueue.add(createJobRequest(filePath1, JobRequest::Type::ParseSupportiveTranslationUnit));
 
     JobRequests jobsToRun;
     ASSERT_THAT(jobQueue.size(), Eq(2));
@@ -218,6 +255,20 @@ TEST_F(JobQueue, RemoveRequestsForNotIntactDocuments)
     ASSERT_THAT(jobsToRun.size(), Eq(0));
 }
 
+TEST_F(JobQueue, CancelRequestsForNotIntactDocuments)
+{
+    jobQueue.add(createJobRequest(filePath1, JobRequest::Type::UpdateDocumentAnnotations));
+    document.setHasParseOrReparseFailed(true);
+    bool canceled = false;
+    jobQueue.setCancelJobRequest([&canceled](const JobRequest &) {
+        canceled = true;
+    });
+
+    jobQueue.processQueue();
+
+    ASSERT_TRUE(canceled);
+}
+
 TEST_F(JobQueue, PrioritizeCurrentDocumentOverNotCurrent)
 {
     resetVisibilityAndCurrentEditor();
@@ -281,9 +332,9 @@ TEST_F(JobQueue, RunOnlyOneJobPerTranslationUnitIfMultipleAreInQueue)
 TEST_F(JobQueue, RunJobsForDistinctTranslationUnits)
 {
     const TranslationUnit initialTu = document.translationUnit();
-    document.translationUnits().updateParseTimePoint(initialTu.id(), std::chrono::steady_clock::now());
+    document.translationUnits().updateParseTimePoint(initialTu.id(), Clock::now());
     const TranslationUnit alternativeTu = document.translationUnits().createAndAppend();
-    document.translationUnits().updateParseTimePoint(alternativeTu.id(), std::chrono::steady_clock::now());
+    document.translationUnits().updateParseTimePoint(alternativeTu.id(), Clock::now());
     jobQueue.add(createJobRequest(filePath1,
                                   JobRequest::Type::UpdateDocumentAnnotations,
                                   PreferredTranslationUnit::RecentlyParsed));
@@ -372,6 +423,7 @@ TEST_F(JobQueue, RequestCompleteCodeOutdatableByDocumentClose)
 
 TEST_F(JobQueue, RequestCompleteCodeNotOutdatableByUnsavedFilesChange)
 {
+    pretendParsedTranslationUnit();
     jobQueue.add(createJobRequest(filePath1, JobRequest::Type::CompleteCode));
     updateUnsavedFiles();
 
@@ -382,6 +434,7 @@ TEST_F(JobQueue, RequestCompleteCodeNotOutdatableByUnsavedFilesChange)
 
 TEST_F(JobQueue, RequestCompleteCodeNotOutdatableByDocumentRevisionChange)
 {
+    pretendParsedTranslationUnit();
     jobQueue.add(createJobRequest(filePath1, JobRequest::Type::CompleteCode));
     updateDocumentRevision();
 
@@ -408,6 +461,49 @@ TEST_F(JobQueue, RequestCompleteCodeOutdatableByDocumentRevisionChange)
     const JobRequests jobsToStart = jobQueue.processQueue();
 
     ASSERT_THAT(jobsToStart.size(), Eq(0));
+}
+
+TEST_F(JobQueue, RequestReferencesRunsForCurrentDocumentRevision)
+{
+    pretendParsedTranslationUnit();
+    jobQueue.add(createJobRequest(filePath1, JobRequest::Type::RequestReferences));
+
+    const JobRequests jobsToStart = jobQueue.processQueue();
+
+    ASSERT_THAT(jobsToStart.size(), Eq(1));
+}
+
+TEST_F(JobQueue, RequestReferencesOutdatableByDocumentClose)
+{
+    jobQueue.add(createJobRequest(filePath1, JobRequest::Type::RequestReferences));
+    removeDocument();
+
+    const JobRequests jobsToStart = jobQueue.processQueue();
+
+    ASSERT_THAT(jobsToStart.size(), Eq(0));
+    ASSERT_THAT(jobQueue.size(), Eq(0));
+}
+
+TEST_F(JobQueue, RequestReferencesDoesNotRunOnSuspendedDocument)
+{
+    jobQueue.add(createJobRequest(filePath1, JobRequest::Type::RequestReferences));
+    document.setIsSuspended(true);
+
+    const JobRequests jobsToStart = jobQueue.processQueue();
+
+    ASSERT_THAT(jobsToStart.size(), Eq(0));
+    ASSERT_THAT(jobQueue.size(), Eq(1));
+}
+
+TEST_F(JobQueue, ResumeDocumentDoesNotRunOnUnsuspended)
+{
+    jobQueue.add(createJobRequest(filePath1, JobRequest::Type::ResumeDocument));
+    document.setIsSuspended(false);
+
+    const JobRequests jobsToStart = jobQueue.processQueue();
+
+    ASSERT_THAT(jobsToStart.size(), Eq(0));
+    ASSERT_THAT(jobQueue.size(), Eq(1));
 }
 
 void JobQueue::SetUp()
@@ -447,9 +543,7 @@ JobRequest JobQueue::createJobRequest(
         JobRequest::Type type,
         PreferredTranslationUnit preferredTranslationUnit) const
 {
-    JobRequest jobRequest;
-    jobRequest.type = type;
-    jobRequest.requirements = JobRequest::requirementsForType(type);
+    JobRequest jobRequest(type);
     jobRequest.filePath = filePath;
     jobRequest.projectPartId = projectPartId;
     jobRequest.unsavedFilesChangeTimePoint = unsavedFiles.lastChangeTimePoint();
@@ -458,6 +552,11 @@ JobRequest JobQueue::createJobRequest(
     jobRequest.projectChangeTimePoint = projects.project(projectPartId).lastChangeTimePoint();
 
     return jobRequest;
+}
+
+void JobQueue::pretendParsedTranslationUnit()
+{
+    document.translationUnits().updateParseTimePoint(document.translationUnit().id(), Clock::now());
 }
 
 void JobQueue::updateDocumentRevision()

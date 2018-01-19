@@ -25,9 +25,10 @@
 
 #pragma once
 
-#include <qmlprofiler/localqmlprofilerrunner.h>
 #include <qmlprofiler/qmlprofilermodelmanager.h>
-#include <debugger/analyzer/analyzerstartparameters.h>
+#include <qmlprofiler/qmlprofilerruncontrol.h>
+
+#include <QUrl>
 
 namespace QmlProfiler {
 namespace Internal {
@@ -42,19 +43,6 @@ private slots:
     void testRunner();
     void testFindFreePort();
     void testFindFreeSocket();
-
-private:
-    void connectRunner(LocalQmlProfilerRunner *runner);
-    void testRunner1();
-    void testRunner2();
-    void testRunner3();
-    void testRunner4();
-
-    bool running = false;
-    int runCount = 0;
-    ProjectExplorer::RunControl *rc = nullptr;
-    Debugger::AnalyzerConnection connection;
-    LocalQmlProfilerRunner::Configuration configuration;
 };
 
 } // namespace Internal

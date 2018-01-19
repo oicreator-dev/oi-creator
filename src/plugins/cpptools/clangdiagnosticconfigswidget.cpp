@@ -28,6 +28,7 @@
 
 #include <utils/algorithm.h>
 #include <utils/qtcassert.h>
+#include <utils/utilsicons.h>
 
 #include <QDebug>
 #include <QInputDialog>
@@ -107,15 +108,61 @@ void ClangDiagnosticConfigsWidget::onRemoveButtonClicked()
     syncConfigChooserToModel();
 }
 
+static bool isAcceptedWarningOption(const QString &option)
+{
+    return option == "-w"
+        || option == "-pedantic"
+        || option == "-pedantic-errors";
+}
+
+// Reference:
+// https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html
+// https://clang.llvm.org/docs/DiagnosticsReference.html
+static bool isValidOption(const QString &option)
+{
+    if (option == "-Werror")
+        return false; // Avoid errors due to unknown or misspelled warnings.
+    return option.startsWith("-W") || isAcceptedWarningOption(option);
+}
+
+static QString validateDiagnosticOptions(const QStringList &options)
+{
+    // This is handy for testing, allow disabling validation.
+    if (qEnvironmentVariableIntValue("QTC_CLANG_NO_DIAGNOSTIC_CHECK"))
+        return QString();
+
+    for (const QString &option : options) {
+        if (!isValidOption(option))
+            return ClangDiagnosticConfigsWidget::tr("Option \"%1\" is invalid.").arg(option);
+    }
+
+    return QString();
+}
+
+static QStringList normalizeDiagnosticInputOptions(const QString &options)
+{
+    return options.simplified().split(QLatin1Char(' '), QString::SkipEmptyParts);
+}
+
 void ClangDiagnosticConfigsWidget::onDiagnosticOptionsEdited()
 {
-    const QString diagnosticOptions
-            = m_ui->diagnosticOptionsTextEdit->document()->toPlainText().trimmed();
-    const QStringList updatedCommandLine
-            = diagnosticOptions.trimmed().split(QLatin1Char(' '), QString::SkipEmptyParts);
+    // Clean up input
+    const QString diagnosticOptions = m_ui->diagnosticOptionsTextEdit->document()->toPlainText();
+    const QStringList normalizedOptions = normalizeDiagnosticInputOptions(diagnosticOptions);
 
+    // Validate
+    const QString errorMessage = validateDiagnosticOptions(normalizedOptions);
+    updateValidityWidgets(errorMessage);
+    if (!errorMessage.isEmpty()) {
+        // Remember the entered options in case the user will switch back.
+        m_notAcceptedOptions.insert(currentConfigId(), diagnosticOptions);
+        return;
+    }
+    m_notAcceptedOptions.remove(currentConfigId());
+
+    // Commit valid changes
     ClangDiagnosticConfig updatedConfig = currentConfig();
-    updatedConfig.setCommandLineOptions(updatedCommandLine);
+    updatedConfig.setCommandLineWarnings(normalizedOptions);
 
     m_diagnosticConfigsModel.appendOrUpdate(updatedConfig);
     emit customConfigsChanged(customConfigs());
@@ -125,15 +172,6 @@ void ClangDiagnosticConfigsWidget::syncWidgetsToModel(const Core::Id &configToSe
 {
     syncConfigChooserToModel(configToSelect);
     syncOtherWidgetsToComboBox();
-}
-
-static QString displayNameWithBuiltinIndication(const ClangDiagnosticConfig &config,
-                                                const Core::Id &exceptionalConfig)
-{
-    if (exceptionalConfig == config.id())
-        return config.displayName();
-
-    return ClangDiagnosticConfigsModel::displayNameWithBuiltinIndication(config);
 }
 
 void ClangDiagnosticConfigsWidget::syncConfigChooserToModel(const Core::Id &configToSelect)
@@ -148,7 +186,7 @@ void ClangDiagnosticConfigsWidget::syncConfigChooserToModel(const Core::Id &conf
     for (int i = 0; i < size; ++i) {
         const ClangDiagnosticConfig &config = m_diagnosticConfigsModel.at(i);
         const QString displayName
-                = displayNameWithBuiltinIndication(config, m_configWithUndecoratedDisplayName);
+                = ClangDiagnosticConfigsModel::displayNameWithBuiltinIndication(config);
         m_ui->configChooserComboBox->addItem(displayName, config.id().toSetting());
 
         if (configToSelect == config.id())
@@ -176,8 +214,10 @@ void ClangDiagnosticConfigsWidget::syncOtherWidgetsToComboBox()
     m_ui->removeButton->setEnabled(!config.isReadOnly());
 
     // Update child widgets
-    const QString commandLineOptions = config.commandLineOptions().join(QLatin1Char(' '));
-    setDiagnosticOptions(commandLineOptions);
+    const QString options = m_notAcceptedOptions.contains(config.id())
+            ? m_notAcceptedOptions.value(config.id())
+            : config.commandLineWarnings().join(QLatin1Char(' '));
+    setDiagnosticOptions(options);
     m_ui->diagnosticOptionsTextEdit->setReadOnly(config.isReadOnly());
 }
 
@@ -195,9 +235,33 @@ void ClangDiagnosticConfigsWidget::setDiagnosticOptions(const QString &options)
 {
     if (options != m_ui->diagnosticOptionsTextEdit->document()->toPlainText()) {
         disconnectDiagnosticOptionsChanged();
+
         m_ui->diagnosticOptionsTextEdit->document()->setPlainText(options);
+        const QString errorMessage
+                = validateDiagnosticOptions(normalizeDiagnosticInputOptions(options));
+        updateValidityWidgets(errorMessage);
+
         connectDiagnosticOptionsChanged();
     }
+}
+
+void ClangDiagnosticConfigsWidget::updateValidityWidgets(const QString &errorMessage)
+{
+    QString validationResult;
+    const Utils::Icon *icon = nullptr;
+    QString styleSheet;
+    if (errorMessage.isEmpty()) {
+        icon = &Utils::Icons::INFO;
+        validationResult = tr("Configuration passes sanity checks.");
+    } else {
+        icon = &Utils::Icons::CRITICAL;
+        validationResult = tr("%1").arg(errorMessage);
+        styleSheet = "color: red;";
+    }
+
+    m_ui->validationResultIcon->setPixmap(icon->pixmap());
+    m_ui->validationResultLabel->setText(validationResult);
+    m_ui->validationResultLabel->setStyleSheet(styleSheet);
 }
 
 void ClangDiagnosticConfigsWidget::connectConfigChooserCurrentIndex()
@@ -226,11 +290,6 @@ void ClangDiagnosticConfigsWidget::disconnectDiagnosticOptionsChanged()
 {
     disconnect(m_ui->diagnosticOptionsTextEdit->document(), &QTextDocument::contentsChanged,
                this, &ClangDiagnosticConfigsWidget::onDiagnosticOptionsEdited);
-}
-
-void ClangDiagnosticConfigsWidget::setConfigWithUndecoratedDisplayName(const Core::Id &id)
-{
-    m_configWithUndecoratedDisplayName = id;
 }
 
 Core::Id ClangDiagnosticConfigsWidget::currentConfigId() const

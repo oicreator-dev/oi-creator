@@ -26,6 +26,7 @@
 #pragma once
 
 #include <utils/itemviews.h>
+#include <utils/fileutils.h>
 #include <coreplugin/inavigationwidgetfactory.h>
 
 #include <QAbstractItemModel>
@@ -52,8 +53,6 @@ public:
     BookmarkManager();
     ~BookmarkManager();
 
-    QIcon bookmarkIcon() const { return m_bookmarkIcon; }
-
     void updateBookmark(Bookmark *bookmark);
     void updateBookmarkFileName(Bookmark *bookmark, const QString &oldFileName);
     void deleteBookmark(Bookmark *bookmark); // Does not remove the mark
@@ -78,7 +77,7 @@ public:
     // this QItemSelectionModel is shared by all views
     QItemSelectionModel *selectionModel() const;
 
-    bool hasBookmarkInPosition(const QString &fileName, int lineNumber);
+    bool hasBookmarkInPosition(const Utils::FileName &fileName, int lineNumber);
 
     enum Roles {
         Filename = Qt::UserRole,
@@ -88,7 +87,7 @@ public:
         Note = Qt::UserRole + 4
     };
 
-    void toggleBookmark(const QString &fileName, int lineNumber);
+    void toggleBookmark(const Utils::FileName &fileName, int lineNumber);
     void nextInDocument();
     void prevInDocument();
     void next();
@@ -96,8 +95,8 @@ public:
     void moveUp();
     void moveDown();
     void edit();
-    void editByFileAndLine(const QString &fileName, int lineNumber);
-    bool gotoBookmark(Bookmark *bookmark);
+    void editByFileAndLine(const Utils::FileName &fileName, int lineNumber);
+    bool gotoBookmark(const Bookmark *bookmark) const;
 
 signals:
     void updateActions(bool enableToggle, int state);
@@ -109,20 +108,13 @@ private:
 
     void documentPrevNext(bool next);
 
-    Bookmark *findBookmark(const QString &filePath, int lineNumber);
+    Bookmark *findBookmark(const Utils::FileName &filePath, int lineNumber);
     void addBookmark(Bookmark *bookmark, bool userset = true);
     void addBookmark(const QString &s);
-    void addBookmarkToMap(Bookmark *bookmark);
-    bool removeBookmarkFromMap(Bookmark *bookmark, const QString &fileName = QString());
     static QString bookmarkToString(const Bookmark *b);
     void saveBookmarks();
 
-    typedef QMultiMap<QString, Bookmark *> FileNameBookmarksMap;
-    typedef QMap<QString, FileNameBookmarksMap *> DirectoryFileBookmarksMap;
-
-    DirectoryFileBookmarksMap m_bookmarksMap;
-
-    const QIcon m_bookmarkIcon;
+    QMap<Utils::FileName, QVector<Bookmark *>> m_bookmarksMap;
 
     QList<Bookmark *> m_bookmarksList;
     QItemSelectionModel *m_selectionModel;

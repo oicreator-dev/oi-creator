@@ -46,20 +46,21 @@ namespace Internal {
 class ActionHandler::ActionHandlerPrivate {
 public:
     Core::Context context;
-    QAction *undoAction = 0;
-    QAction *redoAction = 0;
-    QAction *cutAction = 0;
-    QAction *copyAction = 0;
-    QAction *pasteAction = 0;
-    QAction *removeAction = 0;
-    QAction *deleteAction = 0;
-    QAction *selectAllAction = 0;
-    QAction *openParentDiagramAction = 0;
-    QAction *synchronizeBrowserAction = 0;
-    QAction *exportDiagramAction = 0;
-    QAction *zoomInAction = 0;
-    QAction *zoomOutAction = 0;
-    QAction *resetZoomAction = 0;
+    QAction *undoAction = nullptr;
+    QAction *redoAction = nullptr;
+    QAction *cutAction = nullptr;
+    QAction *copyAction = nullptr;
+    QAction *pasteAction = nullptr;
+    QAction *removeAction = nullptr;
+    QAction *deleteAction = nullptr;
+    QAction *selectAllAction = nullptr;
+    QAction *openParentDiagramAction = nullptr;
+    QAction *synchronizeBrowserAction = nullptr;
+    QAction *exportDiagramAction = nullptr;
+    QAction *exportSelectedElementsAction = nullptr;
+    QAction *zoomInAction = nullptr;
+    QAction *zoomOutAction = nullptr;
+    QAction *resetZoomAction = nullptr;
 };
 
 ActionHandler::ActionHandler(const Core::Context &context, QObject *parent)
@@ -129,6 +130,11 @@ QAction *ActionHandler::exportDiagramAction() const
     return d->exportDiagramAction;
 }
 
+QAction *ActionHandler::exportSelectedElementsAction() const
+{
+    return d->exportSelectedElementsAction;
+}
+
 QAction *ActionHandler::zoomInAction() const
 {
     return d->zoomInAction;
@@ -160,7 +166,7 @@ void ActionHandler::createActions()
     d->removeAction = removeCommand->action();
     Core::Command *deleteCommand = registerCommand(
                 Constants::DELETE_SELECTED_ELEMENTS, [this]() { deleteSelectedElements(); }, d->context, true,
-                tr("&Delete"), QKeySequence(QStringLiteral("Ctrl+D")));
+                tr("&Delete"), QKeySequence("Ctrl+D"));
     medit->addAction(deleteCommand, Core::Constants::G_EDIT_COPYPASTE);
     d->deleteAction = deleteCommand->action();
     d->selectAllAction = registerCommand(Core::Constants::SELECTALL, [this]() { selectAll(); }, d->context)->action();
@@ -176,30 +182,36 @@ void ActionHandler::createActions()
     menuModelEditor->addAction(exportDiagramCommand);
     d->exportDiagramAction = exportDiagramCommand->action();
 
+    Core::Command *exportSelectedElementsCommand = registerCommand(
+                Constants::EXPORT_SELECTED_ELEMENTS, [this]() { exportSelectedElements(); }, d->context, true,
+                tr("Export Selected Elements..."));
+    menuModelEditor->addAction(exportSelectedElementsCommand);
+    d->exportSelectedElementsAction = exportSelectedElementsCommand->action();
+
     menuModelEditor->addSeparator(d->context);
 
     Core::Command *zoomInCommand = registerCommand(
                 Constants::ZOOM_IN, [this]() { zoomIn(); }, d->context, true,
-                tr("Zoom In"), QKeySequence(QStringLiteral("Ctrl++")));
+                tr("Zoom In"), QKeySequence("Ctrl++"));
     menuModelEditor->addAction(zoomInCommand);
     d->zoomInAction = zoomInCommand->action();
 
     Core::Command *zoomOutCommand = registerCommand(
                 Constants::ZOOM_OUT, [this]() { zoomOut(); }, d->context, true,
-                tr("Zoom Out"), QKeySequence(QStringLiteral("Ctrl+-")));
+                tr("Zoom Out"), QKeySequence("Ctrl+-"));
     menuModelEditor->addAction(zoomOutCommand);
     d->zoomOutAction = zoomOutCommand->action();
 
     Core::Command *resetZoomCommand = registerCommand(
                 Constants::RESET_ZOOM, [this]() { resetZoom(); }, d->context, true,
-                tr("Reset Zoom"), QKeySequence(QStringLiteral("Ctrl+0")));
+                tr("Reset Zoom"), QKeySequence("Ctrl+0"));
     menuModelEditor->addAction(resetZoomCommand);
     d->zoomOutAction = resetZoomCommand->action();
 
     d->openParentDiagramAction = registerCommand(
                 Constants::OPEN_PARENT_DIAGRAM, [this]() { openParentDiagram(); }, Core::Context(), true,
-                tr("Open Parent Diagram"), QKeySequence(QStringLiteral("Ctrl+Shift+P")))->action();
-    d->openParentDiagramAction->setIcon(QIcon(QStringLiteral(":/modeleditor/up.png")));
+                tr("Open Parent Diagram"), QKeySequence("Ctrl+Shift+P"))->action();
+    d->openParentDiagramAction->setIcon(QIcon(":/modeleditor/up.png"));
     registerCommand(Constants::ACTION_ADD_PACKAGE, nullptr, Core::Context(), true, tr("Add Package"));
     registerCommand(Constants::ACTION_ADD_COMPONENT, nullptr, Core::Context(), true, tr("Add Component"));
     registerCommand(Constants::ACTION_ADD_CLASS, nullptr, Core::Context(), true, tr("Add Class"));
@@ -304,7 +316,14 @@ void ActionHandler::exportDiagram()
 {
     auto editor = qobject_cast<ModelEditor *>(Core::EditorManager::currentEditor());
     if (editor)
-        editor->exportDiagram();
+        editor->exportDiagram(false);
+}
+
+void ActionHandler::exportSelectedElements()
+{
+    auto editor = qobject_cast<ModelEditor *>(Core::EditorManager::currentEditor());
+    if (editor)
+        editor->exportDiagram(true);
 }
 
 void ActionHandler::zoomIn()

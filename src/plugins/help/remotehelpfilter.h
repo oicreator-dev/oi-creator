@@ -33,7 +33,7 @@
 #include <QMutex>
 
 namespace Help {
-    namespace Internal {
+namespace Internal {
 
 class RemoteHelpFilter : public Core::ILocatorFilter
 {
@@ -45,7 +45,8 @@ public:
     // ILocatorFilter
     QList<Core::LocatorFilterEntry> matchesFor(QFutureInterface<Core::LocatorFilterEntry> &future,
                                                const QString &entry) override;
-    void accept(Core::LocatorFilterEntry selection) const override;
+    void accept(Core::LocatorFilterEntry selection,
+                QString *newText, int *selectionStart, int *selectionLength) const override;
     void refresh(QFutureInterface<void> &future) override;
     QByteArray saveState() const override;
     void restoreState(const QByteArray &state) override;
@@ -68,7 +69,7 @@ class RemoteFilterOptions : public QDialog
     friend class RemoteHelpFilter;
 
 public:
-    explicit RemoteFilterOptions(RemoteHelpFilter *filter, QWidget *parent = 0);
+    explicit RemoteFilterOptions(RemoteHelpFilter *filter, QWidget *parent = nullptr);
 
 private:
     void addNewItem();
@@ -77,9 +78,9 @@ private:
     void moveItemDown();
     void updateActionButtons();
 
-    RemoteHelpFilter *m_filter;
+    RemoteHelpFilter *m_filter = nullptr;
     Ui::RemoteFilterOptions m_ui;
 };
 
-    } // namespace Internal
+} // namespace Internal
 } // namespace Help

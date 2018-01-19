@@ -223,8 +223,6 @@ def deploy_libclang(install_dir, llvm_install_dir, chrpath_bin):
                            os.path.join(install_dir, 'bin')))
         deployinfo.append((os.path.join(llvm_install_dir, 'bin', 'clang.exe'),
                            clangbindirtarget))
-        deployinfo.append((os.path.join(llvm_install_dir, 'bin', 'clang-cl.exe'),
-                           clangbindirtarget))
         resourcetarget = os.path.join(clanglibdirtarget, 'clang')
     else:
         libsources = glob(os.path.join(llvm_install_dir, 'lib', 'libclang.so*'))
@@ -309,7 +307,7 @@ def main():
     QT_INSTALL_QML = qt_install_info['QT_INSTALL_QML']
     QT_INSTALL_TRANSLATIONS = qt_install_info['QT_INSTALL_TRANSLATIONS']
 
-    plugins = ['accessible', 'codecs', 'designer', 'iconengines', 'imageformats', 'platformthemes', 'platforminputcontexts', 'platforms', 'printsupport', 'sqldrivers', 'xcbglintegrations']
+    plugins = ['accessible', 'codecs', 'designer', 'iconengines', 'imageformats', 'platformthemes', 'platforminputcontexts', 'platforms', 'printsupport', 'sqldrivers', 'styles', 'xcbglintegrations']
     imports = ['Qt', 'QtWebKit']
 
     if common.is_windows_platform():

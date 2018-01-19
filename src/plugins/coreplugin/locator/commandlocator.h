@@ -40,18 +40,19 @@ class CORE_EXPORT CommandLocator : public ILocatorFilter
 
 public:
     CommandLocator(Id id, const QString &displayName,
-                   const QString &shortCutString, QObject *parent = 0);
+                   const QString &shortCutString, QObject *parent = nullptr);
     ~CommandLocator();
 
     void appendCommand(Command *cmd);
 
     QList<LocatorFilterEntry> matchesFor(QFutureInterface<LocatorFilterEntry> &future,
                                          const QString &entry) override;
-    void accept(LocatorFilterEntry selection) const override;
+    void accept(LocatorFilterEntry selection,
+                QString *newText, int *selectionStart, int *selectionLength) const override;
     void refresh(QFutureInterface<void> &future) override;
 
 private:
-    CommandLocatorPrivate *d;
+    CommandLocatorPrivate *d = nullptr;
 };
 
 } // namespace Core

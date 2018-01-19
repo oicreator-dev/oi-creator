@@ -32,8 +32,6 @@
 
 #include <utils/environment.h>
 
-#include <QDir>
-#include <QUrl>
 
 namespace ProjectExplorer {
 
@@ -47,37 +45,12 @@ public:
     ApplicationLauncher::Mode runMode = ApplicationLauncher::Gui;
     IDevice::ConstPtr device; // Override the kit's device. Keep unset by default.
 
-    QString displayName() const { return QDir::toNativeSeparators(executable); }
+    // FIXME: Not necessarily a display name
+    QString displayName() const { return executable; }
+
     static void *staticTypeId;
 };
 
 PROJECTEXPLORER_EXPORT bool operator==(const StandardRunnable &r1, const StandardRunnable &r2);
-
-class PROJECTEXPLORER_EXPORT HostName
-{
-public:
-    explicit HostName(const QString &host) : m_host(host) {}
-    QString host() const { return m_host; }
-
-    static void *staticTypeId;
-
-private:
-    QString m_host;
-};
-
-class PROJECTEXPLORER_EXPORT UrlConnection : public QUrl
-{
-public:
-    UrlConnection() {}
-    explicit UrlConnection(const QUrl &url) : QUrl(url) {}
-
-    static UrlConnection fromHost(const QString &host) {
-        UrlConnection connection;
-        connection.setHost(host);
-        return connection;
-    }
-
-    static void *staticTypeId;
-};
 
 } // namespace ProjectExplorer

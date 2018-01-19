@@ -267,7 +267,7 @@ def getEditorForFileSuffix(curFile, treeViewSyntax=False):
     if treeViewSyntax:
         expected = simpleFileName(curFile)
     mainWindow = waitForObject(":Qt Creator_Core::Internal::MainWindow")
-    if not waitFor("expected in str(mainWindow.windowTitle)", 5000):
+    if not waitFor("str(mainWindow.windowTitle).startswith(expected + ' ')", 5000):
         test.fatal("Window title (%s) did not switch to expected file (%s)."
                    % (str(mainWindow.windowTitle), expected))
     try:
@@ -344,7 +344,10 @@ def validateSearchResult(expectedCount):
 def invokeContextMenuItem(editorArea, command1, command2 = None):
     ctxtMenu = openContextMenuOnTextCursorPosition(editorArea)
     snooze(1)
-    activateItem(waitForObjectItem(objectMap.realName(ctxtMenu), command1, 2000))
+    item1 = waitForObjectItem(objectMap.realName(ctxtMenu), command1, 2000)
+    if command2 and platform.system() == 'Darwin':
+        mouseMove(item1)
+    activateItem(item1)
     if command2:
         activateItem(waitForObjectItem("{title='%s' type='QMenu' visible='1' window=%s}"
                                        % (command1, objectMap.realName(ctxtMenu)), command2, 2000))
@@ -377,14 +380,14 @@ def openDocument(treeElement):
         except:
             treeElement = addBranchWildcardToRoot(treeElement)
             item = waitForObjectItem(navigator, treeElement)
+        expected = str(item.text).split("/")[-1]
         for _ in range(2):
             # Expands items as needed what might make scrollbars appear.
             # These might cover the item to click.
             # In this case, do it again to hit the item then.
             doubleClickItem(navigator, treeElement, 5, 5, 0, Qt.LeftButton)
             mainWindow = waitForObject(":Qt Creator_Core::Internal::MainWindow")
-            expected = str(item.text).split("/")[-1]
-            if waitFor("expected in str(mainWindow.windowTitle)", 5000):
+            if waitFor("str(mainWindow.windowTitle).startswith(expected + ' ')", 5000):
                 return True
         test.log("Expected file (%s) was not being opened in openDocument()" % expected)
         return False
@@ -420,3 +423,14 @@ def replaceLine(fileSpec, oldLine, newLine):
         type(editor, "<Backspace>")
     type(editor, newLine)
     return True
+
+def addTestableCodeAfterLine(editorObject, line, newCodeLines):
+    if not placeCursorToLine(editorObject, line):
+        return False
+    type(editorObject, "<Return>")
+    typeLines(editorObject, newCodeLines)
+    return True
+
+def saveAndExit():
+    invokeMenuItem("File", "Save All")
+    invokeMenuItem("File", "Exit")

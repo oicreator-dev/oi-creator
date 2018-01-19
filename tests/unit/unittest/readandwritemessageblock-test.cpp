@@ -25,21 +25,13 @@
 
 #include "googletest.h"
 
-#include <cmbalivemessage.h>
-#include <cmbcodecompletedmessage.h>
-#include <cmbcompletecodemessage.h>
-#include <cmbendmessage.h>
-#include <cmbregistertranslationunitsforeditormessage.h>
-#include <cmbunregistertranslationunitsforeditormessage.h>
+#include <clangcodemodelclientmessages.h>
+#include <clangcodemodelservermessages.h>
+
 #include <diagnosticcontainer.h>
-#include <documentannotationschangedmessage.h>
-#include <highlightingmarkcontainer.h>
+#include <tokeninfocontainer.h>
 #include <messageenvelop.h>
-#include <requestdocumentannotations.h>
 #include <readmessageblock.h>
-#include <registerunsavedfilesforeditormessage.h>
-#include <unregisterunsavedfilesforeditormessage.h>
-#include <updatetranslationunitsforeditormessage.h>
 #include <writemessageblock.h>
 
 #include <QBuffer>
@@ -127,7 +119,7 @@ TEST_F(ReadAndWriteMessageBlock, ReadThreeMessagesAndTestCount)
     writeMessageBlock.write(ClangBackEnd::EndMessage());
     buffer.seek(0);
 
-    ASSERT_EQ(3, readMessageBlock.readAll().count());
+    ASSERT_THAT(readMessageBlock.readAll(), SizeIs(3));
 }
 
 TEST_F(ReadAndWriteMessageBlock, CompareEndMessage)
@@ -182,12 +174,12 @@ TEST_F(ReadAndWriteMessageBlock, CompareDocumentAnnotationsChangedMessage)
                                                 {},
                                                 {});
 
-    ClangBackEnd::HighlightingMarkContainer highlightingMark(1, 1, 1, ClangBackEnd::HighlightingType::Keyword);
+    ClangBackEnd::TokenInfoContainer tokenInfo(1, 1, 1, ClangBackEnd::HighlightingType::Keyword);
 
     CompareMessage(ClangBackEnd::DocumentAnnotationsChangedMessage(fileContainer,
                                                                    {diagnostic},
                                                                    {},
-                                                                   {highlightingMark},
+                                                                   {tokenInfo},
                                                                    QVector<ClangBackEnd::SourceRangeContainer>()));
 }
 
@@ -204,6 +196,26 @@ TEST_F(ReadAndWriteMessageBlock, CompareUnregisterUnsavedFilesForEditorMessage)
 TEST_F(ReadAndWriteMessageBlock, CompareRequestDocumentAnnotations)
 {
     CompareMessage(ClangBackEnd::RequestDocumentAnnotationsMessage(fileContainer));
+}
+
+TEST_F(ReadAndWriteMessageBlock, CompareRequestReferences)
+{
+    CompareMessage(ClangBackEnd::RequestReferencesMessage{fileContainer, 13, 37});
+}
+
+TEST_F(ReadAndWriteMessageBlock, CompareRequestFollowSymbol)
+{
+    CompareMessage(ClangBackEnd::RequestFollowSymbolMessage{fileContainer, 13, 37});
+}
+
+TEST_F(ReadAndWriteMessageBlock, CompareReferences)
+{
+    const QVector<ClangBackEnd::SourceRangeContainer> references{
+        true,
+        {{fileContainer.filePath(), 12, 34},
+         {fileContainer.filePath(), 56, 78}}
+    };
+    CompareMessage(ClangBackEnd::ReferencesMessage(fileContainer, references, true, 1));
 }
 
 TEST_F(ReadAndWriteMessageBlock, GetInvalidMessageForAPartialBuffer)

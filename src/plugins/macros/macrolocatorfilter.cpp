@@ -24,12 +24,13 @@
 ****************************************************************************/
 
 #include "macrolocatorfilter.h"
-#include "macromanager.h"
-#include "macro.h"
 
-#include <coreplugin/icore.h>
+#include "macro.h"
+#include "macromanager.h"
+
 #include <coreplugin/editormanager/editormanager.h>
 #include <coreplugin/editormanager/ieditor.h>
+#include <coreplugin/icore.h>
 
 #include <QPixmap>
 
@@ -37,11 +38,11 @@ using namespace Macros;
 using namespace Macros::Internal;
 
 MacroLocatorFilter::MacroLocatorFilter():
-    m_icon(QPixmap(QLatin1String(":/macros/images/macro.png")))
+    m_icon(QPixmap(":/macros/images/macro.png"))
 {
     setId("Macros");
     setDisplayName(tr("Text Editing Macros"));
-    setShortcutString(QLatin1String("rm"));
+    setShortcutString("rm");
 }
 
 MacroLocatorFilter::~MacroLocatorFilter()
@@ -86,8 +87,12 @@ QList<Core::LocatorFilterEntry> MacroLocatorFilter::matchesFor(QFutureInterface<
     return betterEntries;
 }
 
-void MacroLocatorFilter::accept(Core::LocatorFilterEntry selection) const
+void MacroLocatorFilter::accept(Core::LocatorFilterEntry selection,
+                                QString *newText, int *selectionStart, int *selectionLength) const
 {
+    Q_UNUSED(newText)
+    Q_UNUSED(selectionStart)
+    Q_UNUSED(selectionLength)
     // Give the focus back to the editor
     Core::IEditor *editor = Core::EditorManager::currentEditor();
     if (editor)

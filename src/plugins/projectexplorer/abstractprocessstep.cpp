@@ -89,11 +89,6 @@ AbstractProcessStep::AbstractProcessStep(BuildStepList *bsl, Core::Id id) :
     connect(&m_timer, &QTimer::timeout, this, &AbstractProcessStep::checkForCancel);
 }
 
-AbstractProcessStep::AbstractProcessStep(BuildStepList *bsl,
-                                         AbstractProcessStep *bs) :
-    BuildStep(bsl, bs), m_ignoreReturnValue(bs->m_ignoreReturnValue)
-{ }
-
 /*!
      Deletes all existing output parsers and starts a new chain with the
      given parser.
@@ -379,8 +374,8 @@ void AbstractProcessStep::taskAdded(const Task &task, int linkedOutputLines, int
 
         QList<QFileInfo> possibleFiles;
         QString fileName = Utils::FileName::fromString(filePath).fileName();
-        foreach (const QString &file, project()->files(Project::AllFiles)) {
-            QFileInfo candidate(file);
+        foreach (const Utils::FileName &file, project()->files(Project::AllFiles)) {
+            QFileInfo candidate = file.toFileInfo();
             if (candidate.fileName() == fileName)
                 possibleFiles << candidate;
         }
@@ -390,7 +385,7 @@ void AbstractProcessStep::taskAdded(const Task &task, int linkedOutputLines, int
         } else {
             // More then one filename, so do a better compare
             // Chop of any "../"
-            while (filePath.startsWith(QLatin1String("../")))
+            while (filePath.startsWith("../"))
                 filePath.remove(0, 3);
             int count = 0;
             QString possibleFilePath;

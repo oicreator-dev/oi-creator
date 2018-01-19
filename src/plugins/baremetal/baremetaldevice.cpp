@@ -104,8 +104,8 @@ void BareMetalDevice::setChannelByServerProvider(GdbServerProvider *provider)
     if (colon < 0)
         return;
     QSsh::SshConnectionParameters sshParams = sshParameters();
-    sshParams.host = channel.left(colon);
-    sshParams.port = channel.mid(colon + 1).toUShort();
+    sshParams.setHost(channel.left(colon));
+    sshParams.setPort(channel.mid(colon + 1).toUShort());
     setSshParameters(sshParams);
 }
 
@@ -121,8 +121,8 @@ void BareMetalDevice::fromMap(const QVariantMap &map)
             const QSsh::SshConnectionParameters sshParams = sshParameters();
             DefaultGdbServerProvider *newProvider = new DefaultGdbServerProvider;
             newProvider->setDisplayName(name);
-            newProvider->m_host = sshParams.host;
-            newProvider->m_port = sshParams.port;
+            newProvider->m_host = sshParams.host();
+            newProvider->m_port = sshParams.port();
             if (GdbServerProviderManager::registerProvider(newProvider))
                 gdbServerProvider = newProvider->id();
             else
@@ -174,6 +174,11 @@ void BareMetalDevice::executeAction(Core::Id actionId, QWidget *parent)
 {
     QTC_ASSERT(actionIds().contains(actionId), return);
     Q_UNUSED(parent);
+}
+
+Utils::OsType BareMetalDevice::osType() const
+{
+    return Utils::OsTypeOther;
 }
 
 DeviceProcess *BareMetalDevice::createProcess(QObject *parent) const

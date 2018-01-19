@@ -94,7 +94,6 @@ public:
     ObjectValue *_globalObject;
     ObjectValue *_mathObject;
     ObjectValue *_qtObject;
-    ObjectValue *_qmlKeysObject;
     ObjectValue *_qmlFontObject;
     ObjectValue *_qmlPointObject;
     ObjectValue *_qmlSizeObject;
@@ -494,6 +493,8 @@ SharedValueOwner::SharedValueOwner(SharedValueOwnerKind kind)
     _qmlFontObject->setMember(QLatin1String("letterSpacing"), realValue());
     _qmlFontObject->setMember(QLatin1String("wordSpacing"), realValue());
     _qmlFontObject->setMember(QLatin1String("hintingPreference"), unknownValue());
+    _qmlFontObject->setMember(QLatin1String("kerning"), booleanValue());
+    _qmlFontObject->setMember(QLatin1String("preferShaping"), booleanValue());
 
     _qmlPointObject = newObject(/*prototype =*/ 0);
     _qmlPointObject->setClassName(QLatin1String("Point"));
@@ -888,11 +889,6 @@ Function *ValueOwner::addFunction(ObjectValue *object, const QString &name, int 
     function->setOptionalNamedArgumentCount(optionalCount);
     object->setMember(name, function);
     return function;
-}
-
-const ObjectValue *ValueOwner::qmlKeysObject()
-{
-    return _shared->_qmlKeysObject;
 }
 
 const ObjectValue *ValueOwner::qmlFontObject()

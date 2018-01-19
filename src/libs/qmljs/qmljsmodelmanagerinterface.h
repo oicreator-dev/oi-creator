@@ -178,7 +178,7 @@ public:
     QList<ProjectInfo> allProjectInfosForPath(const QString &path) const;
     bool isIdle() const ;
 
-    PathsAndLanguages importPaths() const;
+    QStringList importPathsNames() const;
     QmlJS::QmlLanguageBundles activeBundles() const;
     QmlJS::QmlLanguageBundles extendedBundles() const;
 
@@ -242,7 +242,7 @@ protected:
                       ModelManagerInterface *modelManager,
                       QmlJS::Dialect mainLanguage,
                       bool emitDocChangedOnDisk);
-    static void updateCppQmlTypes(QFutureInterface<void> &interface,
+    static void updateCppQmlTypes(QFutureInterface<void> &futureInterface,
                                   ModelManagerInterface *qmlModelManager,
                                   CPlusPlus::Snapshot snapshot,
                                   QHash<QString, QPair<CPlusPlus::Document::Ptr, bool> > documents);

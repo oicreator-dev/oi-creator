@@ -41,8 +41,17 @@ public:
     MOCK_METHOD1(requestSourceRangesAndDiagnosticsForQueryMessage,
                  void (const ClangBackEnd::RequestSourceRangesAndDiagnosticsForQueryMessage&));
 
+    MOCK_METHOD1(requestSourceRangesForQueryMessage,
+                 void (const ClangBackEnd::RequestSourceRangesForQueryMessage&));
+
+    MOCK_METHOD1(updatePchProjectParts,
+                 void (const ClangBackEnd::UpdatePchProjectPartsMessage&));
+
+    MOCK_METHOD1(removePchProjectParts,
+                 void (const ClangBackEnd::RemovePchProjectPartsMessage&));
+
     MOCK_METHOD0(cancel,
-                 void ());
+                 void());
 
     void requestSourceLocationsForRenamingMessage(ClangBackEnd::RequestSourceLocationsForRenamingMessage &&message) override
     {
@@ -52,5 +61,20 @@ public:
     void requestSourceRangesAndDiagnosticsForQueryMessage(ClangBackEnd::RequestSourceRangesAndDiagnosticsForQueryMessage &&message) override
     {
         requestSourceRangesAndDiagnosticsForQueryMessage(message);
+    }
+
+    void requestSourceRangesForQueryMessage(ClangBackEnd::RequestSourceRangesForQueryMessage &&message) override
+    {
+        requestSourceRangesForQueryMessage(message);
+    }
+
+    void updatePchProjectParts(ClangBackEnd::UpdatePchProjectPartsMessage &&message) override
+    {
+        updatePchProjectParts(message);
+    }
+
+    void removePchProjectParts(ClangBackEnd::RemovePchProjectPartsMessage &&message) override
+    {
+        removePchProjectParts(message);
     }
 };

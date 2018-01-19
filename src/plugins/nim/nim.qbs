@@ -36,7 +36,6 @@ QtcPlugin {
         prefix: "project/"
         files: [
             "nimbuildconfiguration.h", "nimbuildconfiguration.cpp",
-            "nimbuildconfigurationfactory.h", "nimbuildconfigurationfactory.cpp",
             "nimbuildconfigurationwidget.h", "nimbuildconfigurationwidget.cpp",
             "nimcompilerbuildstep.h", "nimcompilerbuildstep.cpp",
             "nimcompilerbuildstepconfigwidget.h", "nimcompilerbuildstepconfigwidget.cpp", "nimcompilerbuildstepconfigwidget.ui",
@@ -49,7 +48,6 @@ QtcPlugin {
             "nimrunconfiguration.h", "nimrunconfiguration.cpp",
             "nimrunconfigurationfactory.h", "nimrunconfigurationfactory.cpp",
             "nimrunconfigurationwidget.h", "nimrunconfigurationwidget.cpp",
-            "nimruncontrolfactory.h", "nimruncontrolfactory.cpp",
             "nimtoolchain.h", "nimtoolchain.cpp",
             "nimtoolchainfactory.h", "nimtoolchainfactory.cpp",
         ]

@@ -28,6 +28,7 @@
 #include <enumeration.h>
 #include <qmlprivategate.h>
 
+#include <QDebug>
 #include <QEvent>
 #include <QQmlContext>
 #include <QQmlError>
@@ -692,7 +693,7 @@ static inline QString fixComponentPathForIncompatibleQt(const QString &component
         //plugin directories might contain the version number
             fixedPath.chop(4);
             fixedPath += QLatin1Char('/') + QFileInfo(componentPath).fileName();
-            if (QFileInfo(fixedPath).exists())
+            if (QFileInfo::exists(fixedPath))
                 return fixedPath;
         }
     }

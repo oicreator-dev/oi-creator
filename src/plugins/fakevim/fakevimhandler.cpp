@@ -2141,6 +2141,8 @@ public:
     bool handleExShiftCommand(const ExCommand &cmd);
     bool handleExSourceCommand(const ExCommand &cmd);
     bool handleExSubstituteCommand(const ExCommand &cmd);
+    bool handleExTabNextCommand(const ExCommand &cmd);
+    bool handleExTabPreviousCommand(const ExCommand &cmd);
     bool handleExWriteCommand(const ExCommand &cmd);
     bool handleExEchoCommand(const ExCommand &cmd);
 
@@ -2532,7 +2534,6 @@ EventResult FakeVimHandler::Private::handleEvent(QKeyEvent *ev)
     //    qDebug() << "Cursor at EOL before key handler");
 
     const Input input(key, mods, ev->text());
-    const QString text = ev->text();
     if (!input.isValid())
         return EventUnhandled;
 
@@ -4420,7 +4421,7 @@ bool FakeVimHandler::Private::handleNoSubMode(const Input &input)
     } else if (g.gflag && input.is('t')) {
         handleExCommand("tabnext");
     } else if (g.gflag && input.is('T')) {
-        handleExCommand("tabprev");
+        handleExCommand("tabprevious");
     } else if (input.isControl('t')) {
         handleExCommand("pop");
     } else if (!g.gflag && input.is('u') && !isVisualMode()) {
@@ -5561,6 +5562,24 @@ bool FakeVimHandler::Private::handleExSubstituteCommand(const ExCommand &cmd)
     return true;
 }
 
+bool FakeVimHandler::Private::handleExTabNextCommand(const ExCommand &cmd)
+{
+    if (!cmd.matches("tabn", "tabnext"))
+        return false;
+
+    emit q->tabNextRequested(q);
+    return true;
+}
+
+bool FakeVimHandler::Private::handleExTabPreviousCommand(const ExCommand &cmd)
+{
+    if (!cmd.matches("tabp", "tabprevious"))
+        return false;
+
+    emit q->tabPreviousRequested(q);
+    return true;
+}
+
 bool FakeVimHandler::Private::handleExMapCommand(const ExCommand &cmd0) // :map
 {
     QByteArray modes;
@@ -6212,6 +6231,8 @@ bool FakeVimHandler::Private::handleExCommandHelper(ExCommand &cmd)
         || handleExShiftCommand(cmd)
         || handleExSourceCommand(cmd)
         || handleExSubstituteCommand(cmd)
+        || handleExTabNextCommand(cmd)
+        || handleExTabPreviousCommand(cmd)
         || handleExWriteCommand(cmd)
         || handleExEchoCommand(cmd);
 }

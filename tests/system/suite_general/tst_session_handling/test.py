@@ -58,7 +58,7 @@ def main():
                 "Verifying window title contains created session name.")
     checkNavigator(52, "Verifying whether all projects have been re-opened.")
     checkOpenDocuments(2, "Verifying whether 2 files have been re-opened.")
-    if test.verify("main.cpp" in str(mainWindow.windowTitle),
+    if test.verify(str(mainWindow.windowTitle).startswith("main.cpp "),
                    "Verifying whether utility.h has been opened."):
         current = str(waitForObject(":Qt Creator_CppEditor::Internal::CPPEditorWidget").plainText)
         test.verify(originalText == current, "Verifying that same file has been opened.")
@@ -83,7 +83,7 @@ def prepareTestExamples():
 
 def switchSession(toSession):
     test.log("Switching to session '%s'" % toSession)
-    invokeMenuItem("File", "Session Manager...")
+    invokeMenuItem("File", "Sessions", "Manage...")
     clickItem(waitForObject("{name='sessionView' type='ProjectExplorer::Internal::SessionView' visible='1' "
                             "window=':Session Manager_ProjectExplorer::Internal::SessionDialog'}"),
                             toSession, 5, 5, 0, Qt.LeftButton)
@@ -94,7 +94,7 @@ def createAndSwitchToSession(toSession):
     sessionInputDialog = ("{type='ProjectExplorer::Internal::SessionNameInputDialog' unnamed='1' "
                           "visible='1' windowTitle='New Session Name'}")
     test.log("Switching to session '%s' after creating it." % toSession)
-    invokeMenuItem("File", "Session Manager...")
+    invokeMenuItem("File", "Sessions", "Manage...")
     clickButton(waitForObject("{name='btCreateNew' text='New' type='QPushButton' visible='1' "
                               "window=':Session Manager_ProjectExplorer::Internal::SessionDialog'}"))
     lineEdit = waitForObject("{type='QLineEdit' unnamed='1' visible='1' window=%s}"
@@ -148,6 +148,3 @@ def checkForSessionFile(sessionName, proFiles):
                 proFile = proFile.replace('\\', '/')
             test.verify(proFile in content, "Verifying whether expected .pro file (%s) is listed "
                         "inside session file." % proFile)
-
-def init():
-    removeQmlDebugFolderIfExists()

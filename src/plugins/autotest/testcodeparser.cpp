@@ -199,7 +199,7 @@ static bool parsingHasFailed;
 
 /****** threaded parsing stuff *******/
 
-void TestCodeParser::onDocumentUpdated(const QString &fileName)
+void TestCodeParser::onDocumentUpdated(const QString &fileName, bool isQmlFile)
 {
     if (m_codeModelParsing || m_fullUpdatePostponed)
         return;
@@ -207,7 +207,8 @@ void TestCodeParser::onDocumentUpdated(const QString &fileName)
     Project *project = SessionManager::startupProject();
     if (!project)
         return;
-    if (!SessionManager::projectContainsFile(project, Utils::FileName::fromString(fileName)))
+    // Quick tests: qml files aren't necessarily listed inside project files
+    if (!isQmlFile && !project->isKnownFile(Utils::FileName::fromString(fileName)))
         return;
 
     scanForTests(QStringList(fileName));
@@ -222,7 +223,7 @@ void TestCodeParser::onQmlDocumentUpdated(const QmlJS::Document::Ptr &document)
 {
     const QString fileName = document->fileName();
     if (!fileName.endsWith(".qbs"))
-        onDocumentUpdated(fileName);
+        onDocumentUpdated(fileName, true);
 }
 
 void TestCodeParser::onStartupProjectChanged(Project *project)
@@ -342,7 +343,7 @@ void TestCodeParser::scanForTests(const QStringList &fileList, ITestParser *pars
         return;
     QStringList list;
     if (isFullParse) {
-        list = project->files(Project::SourceFiles);
+        list = Utils::transform(project->files(Project::SourceFiles), &Utils::FileName::toString);
         if (list.isEmpty()) {
             // at least project file should be there, but might happen if parsing current project
             // takes too long, especially when opening sessions holding multiple projects
@@ -398,10 +399,10 @@ void TestCodeParser::scanForTests(const QStringList &fileList, ITestParser *pars
         codeParsers.append(m_testCodeParsers);
     qCDebug(LOG) << QDateTime::currentDateTime().toString("hh:mm:ss.zzz") << "StartParsing";
     for (ITestParser *parser : codeParsers)
-        parser->init(list);
+        parser->init(list, isFullParse);
 
     QFuture<TestParseResultPtr> future = Utils::map(list,
-        [this, codeParsers](QFutureInterface<TestParseResultPtr> &fi, const QString &file) {
+        [codeParsers](QFutureInterface<TestParseResultPtr> &fi, const QString &file) {
             parseFileForTests(codeParsers, fi, file);
         },
         Utils::MapReduceOption::Unordered,

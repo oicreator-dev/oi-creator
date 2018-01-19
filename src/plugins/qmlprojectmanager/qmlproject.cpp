@@ -28,6 +28,7 @@
 #include "fileformat/qmlprojectitem.h"
 #include "qmlprojectrunconfiguration.h"
 #include "qmlprojectconstants.h"
+#include "qmlprojectmanagerconstants.h"
 #include "qmlprojectnodes.h"
 
 #include <coreplugin/icontext.h>
@@ -42,12 +43,12 @@
 #include <qtsupport/baseqtversion.h>
 #include <qtsupport/qtkitinformation.h>
 #include <qtsupport/qtsupportconstants.h>
+#include <qtsupport/desktopqtversion.h>
 #include <qmljs/qmljsmodelmanagerinterface.h>
 
 #include <utils/algorithm.h>
 
 #include <QDebug>
-#include <QRegExp>
 
 using namespace Core;
 using namespace ProjectExplorer;
@@ -55,11 +56,10 @@ using namespace ProjectExplorer;
 namespace QmlProjectManager {
 
 QmlProject::QmlProject(const Utils::FileName &fileName) :
-    Project(QString::fromLatin1(Constants::QMLPROJECT_MIMETYPE), fileName, [this]() { refreshProjectFile(); }),
-    m_defaultImport(UnknownImport)
+    Project(QString::fromLatin1(Constants::QMLPROJECT_MIMETYPE), fileName,
+            [this]() { refreshProjectFile(); })
 {
-    setId("QmlProjectManager.QmlProject");
-    setProjectContext(Context(QmlProjectManager::Constants::PROJECTCONTEXT));
+    setId(QmlProjectManager::Constants::QML_PROJECT_ID);
     setProjectLanguages(Context(ProjectExplorer::Constants::QMLJS_LANGUAGE_ID));
     setDisplayName(fileName.toFileInfo().completeBaseName());
 }
@@ -101,25 +101,12 @@ void QmlProject::addedRunConfiguration(RunConfiguration *rc)
     // they have been added to a project
     QmlProjectRunConfiguration *qmlrc = qobject_cast<QmlProjectRunConfiguration *>(rc);
     if (qmlrc)
-        qmlrc->updateEnabled();
+        qmlrc->updateEnabledState();
 }
 
 QDir QmlProject::projectDir() const
 {
     return projectFilePath().toFileInfo().dir();
-}
-
-static QmlProject::QmlImport detectImport(const QString &qml)
-{
-    static QRegExp qtQuick1RegExp(QLatin1String("import\\s+QtQuick\\s+1"));
-    static QRegExp qtQuick2RegExp(QLatin1String("import\\s+QtQuick\\s+2"));
-
-    if (qml.contains(qtQuick1RegExp))
-        return QmlProject::QtQuick1Import;
-    else if (qml.contains(qtQuick2RegExp))
-        return QmlProject::QtQuick2Import;
-    else
-        return QmlProject::UnknownImport;
 }
 
 void QmlProject::parseProject(RefreshOptions options)
@@ -155,8 +142,6 @@ void QmlProject::parseProject(RefreshOptions options)
                     MessageManager::write(tr("Warning while loading project file %1.")
                                           .arg(projectFilePath().toUserOutput()));
                     MessageManager::write(errorMessage);
-                } else {
-                    m_defaultImport = detectImport(QString::fromUtf8(reader.data()));
                 }
             }
         }
@@ -170,6 +155,7 @@ void QmlProject::parseProject(RefreshOptions options)
 
 void QmlProject::refresh(RefreshOptions options)
 {
+    emitParsingStarted();
     parseProject(options);
 
     if (options & Files)
@@ -187,7 +173,7 @@ void QmlProject::refresh(RefreshOptions options)
 
     modelManager->updateProjectInfo(projectInfo, this);
 
-    emit parsingFinished();
+    emitParsingFinished(true);
 }
 
 QString QmlProject::mainFile() const
@@ -226,11 +212,6 @@ void QmlProject::refreshProjectFile()
     refresh(QmlProject::ProjectFile | Files);
 }
 
-QmlProject::QmlImport QmlProject::defaultImport() const
-{
-    return m_defaultImport;
-}
-
 void QmlProject::refreshFiles(const QSet<QString> &/*added*/, const QSet<QString> &removed)
 {
     refresh(Files);
@@ -256,24 +237,12 @@ bool QmlProject::supportsKit(Kit *k, QString *errorMessage) const
         return false;
     }
 
-    if (version->qtVersion() < QtSupport::QtVersionNumber(4, 7, 0)) {
-        if (errorMessage)
-            *errorMessage = tr("Qt version is too old.");
-        return false;
-    }
-
-    if (version->qtVersion() < QtSupport::QtVersionNumber(5, 0, 0)
-            && defaultImport() == QtQuick2Import) {
+    if (version->qtVersion() < QtSupport::QtVersionNumber(5, 0, 0)) {
         if (errorMessage)
             *errorMessage = tr("Qt version is too old.");
         return false;
     }
     return true;
-}
-
-Internal::QmlProjectNode *QmlProject::rootProjectNode() const
-{
-    return static_cast<Internal::QmlProjectNode *>(Project::rootProjectNode());
 }
 
 Project::RestoreResult QmlProject::fromMap(const QVariantMap &map, QString *errorMessage)
@@ -288,7 +257,7 @@ Project::RestoreResult QmlProject::fromMap(const QVariantMap &map, QString *erro
     if (!activeTarget()) {
         // find a kit that matches prerequisites (prefer default one)
         QList<Kit*> kits = KitManager::kits(
-            std::function<bool(const Kit *)>([this](const Kit *k) -> bool {
+            std::function<bool(const Kit *)>([](const Kit *k) -> bool {
                 if (!k->isValid())
                     return false;
 
@@ -299,25 +268,11 @@ Project::RestoreResult QmlProject::fromMap(const QVariantMap &map, QString *erro
                 if (!version || version->type() != QLatin1String(QtSupport::Constants::DESKTOPQT))
                     return false;
 
-                bool hasViewer = false; // Initialization needed for dumb compilers.
-                QtSupport::QtVersionNumber minVersion;
-                switch (m_defaultImport) {
-                case QmlProject::UnknownImport:
-                    minVersion = QtSupport::QtVersionNumber(4, 7, 0);
-                    hasViewer = !version->qmlviewerCommand().isEmpty() || !version->qmlsceneCommand().isEmpty();
-                    break;
-                case QmlProject::QtQuick1Import:
-                    minVersion = QtSupport::QtVersionNumber(4, 7, 1);
-                    hasViewer = !version->qmlviewerCommand().isEmpty();
-                    break;
-                case QmlProject::QtQuick2Import:
-                    minVersion = QtSupport::QtVersionNumber(5, 0, 0);
-                    hasViewer = !version->qmlsceneCommand().isEmpty();
-                    break;
-                }
-
-                return version->qtVersion() >= minVersion && hasViewer;
-            }));
+                return version->qtVersion() >= QtSupport::QtVersionNumber(5, 0, 0)
+                        && !static_cast<QtSupport::DesktopQtVersion *>(version)
+                            ->qmlsceneCommand().isEmpty();
+            })
+        );
 
         if (!kits.isEmpty()) {
             Kit *kit = 0;
@@ -344,6 +299,13 @@ Project::RestoreResult QmlProject::fromMap(const QVariantMap &map, QString *erro
     return RestoreResult::Ok;
 }
 
+bool QmlProject::setupTarget(Target *target)
+{
+    target->updateDefaultDeployConfigurations();
+    target->updateDefaultRunConfigurations();
+    return true;
+}
+
 void QmlProject::generateProjectTree()
 {
     if (!m_projectItem)
@@ -352,10 +314,10 @@ void QmlProject::generateProjectTree()
     auto newRoot = new Internal::QmlProjectNode(this);
 
     for (const QString &f : m_projectItem.data()->files()) {
-        FileType fileType = FileType::Source; // ### FIXME
-        if (f == projectFilePath().toString())
-            fileType = FileType::Project;
-        newRoot->addNestedNode(new FileNode(Utils::FileName::fromString(f), fileType, false));
+        const Utils::FileName fileName = Utils::FileName::fromString(f);
+        const FileType fileType = (fileName == projectFilePath())
+                ? FileType::Project : FileNode::fileTypeForFileName(fileName);
+        newRoot->addNestedNode(new FileNode(fileName, fileType, false));
     }
     newRoot->addNestedNode(new FileNode(projectFilePath(), FileType::Project, false));
 

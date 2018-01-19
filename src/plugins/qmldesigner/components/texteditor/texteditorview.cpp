@@ -93,6 +93,7 @@ TextEditorView::~TextEditorView()
 void TextEditorView::modelAttached(Model *model)
 {
     Q_ASSERT(model);
+    m_widget->clearStatusBar();
 
     AbstractView::modelAttached(model);
 
@@ -117,7 +118,11 @@ void TextEditorView::modelAboutToBeDetached(Model *model)
 
     m_widget->setTextEditor(0);
 
-    QmlDesignerPlugin::instance()->emitCurrentTextEditorChanged(QmlDesignerPlugin::instance()->currentDesignDocument()->textEditor());
+    // in case the user closed it explicit we do not want to do anything with the editor
+    if (TextEditor::BaseTextEditor *textEditor =
+            QmlDesignerPlugin::instance()->currentDesignDocument()->textEditor()) {
+        QmlDesignerPlugin::instance()->emitCurrentTextEditorChanged(textEditor);
+    }
 }
 
 void TextEditorView::importsChanged(const QList<Import> &/*addedImports*/, const QList<Import> &/*removedImports*/)
@@ -173,9 +178,9 @@ void TextEditorView::selectedNodesChanged(const QList<ModelNode> &/*selectedNode
 void TextEditorView::customNotification(const AbstractView * /*view*/, const QString &identifier, const QList<ModelNode> &/*nodeList*/, const QList<QVariant> &/*data*/)
 {
     if (identifier == StartRewriterApply)
-        m_widget->setBlockCurserSelectionSyncronisation(true);
+        m_widget->setBlockCursorSelectionSynchronisation(true);
     else if (identifier == EndRewriterApply)
-        m_widget->setBlockCurserSelectionSyncronisation(false);
+        m_widget->setBlockCursorSelectionSynchronisation(false);
 }
 
 void TextEditorView::documentMessagesChanged(const QList<DocumentMessage> &errors, const QList<DocumentMessage> &)

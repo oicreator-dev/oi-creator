@@ -41,6 +41,7 @@
 #include <metainfo.h>
 #include "rewritingexception.h"
 
+#include <QDrag>
 #include <QFileInfo>
 #include <QFileSystemModel>
 #include <QStackedWidget>
@@ -54,9 +55,14 @@
 #include <QApplication>
 #include <QTimer>
 #include <QShortcut>
+#include <QQmlContext>
 #include <QQuickItem>
 
 namespace QmlDesigner {
+
+static QString propertyEditorResourcesPath() {
+    return Core::ICore::resourcePath() + QStringLiteral("/qmldesigner/propertyEditorQmlSources");
+}
 
 ItemLibraryWidget::ItemLibraryWidget(QWidget *parent) :
     QFrame(parent),
@@ -73,6 +79,8 @@ ItemLibraryWidget::ItemLibraryWidget(QWidget *parent) :
 
     /* create Items view and its model */
     m_itemViewQuickWidget->setResizeMode(QQuickWidget::SizeRootObjectToView);
+
+    m_itemViewQuickWidget->engine()->addImportPath(propertyEditorResourcesPath() + "/imports");
     m_itemLibraryModel = new ItemLibraryModel(this);
 
     QQmlContext *rootContext = m_itemViewQuickWidget->rootContext();

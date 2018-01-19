@@ -68,7 +68,7 @@
     use qmake, Qbs, or CMake. This enables you to use \QC as a code editor and
     to fully control the steps and commands used to build the project.
 
-    You can install tools for mobile devices as part of Qt distributions.
+    You can install tools for \l{glossary-device}{devices} as part of Qt distributions.
     The \l{glossary-buildandrun-kit}{kits} and build and run settings for the
     installed device types are set up automatically. However, you might need to
     install and configure some additional software on the devices to be able to
@@ -107,18 +107,20 @@
                 Use \QD forms to design a Qt widget based user interface for the
                 desktop and C++ to implement the application logic
 
-            \li Qt Quick Application
+            \li Qt Quick Application - Empty
 
-                Create a Qt Quick application that contains both QML and C++
-                code. The project includes a QQuickView.
+                Create an empty Qt Quick application that uses Qt Quick 2 types.
+
                 You can build the application and deploy it to desktop,
                 embedded, and mobile target platforms.
 
-            \li Qt Quick Controls 2 Application
+            \li Qt Quick Application - Scroll, Stack, or Swipe
 
-                Create a Qt Quick application using
+                Create a Qt Quick application that uses
                 \l{http://doc.qt.io/qt-5/qtquickcontrols2-index.html}
-                {Qt Quick Controls 2} (requires Qt 5.7 or later)
+                {Qt Quick Controls 2} to implement a scrollable list (requires
+                Qt 5.9 or later) or a set of pages with a stack-based or
+                swipe-based navigation model (requires Qt 5.7 or later).
 
             \li Qt Canvas 3D Application
 

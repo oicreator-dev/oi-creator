@@ -40,23 +40,28 @@
 #include <coreplugin/editormanager/ieditor.h>
 #include <coreplugin/find/itemviewfind.h>
 
-#include <utils/navigationtreeview.h>
 #include <utils/algorithm.h>
+#include <utils/navigationtreeview.h>
+#include <utils/progressindicator.h>
 #include <utils/tooltip/tooltip.h>
 #include <utils/utilsicons.h>
 
-#include <QDebug>
+#include <QApplication>
 #include <QSettings>
 
 #include <QStyledItemDelegate>
 #include <QVBoxLayout>
 #include <QToolButton>
+#include <QPainter>
 #include <QAction>
 #include <QMenu>
+
+#include <memory>
 
 using namespace Core;
 using namespace ProjectExplorer;
 using namespace ProjectExplorer::Internal;
+using namespace Utils;
 
 QList<ProjectTreeWidget *> ProjectTreeWidget::m_projectTreeWidgets;
 
@@ -65,22 +70,78 @@ namespace {
 class ProjectTreeItemDelegate : public QStyledItemDelegate
 {
 public:
-    ProjectTreeItemDelegate(QObject *parent) : QStyledItemDelegate(parent)
-    { }
+    ProjectTreeItemDelegate(QTreeView *view) : QStyledItemDelegate(view),
+        m_view(view)
+    {
+        connect(m_view->model(), &QAbstractItemModel::modelReset,
+                this, &ProjectTreeItemDelegate::deleteAllIndicators);
 
-    void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const
+        // Actually this only needs to delete the indicators in the effected rows and *after* it,
+        // but just be lazy and nuke all the indicators.
+        connect(m_view->model(), &QAbstractItemModel::rowsAboutToBeRemoved,
+                this, &ProjectTreeItemDelegate::deleteAllIndicators);
+        connect(m_view->model(), &QAbstractItemModel::rowsAboutToBeInserted,
+                this, &ProjectTreeItemDelegate::deleteAllIndicators);
+    }
+
+    ~ProjectTreeItemDelegate() override
+    {
+        deleteAllIndicators();
+    }
+
+    void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override
     {
         QStyleOptionViewItem opt = option;
         if (!index.data(Project::EnabledRole).toBool())
             opt.state &= ~QStyle::State_Enabled;
         QStyledItemDelegate::paint(painter, opt, index);
+
+        if (index.data(Project::isParsingRole).toBool()) {
+            initStyleOption(&opt, index);
+            ProgressIndicatorPainter *indicator = findOrCreateIndicatorPainter(index);
+
+            QStyle *style = option.widget ? option.widget->style() : QApplication::style();
+            const QRect rect = style->subElementRect(QStyle::SE_ItemViewItemDecoration, &opt, opt.widget);
+
+            indicator->paint(*painter, rect);
+        } else {
+            delete m_indicators.value(index);
+            m_indicators.remove(index);
+        }
     }
+
+private:
+    ProgressIndicatorPainter *findOrCreateIndicatorPainter(const QModelIndex &index) const
+    {
+        ProgressIndicatorPainter *indicator = m_indicators.value(index);
+        if (!indicator)
+            indicator = createIndicatorPainter(index);
+        return indicator;
+    }
+
+    ProgressIndicatorPainter *createIndicatorPainter(const QModelIndex &index) const
+    {
+        auto indicator = new ProgressIndicatorPainter(ProgressIndicatorSize::Small);
+        indicator->setUpdateCallback([index, this]() { m_view->update(index); });
+        indicator->startAnimation();
+        m_indicators.insert(index, indicator);
+        return indicator;
+    }
+
+    void deleteAllIndicators()
+    {
+        qDeleteAll(m_indicators);
+        m_indicators.clear();
+    }
+
+    mutable QHash<QModelIndex, ProgressIndicatorPainter *> m_indicators;
+    QTreeView *m_view;
 };
 
 bool debug = false;
 }
 
-class ProjectTreeView : public Utils::NavigationTreeView
+class ProjectTreeView : public NavigationTreeView
 {
 public:
     ProjectTreeView()
@@ -138,7 +199,7 @@ public:
             connect(newModel, &QAbstractItemModel::rowsRemoved,
                     this, &ProjectTreeView::invalidateSize);
         }
-        Utils::NavigationTreeView::setModel(newModel);
+        NavigationTreeView::setModel(newModel);
     }
 
     ~ProjectTreeView()
@@ -150,7 +211,7 @@ public:
     int sizeHintForColumn(int column) const override
     {
         if (m_cachedSize < 0)
-            m_cachedSize = Utils::NavigationTreeView::sizeHintForColumn(column);
+            m_cachedSize = NavigationTreeView::sizeHintForColumn(column);
 
         return m_cachedSize;
     }
@@ -172,7 +233,7 @@ ProjectTreeWidget::ProjectTreeWidget(QWidget *parent) : QWidget(parent)
     m_model = new FlatModel(this);
     m_view = new ProjectTreeView;
     m_view->setModel(m_model);
-    m_view->setItemDelegate(new ProjectTreeItemDelegate(this));
+    m_view->setItemDelegate(new ProjectTreeItemDelegate(m_view));
     setFocusProxy(m_view);
     m_view->installEventFilter(this);
 
@@ -194,6 +255,12 @@ ProjectTreeWidget::ProjectTreeWidget(QWidget *parent) : QWidget(parent)
     connect(m_filterGeneratedFilesAction, &QAction::toggled,
             this, &ProjectTreeWidget::setGeneratedFilesFilter);
 
+    m_trimEmptyDirectoriesAction = new QAction(tr("Hide Empty Directories"), this);
+    m_trimEmptyDirectoriesAction->setCheckable(true);
+    m_trimEmptyDirectoriesAction->setChecked(true);
+    connect(m_trimEmptyDirectoriesAction, &QAction::toggled,
+            this, &ProjectTreeWidget::setTrimEmptyDirectories);
+
     // connections
     connect(m_model, &FlatModel::renamed,
             this, &ProjectTreeWidget::renamed);
@@ -211,14 +278,14 @@ ProjectTreeWidget::ProjectTreeWidget(QWidget *parent) : QWidget(parent)
             m_model, &FlatModel::onCollapsed);
 
     m_toggleSync = new QToolButton;
-    m_toggleSync->setIcon(Utils::Icons::LINK.icon());
+    m_toggleSync->setIcon(Icons::LINK.icon());
     m_toggleSync->setCheckable(true);
     m_toggleSync->setChecked(autoSynchronization());
     m_toggleSync->setToolTip(tr("Synchronize with Editor"));
     connect(m_toggleSync, &QAbstractButton::clicked,
             this, &ProjectTreeWidget::toggleAutoSynchronization);
 
-    setCurrentItem(ProjectTree::currentNode());
+    setCurrentItem(ProjectTree::findCurrentNode());
     setAutoSynchronization(true);
 
     m_projectTreeWidgets << this;
@@ -270,7 +337,7 @@ void ProjectTreeWidget::rowsInserted(const QModelIndex &parent, int start, int e
     }
 }
 
-Node *ProjectTreeWidget::nodeForFile(const Utils::FileName &fileName)
+Node *ProjectTreeWidget::nodeForFile(const FileName &fileName)
 {
     Node *bestNode = nullptr;
     int bestNodeExpandCount = INT_MAX;
@@ -328,7 +395,7 @@ void ProjectTreeWidget::setAutoSynchronization(bool sync)
 
     if (m_autoSync) {
         // sync from document manager
-        Utils::FileName fileName;
+        FileName fileName;
         if (IDocument *doc = EditorManager::currentDocument())
             fileName = doc->filePath();
         if (!currentNode() || currentNode()->filePath() != fileName)
@@ -348,7 +415,7 @@ void ProjectTreeWidget::editCurrentItem()
         m_view->edit(m_view->selectionModel()->currentIndex());
 }
 
-void ProjectTreeWidget::renamed(const Utils::FileName &oldPath, const Utils::FileName &newPath)
+void ProjectTreeWidget::renamed(const FileName &oldPath, const FileName &newPath)
 {
     update();
     Q_UNUSED(oldPath);
@@ -400,8 +467,8 @@ void ProjectTreeWidget::showMessage(Node *node, const QString &message)
     m_view->scrollTo(idx);
 
     QPoint pos = m_view->mapToGlobal(m_view->visualRect(idx).bottomLeft());
-    pos -= Utils::ToolTip::offsetFromPosition();
-    Utils::ToolTip::show(pos, message);
+    pos -= ToolTip::offsetFromPosition();
+    ToolTip::show(pos, message);
 }
 
 void ProjectTreeWidget::showContextMenu(const QPoint &pos)
@@ -433,6 +500,12 @@ void ProjectTreeWidget::setGeneratedFilesFilter(bool filter)
     m_filterGeneratedFilesAction->setChecked(filter);
 }
 
+void ProjectTreeWidget::setTrimEmptyDirectories(bool filter)
+{
+    m_model->setTrimEmptyDirectories(filter);
+    m_trimEmptyDirectoriesAction->setChecked(filter);
+}
+
 bool ProjectTreeWidget::generatedFilesFilter()
 {
     return m_model->generatedFilesFilterEnabled();
@@ -459,13 +532,14 @@ NavigationView ProjectTreeWidgetFactory::createWidget()
     n.widget = ptw;
 
     auto filter = new QToolButton;
-    filter->setIcon(Utils::Icons::FILTER.icon());
+    filter->setIcon(Icons::FILTER.icon());
     filter->setToolTip(tr("Filter Tree"));
     filter->setPopupMode(QToolButton::InstantPopup);
     filter->setProperty("noArrow", true);
     auto filterMenu = new QMenu(filter);
     filterMenu->addAction(ptw->m_filterProjectsAction);
     filterMenu->addAction(ptw->m_filterGeneratedFilesAction);
+    filterMenu->addAction(ptw->m_trimEmptyDirectoriesAction);
     filter->setMenu(filterMenu);
 
     n.dockToolBarWidgets << filter << ptw->toggleSync();
@@ -489,5 +563,5 @@ void ProjectTreeWidgetFactory::restoreSettings(QSettings *settings, int position
     const QString baseKey = QLatin1String("ProjectTreeWidget.") + QString::number(position);
     ptw->setProjectFilter(settings->value(baseKey + QLatin1String(".ProjectFilter"), false).toBool());
     ptw->setGeneratedFilesFilter(settings->value(baseKey + QLatin1String(".GeneratedFilter"), true).toBool());
-    ptw->setAutoSynchronization(settings->value(baseKey +  QLatin1String(".SyncWithEditor")).toBool());
+    ptw->setAutoSynchronization(settings->value(baseKey +  QLatin1String(".SyncWithEditor"), true).toBool());
 }

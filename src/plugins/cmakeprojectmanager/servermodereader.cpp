@@ -32,6 +32,7 @@
 #include "servermode.h"
 
 #include <coreplugin/editormanager/editormanager.h>
+#include <coreplugin/fileiconprovider.h>
 #include <coreplugin/messagemanager.h>
 #include <coreplugin/progressmanager/progressmanager.h>
 #include <projectexplorer/projectexplorerconstants.h>
@@ -43,6 +44,8 @@
 #include <utils/asconst.h>
 #include <utils/qtcassert.h>
 #include <utils/qtcprocess.h>
+
+#include <QVector>
 
 using namespace ProjectExplorer;
 using namespace Utils;
@@ -56,7 +59,10 @@ const char CONFIGURE_TYPE[] = "configure";
 const char CMAKE_INPUTS_TYPE[] = "cmakeInputs";
 const char COMPUTE_TYPE[] = "compute";
 
+const char BACKTRACE_KEY[] = "backtrace";
+const char LINE_KEY[] = "line";
 const char NAME_KEY[] = "name";
+const char PATH_KEY[] = "path";
 const char SOURCE_DIRECTORY_KEY[] = "sourceDirectory";
 const char SOURCES_KEY[] = "sources";
 
@@ -73,6 +79,17 @@ ServerModeReader::ServerModeReader()
         if (m_cmakeFiles.contains(document->filePath()))
             emit dirty();
     });
+
+    connect(&m_parser, &CMakeParser::addOutput,
+            this, [](const QString &m) { Core::MessageManager::write(m); });
+    connect(&m_parser, &CMakeParser::addTask, this, [this](const Task &t) {
+        Task editable(t);
+        if (!editable.file.isEmpty()) {
+            QDir srcDir(m_parameters.sourceDirectory.toString());
+            editable.file = FileName::fromString(srcDir.absoluteFilePath(editable.file.toString()));
+        }
+        TaskHub::addTask(editable);
+    });
 }
 
 ServerModeReader::~ServerModeReader()
@@ -80,12 +97,15 @@ ServerModeReader::~ServerModeReader()
     stop();
 }
 
-void ServerModeReader::setParameters(const BuildDirReader::Parameters &p)
+void ServerModeReader::setParameters(const BuildDirParameters &p)
 {
+    QTC_ASSERT(p.cmakeTool, return);
+
     BuildDirReader::setParameters(p);
     if (!m_cmakeServer) {
         m_cmakeServer.reset(new ServerMode(p.environment,
-                                           p.sourceDirectory, p.buildDirectory, p.cmakeExecutable,
+                                           p.sourceDirectory, p.workDirectory,
+                                           p.cmakeTool->cmakeExecutable(),
                                            p.generator, p.extraGenerator, p.platform, p.toolset,
                                            true, 1));
         connect(m_cmakeServer.get(), &ServerMode::errorOccured,
@@ -98,8 +118,13 @@ void ServerModeReader::setParameters(const BuildDirReader::Parameters &p)
                 this, &ServerModeReader::handleProgress);
         connect(m_cmakeServer.get(), &ServerMode::cmakeSignal,
                 this, &ServerModeReader::handleSignal);
-        connect(m_cmakeServer.get(), &ServerMode::cmakeMessage,
-                this, [this](const QString &m) { Core::MessageManager::write(m); });
+        connect(m_cmakeServer.get(), &ServerMode::cmakeMessage, [this](const QString &m) {
+            const QStringList lines = m.split('\n');
+            for (const QString &l : lines) {
+                m_parser.stdError(l);
+                Core::MessageManager::write(l);
+            }
+        });
         connect(m_cmakeServer.get(), &ServerMode::message,
                 this, [](const QString &m) { Core::MessageManager::write(m); });
         connect(m_cmakeServer.get(), &ServerMode::connected,
@@ -107,47 +132,61 @@ void ServerModeReader::setParameters(const BuildDirReader::Parameters &p)
         connect(m_cmakeServer.get(), &ServerMode::disconnected,
                 this, [this]() {
             stop();
+            Core::MessageManager::write(tr("Parsing of CMake project failed: Connection to CMake server lost."));
             m_cmakeServer.reset();
         }, Qt::QueuedConnection); // Delay
     }
 }
 
-bool ServerModeReader::isCompatible(const BuildDirReader::Parameters &p)
+bool ServerModeReader::isCompatible(const BuildDirParameters &p)
 {
-    // Server mode connection got lost, reset...
-    if (!m_parameters.cmakeExecutable.isEmpty() && !m_cmakeServer)
+    if (!p.cmakeTool)
         return false;
 
-    return p.cmakeHasServerMode
-            && p.cmakeExecutable == m_parameters.cmakeExecutable
+    // Server mode connection got lost, reset...
+    if (!m_parameters.cmakeTool->cmakeExecutable().isEmpty() && !m_cmakeServer)
+        return false;
+
+    return p.cmakeTool->hasServerMode()
+            && p.cmakeTool->cmakeExecutable() == m_parameters.cmakeTool->cmakeExecutable()
             && p.environment == m_parameters.environment
             && p.generator == m_parameters.generator
             && p.extraGenerator == m_parameters.extraGenerator
             && p.platform == m_parameters.platform
             && p.toolset == m_parameters.toolset
             && p.sourceDirectory == m_parameters.sourceDirectory
-            && p.buildDirectory == m_parameters.buildDirectory;
+            && p.workDirectory == m_parameters.workDirectory;
 }
 
 void ServerModeReader::resetData()
 {
-    m_hasData = false;
+    m_cmakeConfiguration.clear();
+    // m_cmakeFiles: Keep these!
+    m_cmakeInputsFileNodes.clear();
+    qDeleteAll(m_projects); // Also deletes targets and filegroups that are its children!
+    m_projects.clear();
+    m_targets.clear();
+    m_fileGroups.clear();
 }
 
-void ServerModeReader::parse(bool force)
+void ServerModeReader::parse(bool forceConfiguration)
 {
     emit configurationStarted();
 
     QTC_ASSERT(m_cmakeServer, return);
     QVariantMap extra;
-    if (force || !QDir(m_parameters.buildDirectory.toString()).exists("CMakeCache.txt")) {
+    if (forceConfiguration || !QDir(m_parameters.buildDirectory.toString()).exists("CMakeCache.txt")) {
         QStringList cacheArguments = transform(m_parameters.configuration,
                                                [this](const CMakeConfigItem &i) {
             return i.toArgument(m_parameters.expander);
         });
+        Core::MessageManager::write(tr("Starting to parse CMake project, using: \"%1\".")
+                                    .arg(cacheArguments.join("\", \"")));
         cacheArguments.prepend(QString()); // Work around a bug in CMake 3.7.0 and 3.7.1 where
                                            // the first argument gets lost!
         extra.insert("cacheArguments", QVariant(cacheArguments));
+    } else {
+        Core::MessageManager::write(tr("Starting to parse CMake project."));
     }
 
     m_future.reset(new QFutureInterface<void>());
@@ -168,6 +207,7 @@ void ServerModeReader::stop()
         m_future->reportFinished();
         m_future.reset();
     }
+    m_parser.flush();
 }
 
 bool ServerModeReader::isReady() const
@@ -180,12 +220,7 @@ bool ServerModeReader::isParsing() const
     return static_cast<bool>(m_future);
 }
 
-bool ServerModeReader::hasData() const
-{
-    return m_hasData;
-}
-
-QList<CMakeBuildTarget> ServerModeReader::buildTargets() const
+QList<CMakeBuildTarget> ServerModeReader::takeBuildTargets()
 {
     const QList<CMakeBuildTarget> result = transform(m_targets, [](const Target *t) -> CMakeBuildTarget {
         CMakeBuildTarget ct;
@@ -218,22 +253,36 @@ QList<CMakeBuildTarget> ServerModeReader::buildTargets() const
 
 CMakeConfig ServerModeReader::takeParsedConfiguration()
 {
-    CMakeConfig config = m_cmakeCache;
-    m_cmakeCache.clear();
+    CMakeConfig config = m_cmakeConfiguration;
+    m_cmakeConfiguration.clear();
     return config;
 }
 
 static void addCMakeVFolder(FolderNode *base, const Utils::FileName &basePath, int priority,
-                     const QString &displayName, QList<FileNode *> &files)
+                     const QString &displayName, const QList<FileNode *> &files)
 {
     if (files.isEmpty())
         return;
-    auto folder = new VirtualFolderNode(basePath, priority);
-    folder->setDisplayName(displayName);
-    base->addNode(folder);
+    FolderNode *folder = base;
+    if (!displayName.isEmpty()) {
+        folder = new VirtualFolderNode(basePath, priority);
+        folder->setDisplayName(displayName);
+        base->addNode(folder);
+    }
     folder->addNestedNodes(files);
     for (FolderNode *fn : folder->folderNodes())
         fn->compress();
+}
+
+static QList<FileNode *> removeKnownNodes(const QSet<Utils::FileName> &knownFiles, const QList<FileNode *> &files)
+{
+    return Utils::filtered(files, [&knownFiles](const FileNode *n) {
+        if (knownFiles.contains(n->filePath())) {
+            delete n;
+            return false;
+        }
+        return true;
+    });
 }
 
 static void addCMakeInputs(FolderNode *root,
@@ -246,15 +295,19 @@ static void addCMakeInputs(FolderNode *root,
     ProjectNode *cmakeVFolder = new CMakeInputsNode(root->filePath());
     root->addNode(cmakeVFolder);
 
-    addCMakeVFolder(cmakeVFolder, sourceDir, 1000,
-                    QCoreApplication::translate("CMakeProjectManager::Internal::ServerModeReader", "<Source Directory>"),
-                    sourceInputs);
+    QSet<Utils::FileName> knownFiles;
+    root->forEachGenericNode([&knownFiles](const Node *n) {
+        if (n->listInProject())
+            knownFiles.insert(n->filePath());
+    });
+
+    addCMakeVFolder(cmakeVFolder, sourceDir, 1000, QString(), removeKnownNodes(knownFiles, sourceInputs));
     addCMakeVFolder(cmakeVFolder, buildDir, 100,
                     QCoreApplication::translate("CMakeProjectManager::Internal::ServerModeReader", "<Build Directory>"),
-                    buildInputs);
+                    removeKnownNodes(knownFiles, buildInputs));
     addCMakeVFolder(cmakeVFolder, Utils::FileName(), 10,
                     QCoreApplication::translate("CMakeProjectManager::Internal::ServerModeReader", "<Other Locations>"),
-                    rootInputs);
+                    removeKnownNodes(knownFiles, rootInputs));
 }
 
 void ServerModeReader::generateProjectTree(CMakeProjectNode *root,
@@ -270,10 +323,10 @@ void ServerModeReader::generateProjectTree(CMakeProjectNode *root,
         const FileName path = fn->filePath();
         if (path.fileName().compare("CMakeLists.txt", HostOsInfo::fileNameCaseSensitivity()) == 0)
             cmakeLists.append(fn);
+        else if (path.isChildOf(m_parameters.workDirectory))
+            cmakeFilesBuild.append(fn);
         else if (path.isChildOf(m_parameters.sourceDirectory))
             cmakeFilesSource.append(fn);
-        else if (path.isChildOf(m_parameters.buildDirectory))
-            cmakeFilesBuild.append(fn);
         else
             cmakeFilesOther.append(fn);
     }
@@ -285,15 +338,15 @@ void ServerModeReader::generateProjectTree(CMakeProjectNode *root,
     if (topLevel)
         root->setDisplayName(topLevel->name);
 
-    if (!cmakeFilesSource.isEmpty() || !cmakeFilesBuild.isEmpty() || !cmakeFilesOther.isEmpty())
-        addCMakeInputs(root, m_parameters.sourceDirectory, m_parameters.buildDirectory,
-                       cmakeFilesSource, cmakeFilesBuild, cmakeFilesOther);
-
     QHash<Utils::FileName, ProjectNode *> cmakeListsNodes = addCMakeLists(root, cmakeLists);
     QList<FileNode *> knownHeaders;
     addProjects(cmakeListsNodes, m_projects, knownHeaders);
 
     addHeaderNodes(root, knownHeaders, allFiles);
+
+    if (!cmakeFilesSource.isEmpty() || !cmakeFilesBuild.isEmpty() || !cmakeFilesOther.isEmpty())
+        addCMakeInputs(root, m_parameters.sourceDirectory, m_parameters.workDirectory,
+                       cmakeFilesSource, cmakeFilesBuild, cmakeFilesOther);
 }
 
 void ServerModeReader::updateCodeModel(CppTools::RawProjectParts &rpps)
@@ -301,14 +354,6 @@ void ServerModeReader::updateCodeModel(CppTools::RawProjectParts &rpps)
     int counter = 0;
     for (const FileGroup *fg : Utils::asConst(m_fileGroups)) {
         ++counter;
-        const QString defineArg
-                = transform(fg->defines, [](const QString &s) -> QString {
-                    QString result = QString::fromLatin1("#define ") + s;
-                    int assignIndex = result.indexOf('=');
-                    if (assignIndex != -1)
-                        result[assignIndex] = ' ';
-                    return result;
-                }).join('\n');
         const QStringList flags = QtcProcess::splitArgs(fg->compileFlags);
         const QStringList includes = transform(fg->includePaths, [](const IncludePath *ip)  { return ip->path.toString(); });
 
@@ -316,7 +361,7 @@ void ServerModeReader::updateCodeModel(CppTools::RawProjectParts &rpps)
         rpp.setProjectFileLocation(fg->target->sourceDirectory.toString() + "/CMakeLists.txt");
         rpp.setBuildSystemTarget(fg->target->name);
         rpp.setDisplayName(fg->target->name + QString::number(counter));
-        rpp.setDefines(defineArg.toUtf8());
+        rpp.setMacros(fg->macros);
         rpp.setIncludePaths(includes);
 
         CppTools::RawProjectPartFlags cProjectFlags;
@@ -329,13 +374,11 @@ void ServerModeReader::updateCodeModel(CppTools::RawProjectParts &rpps)
 
         rpp.setFiles(transform(fg->sources, &FileName::toString));
 
+        const bool isExecutable = fg->target->type == "EXECUTABLE";
+        rpp.setBuildTargetType(isExecutable ? CppTools::ProjectPart::Executable
+                                            : CppTools::ProjectPart::Library);
         rpps.append(rpp);
     }
-
-    qDeleteAll(m_projects); // Not used anymore!
-    m_projects.clear();
-    m_targets.clear();
-    m_fileGroups.clear();
 }
 
 void ServerModeReader::handleReply(const QVariantMap &data, const QString &inReplyTo)
@@ -374,7 +417,7 @@ void ServerModeReader::handleReply(const QVariantMap &data, const QString &inRep
             m_future->reportFinished();
             m_future.reset();
         }
-        m_hasData = true;
+        Core::MessageManager::write(tr("CMake Project was parsed successfully."));
         emit dataAvailable();
     }
 }
@@ -384,6 +427,7 @@ void ServerModeReader::handleError(const QString &message)
     TaskHub::addTask(Task::Error, message, ProjectExplorer::Constants::TASK_CATEGORY_BUILDSYSTEM,
                      Utils::FileName(), -1);
     stop();
+    Core::MessageManager::write(tr("CMake Project parsing failed."));
     emit errorOccured(message);
 }
 
@@ -393,8 +437,7 @@ void ServerModeReader::handleProgress(int min, int cur, int max, const QString &
 
     if (!m_future)
         return;
-    int progress = m_progressStepMinimum
-            + (((max - min) / (cur - min)) * (m_progressStepMaximum  - m_progressStepMinimum));
+    const int progress = calculateProgress(m_progressStepMinimum, min, cur, max, m_progressStepMaximum);
     m_future->setProgressValue(progress);
 }
 
@@ -404,6 +447,14 @@ void ServerModeReader::handleSignal(const QString &signal, const QVariantMap &da
     // CMake on Windows sends false dirty signals on each edit (QTCREATORBUG-17944)
     if (!HostOsInfo::isWindowsHost() && signal == "dirty")
         emit dirty();
+}
+
+int ServerModeReader::calculateProgress(const int minRange, const int min, const int cur, const int max, const int maxRange)
+{
+    if (minRange == maxRange || min == max)
+        return minRange;
+    const int clampedCur = std::min(std::max(cur, min), max);
+    return minRange + ((clampedCur - min) / (max - min)) * (maxRange - minRange);
 }
 
 void ServerModeReader::extractCodeModelData(const QVariantMap &data)
@@ -463,6 +514,8 @@ ServerModeReader::Target *ServerModeReader::extractTargetData(const QVariantMap 
     target->sourceDirectory = FileName::fromString(data.value(SOURCE_DIRECTORY_KEY).toString());
     target->buildDirectory = FileName::fromString(data.value("buildDirectory").toString());
 
+    target->crossReferences = extractCrossReferences(data.value("crossReferences").toMap());
+
     QDir srcDir(target->sourceDirectory.toString());
 
     target->type = data.value("type").toString();
@@ -488,7 +541,9 @@ ServerModeReader::FileGroup *ServerModeReader::extractFileGroupData(const QVaria
     auto fileGroup = new FileGroup;
     fileGroup->target = t;
     fileGroup->compileFlags = data.value("compileFlags").toString();
-    fileGroup->defines = data.value("defines").toStringList();
+    fileGroup->macros = Utils::transform<QVector>(data.value("defines").toStringList(), [](const QString &s) {
+        return ProjectExplorer::Macro::fromKeyValue(s);
+    });
     fileGroup->includePaths = transform(data.value("includePath").toList(),
                                         [](const QVariant &i) -> IncludePath* {
         const QVariantMap iData = i.toMap();
@@ -505,6 +560,72 @@ ServerModeReader::FileGroup *ServerModeReader::extractFileGroupData(const QVaria
 
     m_fileGroups.append(fileGroup);
     return fileGroup;
+}
+
+QList<ServerModeReader::CrossReference *> ServerModeReader::extractCrossReferences(const QVariantMap &data)
+{
+    QList<CrossReference *> crossReferences;
+
+    if (data.isEmpty())
+        return crossReferences;
+
+    auto cr = std::make_unique<CrossReference>();
+    cr->backtrace = extractBacktrace(data.value(BACKTRACE_KEY, QVariantList()).toList());
+    QTC_ASSERT(!cr->backtrace.isEmpty(), return {});
+    crossReferences.append(cr.release());
+
+    const QVariantList related = data.value("relatedStatements", QVariantList()).toList();
+    for (const QVariant &relatedData : related) {
+        auto cr = std::make_unique<CrossReference>();
+
+        // extract information:
+        const QVariantMap map = relatedData.toMap();
+        const QString typeString = map.value("type", QString()).toString();
+        if (typeString.isEmpty())
+            cr->type = CrossReference::TARGET;
+        else if (typeString == "target_link_libraries")
+            cr->type = CrossReference::LIBRARIES;
+        else if (typeString == "target_compile_defines")
+            cr->type = CrossReference::DEFINES;
+        else if (typeString == "target_include_directories")
+            cr->type = CrossReference::INCLUDES;
+        else
+            cr->type = CrossReference::UNKNOWN;
+        cr->backtrace = extractBacktrace(map.value(BACKTRACE_KEY, QVariantList()).toList());
+
+        // sanity check:
+        if (cr->backtrace.isEmpty())
+            continue;
+
+        // store information:
+        crossReferences.append(cr.release());
+    }
+    return crossReferences;
+}
+
+ServerModeReader::BacktraceItem *ServerModeReader::extractBacktraceItem(const QVariantMap &data)
+{
+    QTC_ASSERT(!data.isEmpty(), return nullptr);
+    auto item = std::make_unique<BacktraceItem>();
+
+    item->line = data.value(LINE_KEY, -1).toInt();
+    item->name = data.value(NAME_KEY, QString()).toString();
+    item->path = data.value(PATH_KEY, QString()).toString();
+
+    QTC_ASSERT(!item->path.isEmpty(), return nullptr);
+    return item.release();
+}
+
+QList<ServerModeReader::BacktraceItem *> ServerModeReader::extractBacktrace(const QVariantList &data)
+{
+    QList<BacktraceItem *> btResult;
+    for (const QVariant &bt : data) {
+        BacktraceItem *btItem = extractBacktraceItem(bt.toMap());
+        QTC_ASSERT(btItem, continue);
+
+        btResult.append(btItem);
+    }
+    return btResult;
 }
 
 void ServerModeReader::extractCMakeInputsData(const QVariantMap &data)
@@ -552,7 +673,7 @@ void ServerModeReader::extractCacheData(const QVariantMap &data)
         item.values = CMakeConfigItem::cmakeSplitValue(properties.value("STRINGS").toString(), true);
         config.append(item);
     }
-    m_cmakeCache = config;
+    m_cmakeConfiguration = config;
 }
 
 void ServerModeReader::fixTarget(ServerModeReader::Target *target) const
@@ -561,7 +682,7 @@ void ServerModeReader::fixTarget(ServerModeReader::Target *target) const
 
     for (const FileGroup *group : Utils::asConst(target->fileGroups)) {
         if (group->includePaths.isEmpty() && group->compileFlags.isEmpty()
-                && group->defines.isEmpty())
+                && group->macros.isEmpty())
             continue;
 
         const FileGroup *fallback = languageFallbacks.value(group->language);
@@ -587,13 +708,13 @@ void ServerModeReader::fixTarget(ServerModeReader::Target *target) const
         (*it)->language = fallback->language.isEmpty() ? "CXX" : fallback->language;
 
         if (*it == fallback
-                || !(*it)->includePaths.isEmpty() || !(*it)->defines.isEmpty()
+                || !(*it)->includePaths.isEmpty() || !(*it)->macros.isEmpty()
                 || !(*it)->compileFlags.isEmpty())
             continue;
 
         for (const IncludePath *ip : fallback->includePaths)
             (*it)->includePaths.append(new IncludePath(*ip));
-        (*it)->defines = fallback->defines;
+        (*it)->macros = fallback->macros;
         (*it)->compileFlags = fallback->compileFlags;
     }
 }
@@ -658,12 +779,13 @@ static CMakeTargetNode *createTargetNode(const QHash<Utils::FileName, ProjectNod
     ProjectNode *cmln = cmakeListsNodes.value(dir);
     QTC_ASSERT(cmln, return nullptr);
 
-    Utils::FileName targetName = dir;
-    targetName.appendPath(".target::" + displayName);
+    QByteArray targetId = CMakeTargetNode::generateId(dir, displayName);
 
-    CMakeTargetNode *tn = static_cast<CMakeTargetNode *>(cmln->projectNode(targetName));
+    CMakeTargetNode *tn = static_cast<CMakeTargetNode *>(cmln->findNode([&targetId](const Node *n) {
+        return n->id() == targetId;
+    }));
     if (!tn) {
-        tn = new CMakeTargetNode(targetName);
+        tn = new CMakeTargetNode(dir, displayName);
         cmln->addNode(tn);
     }
     tn->setDisplayName(displayName);
@@ -678,6 +800,36 @@ void ServerModeReader::addTargets(const QHash<Utils::FileName, ProjectExplorer::
         CMakeTargetNode *tNode = createTargetNode(cmakeListsNodes, t->sourceDirectory, t->name);
         QTC_ASSERT(tNode, qDebug() << "No target node for" << t->sourceDirectory << t->name; continue);
         tNode->setTargetInformation(t->artifacts, t->type);
+        QList<FolderNode::LocationInfo> info;
+        // Set up a default target path:
+        FileName targetPath = t->sourceDirectory;
+        targetPath.appendPath("CMakeLists.txt");
+        for (CrossReference *cr : Utils::asConst(t->crossReferences)) {
+            BacktraceItem *bt = cr->backtrace.isEmpty() ? nullptr : cr->backtrace.at(0);
+            if (bt) {
+                const QString btName = bt->name.toLower();
+                const FileName path = Utils::FileName::fromUserInput(bt->path);
+                QString dn;
+                if (cr->type != CrossReference::TARGET) {
+                    if (path == targetPath) {
+                        if (bt->line >= 0)
+                            dn = tr("%1 in line %3").arg(btName).arg(bt->line);
+                        else
+                            dn = tr("%1").arg(btName);
+                    } else {
+                        if (bt->line >= 0)
+                            dn = tr("%1 in %2:%3").arg(btName, path.toUserOutput()).arg(bt->line);
+                        else
+                            dn = tr("%1 in %2").arg(btName, path.toUserOutput());
+                    }
+                } else {
+                    dn = tr("Target Definition");
+                    targetPath = path;
+                }
+                info.append(FolderNode::LocationInfo(dn, path, bt->line));
+            }
+        }
+        tNode->setLocationInfo(info);
         addFileGroups(tNode, t->sourceDirectory, t->buildDirectory, t->fileGroups, knownHeaderNodes);
     }
 }
@@ -707,12 +859,12 @@ void ServerModeReader::addFileGroups(ProjectNode *targetRoot,
     }
 
     // Split up files in groups (based on location):
-    const bool inSourceBuild = (m_parameters.buildDirectory == m_parameters.sourceDirectory);
+    const bool inSourceBuild = (m_parameters.workDirectory == m_parameters.sourceDirectory);
     QList<FileNode *> sourceFileNodes;
     QList<FileNode *> buildFileNodes;
     QList<FileNode *> otherFileNodes;
     foreach (FileNode *fn, toList) {
-        if (fn->filePath().isChildOf(m_parameters.buildDirectory) && !inSourceBuild)
+        if (fn->filePath().isChildOf(m_parameters.workDirectory) && !inSourceBuild)
             buildFileNodes.append(fn);
         else if (fn->filePath().isChildOf(m_parameters.sourceDirectory))
             sourceFileNodes.append(fn);
@@ -720,7 +872,7 @@ void ServerModeReader::addFileGroups(ProjectNode *targetRoot,
             otherFileNodes.append(fn);
     }
 
-    addCMakeVFolder(targetRoot, sourceDirectory, 1000, tr("<Source Directory>"), sourceFileNodes);
+    addCMakeVFolder(targetRoot, sourceDirectory, 1000,  QString(), sourceFileNodes);
     addCMakeVFolder(targetRoot, buildDirectory, 100, tr("<Build Directory>"), buildFileNodes);
     addCMakeVFolder(targetRoot, Utils::FileName(), 10, tr("<Other Locations>"), otherFileNodes);
 }
@@ -728,8 +880,13 @@ void ServerModeReader::addFileGroups(ProjectNode *targetRoot,
 void ServerModeReader::addHeaderNodes(ProjectNode *root, const QList<FileNode *> knownHeaders,
                                       const QList<const FileNode *> &allFiles)
 {
+    if (root->isEmpty())
+        return;
+
+    static QIcon headerNodeIcon = Core::FileIconProvider::directoryIcon(ProjectExplorer::Constants::FILEOVERLAY_H);
     auto headerNode = new VirtualFolderNode(root->filePath(), Node::DefaultPriority - 5);
     headerNode->setDisplayName(tr("<Headers>"));
+    headerNode->setIcon(headerNodeIcon);
 
     // knownHeaders are already listed in their targets:
     QSet<Utils::FileName> seenHeaders = Utils::transform<QSet>(knownHeaders, &FileNode::filePath);
@@ -755,3 +912,59 @@ void ServerModeReader::addHeaderNodes(ProjectNode *root, const QList<FileNode *>
 
 } // namespace Internal
 } // namespace CMakeProjectManager
+
+#if defined(WITH_TESTS)
+
+#include "cmakeprojectplugin.h"
+#include <QTest>
+
+namespace CMakeProjectManager {
+namespace Internal {
+
+void CMakeProjectPlugin::testServerModeReaderProgress_data()
+{
+    QTest::addColumn<int>("minRange");
+    QTest::addColumn<int>("min");
+    QTest::addColumn<int>("cur");
+    QTest::addColumn<int>("max");
+    QTest::addColumn<int>("maxRange");
+    QTest::addColumn<int>("expected");
+
+    QTest::newRow("empty range") << 100 << 10 << 11 << 20 << 100 << 100;
+    QTest::newRow("one range (low)") << 0 << 10 << 11 << 20 << 1 << 0;
+    QTest::newRow("one range (high)") << 20 << 10 << 19 << 20 << 20 << 20;
+    QTest::newRow("large range") << 30 << 10 << 11 << 20 << 100000 << 30;
+
+    QTest::newRow("empty progress") << -5 << 10 << 10 << 10 << 99995 << -5;
+    QTest::newRow("one progress (low)") << 42 << 10 << 10 << 11 << 100042 << 42;
+    QTest::newRow("one progress (high)") << 0 << 10 << 11 << 11 << 100000 << 100000;
+    QTest::newRow("large progress") << 0 << 10 << 10 << 11 << 100000 << 0;
+
+    QTest::newRow("cur too low") << 0 << 10 << 9 << 100 << 100000 << 0;
+    QTest::newRow("cur too high") << 0 << 10 << 101 << 100 << 100000 << 100000;
+    QTest::newRow("cur much too low") << 0 << 10 << -1000 << 100 << 100000 << 0;
+    QTest::newRow("cur much too high") << 0 << 10 << 1110000 << 100 << 100000 << 100000;
+}
+
+void CMakeProjectPlugin::testServerModeReaderProgress()
+{
+    QFETCH(int, minRange);
+    QFETCH(int, min);
+    QFETCH(int, cur);
+    QFETCH(int, max);
+    QFETCH(int, maxRange);
+    QFETCH(int, expected);
+
+    ServerModeReader reader;
+    const int r = reader.calculateProgress(minRange, min, cur, max, maxRange);
+
+    QCOMPARE(r, expected);
+
+    QVERIFY(r <= maxRange);
+    QVERIFY(r >= minRange);
+}
+
+} // namespace Internal
+} // namespace CMakeProjectManager
+
+#endif

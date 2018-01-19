@@ -33,6 +33,7 @@
 #include <coreplugin/icore.h>
 #include <utils/qtcassert.h>
 #include <utils/fileutils.h>
+#include <utils/qtcfallthrough.h>
 #include "utils/runextensions.h"
 #include "utils/synchronousprocess.h"
 
@@ -152,7 +153,7 @@ struct ParserState {
     QString key;
     QString value;
     QMap<QString,QString> info;
-    int progress, maxProgress;
+    int progress = 0, maxProgress = 0;
     int gdbPort, qmlPort;
     bool collectChars() {
         switch (kind) {
@@ -214,7 +215,7 @@ protected:
     IosToolHandler *q;
     QString m_deviceId;
     QString m_bundlePath;
-    IosToolHandler::RunKind m_runKind;
+    IosToolHandler::RunKind m_runKind = IosToolHandler::NormalRun;
     IosDeviceType m_devType;
 };
 
@@ -395,7 +396,7 @@ void IosToolHandlerPrivate::toolExited(int code)
 void IosDeviceToolHandlerPrivate::subprocessError(QProcess::ProcessError error)
 {
     if (state != Stopped)
-        errorMsg(IosToolHandler::tr("iOS tool Error %1").arg(error));
+        errorMsg(IosToolHandler::tr("iOS tool error %1").arg(error));
     stop(-1);
     if (error == QProcess::FailedToStart) {
         qCDebug(toolHandlerLog) << "IosToolHandler::finished(" << this << ")";
@@ -606,7 +607,7 @@ void IosDeviceToolHandlerPrivate::subprocessHasData()
         switch (state) {
         case NonStarted:
             qCWarning(toolHandlerLog) << "IosToolHandler unexpected state in subprocessHasData: NonStarted";
-            // pass
+            Q_FALLTHROUGH();
         case Starting:
         case StartedInferior:
             // read some data
@@ -624,6 +625,7 @@ void IosDeviceToolHandlerPrivate::subprocessHasData()
                 outputParser.addData(QByteArray(buf, rRead));
                 processXml();
             }
+            break;
         }
         case XmlEndProcessed:
             stop(0);
@@ -770,7 +772,7 @@ void IosDeviceToolHandlerPrivate::stop(int errorCode)
     switch (oldState) {
     case NonStarted:
         qCWarning(toolHandlerLog) << "IosToolHandler::stop() when state was NonStarted";
-        // pass
+        Q_FALLTHROUGH();
     case Starting:
         switch (op){
         case OpNone:
@@ -785,7 +787,7 @@ void IosDeviceToolHandlerPrivate::stop(int errorCode)
         case OpDeviceInfo:
             break;
         }
-        // pass
+        Q_FALLTHROUGH();
     case StartedInferior:
     case XmlEndProcessed:
         toolExited(errorCode);
@@ -835,7 +837,7 @@ void IosSimulatorToolHandlerPrivate::requestTransferApp(const QString &appBundle
         if (response.success) {
             installAppOnSimulator();
         } else {
-            errorMsg(IosToolHandler::tr("Application install on Simulator failed. Simulator not running."));
+            errorMsg(IosToolHandler::tr("Application install on simulator failed. Simulator not running."));
             didTransferApp(m_bundlePath, m_deviceId, IosToolHandler::Failure);
             emit q->finished(q);
         }
@@ -860,7 +862,7 @@ void IosSimulatorToolHandlerPrivate::requestRunApp(const QString &appBundlePath,
 
     Utils::FileName appBundle = Utils::FileName::fromString(m_bundlePath);
     if (!appBundle.exists()) {
-        errorMsg(IosToolHandler::tr("Application launch on Simulator failed. Invalid Bundle path %1")
+        errorMsg(IosToolHandler::tr("Application launch on simulator failed. Invalid bundle path %1")
                  .arg(m_bundlePath));
         didStartApp(m_bundlePath, m_deviceId, Ios::IosToolHandler::Failure);
         return;
@@ -872,7 +874,7 @@ void IosSimulatorToolHandlerPrivate::requestRunApp(const QString &appBundlePath,
         if (response.success) {
             launchAppOnSimulator(extraArgs);
         } else {
-            errorMsg(IosToolHandler::tr("Application launch on Simulator failed. Simulator not running."));
+            errorMsg(IosToolHandler::tr("Application launch on simulator failed. Simulator not running."));
             didStartApp(m_bundlePath, m_deviceId, Ios::IosToolHandler::Failure);
         }
     };
@@ -893,7 +895,7 @@ bool IosSimulatorToolHandlerPrivate::isRunning() const
 {
 #ifdef Q_OS_UNIX
     return m_pid > 0 && (kill(m_pid, 0) == 0);
-#elif
+#else
     return false;
 #endif
 }
@@ -924,7 +926,7 @@ void IosSimulatorToolHandlerPrivate::installAppOnSimulator()
             isTransferringApp(m_bundlePath, m_deviceId, 100, 100, "");
             didTransferApp(m_bundlePath, m_deviceId, IosToolHandler::Success);
         } else {
-            errorMsg(IosToolHandler::tr("Application install on Simulator failed. %1")
+            errorMsg(IosToolHandler::tr("Application install on simulator failed. %1")
                      .arg(QString::fromLocal8Bit(response.commandOutput)));
             didTransferApp(m_bundlePath, m_deviceId, IosToolHandler::Failure);
         }
@@ -988,7 +990,7 @@ void IosSimulatorToolHandlerPrivate::launchAppOnSimulator(const QStringList &ext
                                               stderrFile);
         } else {
             m_pid = -1;
-            errorMsg(IosToolHandler::tr("Application launch on Simulator failed. %1")
+            errorMsg(IosToolHandler::tr("Application launch on simulator failed. %1")
                      .arg(QString::fromLocal8Bit(response.commandOutput)));
             didStartApp(m_bundlePath, m_deviceId, Ios::IosToolHandler::Failure);
             stop(-1);

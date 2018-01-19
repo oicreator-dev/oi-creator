@@ -53,7 +53,7 @@ public:
 
     bool isObjCEnabled() const;
     TextEditor::CompletionAssistProvider *completionAssistProvider() const override;
-    TextEditor::QuickFixAssistProvider *quickFixAssistProvider() const override;
+    TextEditor::IAssistProvider *quickFixAssistProvider() const override;
 
     void recalculateSemanticInfoDetached();
     CppTools::SemanticInfo recalculateSemanticInfo(); // TODO: Remove me
@@ -65,6 +65,8 @@ public:
 
     const MinimizableInfoBars &minimizableInfoBars() const;
     ParseContextModel &parseContextModel();
+
+    QFuture<CppTools::CursorInfo> cursorInfo(const CppTools::CursorInfoParams &params);
 
 signals:
     void codeWarningsUpdated(unsigned contentsRevision,

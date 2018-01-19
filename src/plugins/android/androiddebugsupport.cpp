@@ -33,7 +33,6 @@
 #include <debugger/debuggerkitinformation.h>
 #include <debugger/debuggerrunconfigurationaspect.h>
 #include <debugger/debuggerruncontrol.h>
-#include <debugger/debuggerstartparameters.h>
 
 #include <projectexplorer/buildconfiguration.h>
 #include <projectexplorer/project.h>
@@ -45,7 +44,6 @@
 #include <utils/hostosinfo.h>
 
 #include <QDirIterator>
-#include <QTcpServer>
 
 using namespace Debugger;
 using namespace ProjectExplorer;
@@ -56,7 +54,7 @@ namespace Internal {
 static const char * const qMakeVariables[] = {
          "QT_INSTALL_LIBS",
          "QT_INSTALL_PLUGINS",
-         "QT_INSTALL_IMPORTS"
+         "QT_INSTALL_QML"
 };
 
 static QStringList qtSoPaths(QtSupport::BaseQtVersion *qtVersion)
@@ -95,106 +93,64 @@ static QString toNdkArch(const QString &arch)
     return QLatin1String("arch-") + arch;
 }
 
-RunControl *AndroidDebugSupport::createDebugRunControl(RunConfiguration *runConfig, QString *errorMessage)
+AndroidDebugSupport::AndroidDebugSupport(RunControl *runControl)
+    : Debugger::DebuggerRunTool(runControl)
 {
-    Target *target = runConfig->target();
-
-    DebuggerStartParameters params;
-    params.startMode = AttachToRemoteServer;
-    params.displayName = AndroidManager::packageName(target);
-    params.remoteSetupNeeded = true;
-    params.useContinueInsteadOfRun = true;
-    if (!Utils::HostOsInfo::isWindowsHost() &&
-            AndroidConfigurations::currentConfig().ndkVersion() >= QVersionNumber(11, 0, 0)) {
-        params.useTargetAsync = true;
-    }
-
-    auto aspect = runConfig->extraAspect<DebuggerRunConfigurationAspect>();
-
-    if (aspect->useCppDebugger()) {
-        Kit *kit = target->kit();
-        params.symbolFile = target->activeBuildConfiguration()->buildDirectory().toString()
-                                     + QLatin1String("/app_process");
-        params.skipExecutableValidation = true;
-        auto androidRunConfig = qobject_cast<AndroidRunConfiguration *>(runConfig);
-        params.remoteChannel = androidRunConfig->remoteChannel();
-        params.solibSearchPath = AndroidManager::androidQtSupport(target)->soLibSearchPath(target);
-        QtSupport::BaseQtVersion *version = QtSupport::QtKitInformation::qtVersion(kit);
-        params.solibSearchPath.append(qtSoPaths(version));
-        params.solibSearchPath.append(uniquePaths(AndroidManager::androidQtSupport(target)->androidExtraLibs(target)));
-        params.sysRoot = AndroidConfigurations::currentConfig().ndkLocation().appendPath(QLatin1String("platforms"))
-                                                     .appendPath(QLatin1String("android-") + QString::number(AndroidManager::minimumSDK(target)))
-                                                     .appendPath(toNdkArch(AndroidManager::targetArch(target))).toString();
-    }
-    if (aspect->useQmlDebugger()) {
-        QTcpServer server;
-        QTC_ASSERT(server.listen(QHostAddress::LocalHost)
-                   || server.listen(QHostAddress::LocalHostIPv6), return 0);
-        params.qmlServer.host = server.serverAddress().toString();
-        //TODO: Not sure if these are the right paths.
-        Kit *kit = target->kit();
-        QtSupport::BaseQtVersion *version = QtSupport::QtKitInformation::qtVersion(kit);
-        if (version) {
-            const QString qmlQtDir = version->qmakeProperty("QT_INSTALL_QML");
-            params.additionalSearchDirectories = QStringList(qmlQtDir);
-        }
-    }
-
-    auto runControl = new ProjectExplorer::RunControl(runConfig, ProjectExplorer::Constants::DEBUG_RUN_MODE);
-    (void) new AndroidDebugSupport(runControl, params, errorMessage);
-    return runControl;
+    setDisplayName("AndroidDebugger");
+    m_runner = new AndroidRunner(runControl);
+    addStartDependency(m_runner);
 }
 
-AndroidDebugSupport::AndroidDebugSupport(RunControl *runControl,
-                                         const Debugger::DebuggerStartParameters &sp,
-                                         QString *errorMessage)
-    : DebuggerRunTool(runControl, sp, errorMessage),
-      m_runner(new AndroidRunner(this, runControl->runConfiguration(), runControl->runMode()))
+void AndroidDebugSupport::start()
 {
-    connect(runControl, &RunControl::finished,
-            m_runner, &AndroidRunner::stop);
+    auto runConfig = runControl()->runConfiguration();
+    Target *target = runConfig->target();
+    Kit *kit = target->kit();
 
-    connect(this, &DebuggerRunTool::requestRemoteSetup,
-            m_runner, &AndroidRunner::start);
+    setStartMode(AttachToRemoteServer);
+    setRunControlName(AndroidManager::packageName(target));
+    setUseContinueInsteadOfRun(true);
+    setAttachPid(m_runner->pid());
+
+    if (!Utils::HostOsInfo::isWindowsHost() &&
+            AndroidConfigurations::currentConfig().ndkVersion() >= QVersionNumber(11, 0, 0)) {
+        setUseTargetAsync(true);
+    }
+
+    QtSupport::BaseQtVersion *qtVersion = QtSupport::QtKitInformation::qtVersion(kit);
+
+    if (isCppDebugging()) {
+        AndroidQtSupport *qtSupport = AndroidManager::androidQtSupport(target);
+        QStringList solibSearchPath = qtSupport->soLibSearchPath(target);
+        solibSearchPath.append(qtSoPaths(qtVersion));
+        solibSearchPath.append(uniquePaths(qtSupport->androidExtraLibs(target)));
+        setSolibSearchPath(solibSearchPath);
+        setSymbolFile(target->activeBuildConfiguration()->buildDirectory().toString()
+                      + "/app_process");
+        setSkipExecutableValidation(true);
+        setUseExtendedRemote(true);
+        setRemoteChannel(":" + m_runner->gdbServerPort().toString());
+        setSysRoot(AndroidConfigurations::currentConfig().ndkLocation().appendPath("platforms")
+                   .appendPath(QString("android-%1").arg(AndroidManager::minimumSDK(target)))
+                   .appendPath(toNdkArch(AndroidManager::targetArch(target))).toString());
+    }
+    if (isQmlDebugging()) {
+        setQmlServer(m_runner->qmlServer());
+        //TODO: Not sure if these are the right paths.
+        if (qtVersion)
+            addSearchDirectory(qtVersion->qmlPath().toString());
+    }
 
     // FIXME: Move signal to base class and generalize handling.
     connect(this, &DebuggerRunTool::aboutToNotifyInferiorSetupOk,
             m_runner, &AndroidRunner::remoteDebuggerRunning);
 
-    connect(m_runner, &AndroidRunner::remoteServerRunning,
-        [this](const QByteArray &serverChannel, int pid) {
-            notifyEngineRemoteServerRunning(serverChannel, pid);
-        });
-
-    connect(m_runner, &AndroidRunner::remoteProcessStarted,
-            this, &AndroidDebugSupport::handleRemoteProcessStarted);
-
-    connect(m_runner, &AndroidRunner::remoteProcessFinished,
-        [this](const QString &errorMsg) {
-            appendMessage(errorMsg, Utils::DebugFormat);
-            QMetaObject::invokeMethod(this->runControl(), "notifyInferiorExited", Qt::QueuedConnection);
-        });
-
-    connect(m_runner, &AndroidRunner::remoteErrorOutput,
-        [this](const QString &output) {
-            showMessage(output, AppError);
-        });
-
-    connect(m_runner, &AndroidRunner::remoteOutput,
-        [this](const QString &output) {
-            showMessage(output, AppOutput);
-        });
+    DebuggerRunTool::start();
 }
 
-void AndroidDebugSupport::handleRemoteProcessStarted(Utils::Port gdbServerPort, Utils::Port qmlPort)
+void AndroidDebugSupport::stop()
 {
-    disconnect(m_runner, &AndroidRunner::remoteProcessStarted,
-               this, &AndroidDebugSupport::handleRemoteProcessStarted);
-    RemoteSetupResult result;
-    result.success = true;
-    result.gdbServerPort = gdbServerPort;
-    result.qmlServerPort = qmlPort;
-    notifyEngineRemoteSetupFinished(result);
+    DebuggerRunTool::stop();
 }
 
 } // namespace Internal

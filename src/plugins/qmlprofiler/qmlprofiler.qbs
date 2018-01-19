@@ -16,6 +16,7 @@ QtcPlugin {
     Depends { name: "ProjectExplorer" }
     Depends { name: "QtSupport" }
     Depends { name: "TextEditor" }
+    Depends { name: "app_version_header" }
 
     Group {
         name: "General"
@@ -24,7 +25,6 @@ QtcPlugin {
             "flamegraphmodel.cpp", "flamegraphmodel.h",
             "flamegraphview.cpp", "flamegraphview.h",
             "inputeventsmodel.cpp", "inputeventsmodel.h",
-            "localqmlprofilerrunner.cpp", "localqmlprofilerrunner.h",
             "memoryusagemodel.cpp", "memoryusagemodel.h",
             "pixmapcachemodel.cpp", "pixmapcachemodel.h",
             "qmlevent.cpp", "qmlevent.h",
@@ -46,7 +46,6 @@ QtcPlugin {
             "qmlprofileroptionspage.cpp", "qmlprofileroptionspage.h",
             "qmlprofilerplugin.cpp", "qmlprofilerplugin.h",
             "qmlprofilerrunconfigurationaspect.cpp", "qmlprofilerrunconfigurationaspect.h",
-            "qmlprofilerruncontrolfactory.cpp", "qmlprofilerruncontrolfactory.h",
             "qmlprofilerrangemodel.cpp", "qmlprofilerrangemodel.h",
             "qmlprofilerruncontrol.cpp", "qmlprofilerruncontrol.h",
             "qmlprofilersettings.cpp", "qmlprofilersettings.h",
@@ -78,6 +77,7 @@ QtcPlugin {
         prefix: "tests/"
         files: [
             "debugmessagesmodel_test.cpp", "debugmessagesmodel_test.h",
+            "fakedebugserver.cpp", "fakedebugserver.h",
             "flamegraphmodel_test.cpp", "flamegraphmodel_test.h",
             "flamegraphview_test.cpp", "flamegraphview_test.h",
             "inputeventsmodel_test.cpp", "inputeventsmodel_test.h",
@@ -94,6 +94,12 @@ QtcPlugin {
             "qmlprofilerbindingloopsrenderpass_test.h",
             "qmlprofilerclientmanager_test.cpp", "qmlprofilerclientmanager_test.h",
             "qmlprofilerconfigwidget_test.cpp", "qmlprofilerconfigwidget_test.h",
+            "qmlprofilerdetailsrewriter_test.cpp", "qmlprofilerdetailsrewriter_test.h",
+            "qmlprofilertool_test.cpp", "qmlprofilertool_test.h",
+            "qmlprofilertraceclient_test.cpp", "qmlprofilertraceclient_test.h",
+            "qmlprofilertraceview_test.cpp", "qmlprofilertraceview_test.h",
+
+            "tests.qrc"
         ]
     }
 }

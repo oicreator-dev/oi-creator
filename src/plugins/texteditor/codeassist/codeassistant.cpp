@@ -25,7 +25,6 @@
 
 #include "codeassistant.h"
 #include "completionassistprovider.h"
-#include "quickfixassistprovider.h"
 #include "iassistprocessor.h"
 #include "textdocument.h"
 #include "iassistproposal.h"
@@ -74,6 +73,9 @@ public:
     bool hasContext() const;
     void destroyContext();
 
+    QVariant userData() const;
+    void setUserData(const QVariant &data);
+
     CompletionAssistProvider *identifyActivationSequence();
 
     void stopAutomaticProposalTimer();
@@ -105,6 +107,7 @@ private:
     CompletionSettings m_settings;
     int m_abortedBasePosition;
     static const QChar m_null;
+    QVariant m_userData;
 };
 
 // --------------------
@@ -248,7 +251,7 @@ void CodeAssistantPrivate::requestProposal(AssistReason reason,
     }
     case IAssistProvider::Asynchronous: {
         processor->setAsyncCompletionAvailableHandler(
-            [this, processor, reason](IAssistProposal *newProposal){
+            [this, reason](IAssistProposal *newProposal){
                 QTC_CHECK(newProposal);
                 invalidateCurrentRequestData();
                 displayProposal(newProposal, reason);
@@ -285,6 +288,8 @@ void CodeAssistantPrivate::displayProposal(IAssistProposal *newProposal, AssistR
     if (!newProposal)
         return;
 
+    // TODO: The proposal should own the model until someone takes it explicitly away.
+    QScopedPointer<IAssistProposalModel> proposalCandidateModel(newProposal->model());
     QScopedPointer<IAssistProposal> proposalCandidate(newProposal);
 
     bool destroyCurrentContext = false;
@@ -309,8 +314,11 @@ void CodeAssistantPrivate::displayProposal(IAssistProposal *newProposal, AssistR
 
     const QString prefix = m_editorWidget->textAt(basePosition,
                                                   m_editorWidget->position() - basePosition);
-    if (!newProposal->hasItemsToPropose(prefix, reason))
+    if (!newProposal->hasItemsToPropose(prefix, reason)) {
+        if (newProposal->isCorrective(m_editorWidget))
+            newProposal->makeCorrection(m_editorWidget);
         return;
+    }
 
     if (destroyCurrentContext)
         destroyContext();
@@ -335,8 +343,9 @@ void CodeAssistantPrivate::displayProposal(IAssistProposal *newProposal, AssistR
     m_proposalWidget->setAssistant(q);
     m_proposalWidget->setReason(reason);
     m_proposalWidget->setKind(m_assistKind);
+    m_proposalWidget->setBasePosition(basePosition);
     m_proposalWidget->setUnderlyingWidget(m_editorWidget);
-    m_proposalWidget->setModel(m_proposal->model());
+    m_proposalWidget->setModel(proposalCandidateModel.take());
     m_proposalWidget->setDisplayRect(m_editorWidget->cursorRect(basePosition));
     m_proposalWidget->setIsSynchronized(!m_receivedContentWhileWaiting);
     m_proposalWidget->showProposal(prefix);
@@ -348,7 +357,8 @@ void CodeAssistantPrivate::processProposalItem(AssistProposalItemInterface *prop
     TextDocumentManipulator manipulator(m_editorWidget);
     proposalItem->apply(manipulator, m_proposal->basePosition());
     destroyContext();
-    process();
+    if (!proposalItem->isSnippet())
+        process();
 }
 
 void CodeAssistantPrivate::handlePrefixExpansion(const QString &newPrefix)
@@ -359,8 +369,21 @@ void CodeAssistantPrivate::handlePrefixExpansion(const QString &newPrefix)
     cursor.setPosition(m_proposal->basePosition());
     cursor.movePosition(QTextCursor::EndOfWord);
 
+    int currentPosition = m_editorWidget->position();
+    const QString textAfterCursor = m_editorWidget->textAt(currentPosition,
+                                                       cursor.position() - currentPosition);
+    if (!textAfterCursor.startsWith(newPrefix)) {
+        if (newPrefix.indexOf(textAfterCursor, currentPosition - m_proposal->basePosition()) >= 0)
+            currentPosition = cursor.position();
+        const QStringRef prefixAddition =
+                newPrefix.midRef(currentPosition - m_proposal->basePosition());
+        // If remaining string starts with the prefix addition
+        if (textAfterCursor.startsWith(prefixAddition))
+            currentPosition += prefixAddition.size();
+    }
+
     m_editorWidget->setCursorPosition(m_proposal->basePosition());
-    m_editorWidget->replace(cursor.position() - m_proposal->basePosition(), newPrefix);
+    m_editorWidget->replace(currentPosition - m_proposal->basePosition(), newPrefix);
     notifyChange();
 }
 
@@ -422,8 +445,6 @@ void CodeAssistantPrivate::notifyChange()
             m_proposalWidget->updateProposal(
                 m_editorWidget->textAt(m_proposal->basePosition(),
                                      m_editorWidget->position() - m_proposal->basePosition()));
-            if (m_proposal->isFragile())
-                startAutomaticProposalTimer();
         }
     }
 }
@@ -446,6 +467,16 @@ void CodeAssistantPrivate::destroyContext()
                    this, &CodeAssistantPrivate::finalizeProposal);
         finalizeProposal();
     }
+}
+
+QVariant CodeAssistantPrivate::userData() const
+{
+    return m_userData;
+}
+
+void CodeAssistantPrivate::setUserData(const QVariant &data)
+{
+    m_userData = data;
 }
 
 void CodeAssistantPrivate::startAutomaticProposalTimer()
@@ -553,6 +584,16 @@ bool CodeAssistant::hasContext() const
 void CodeAssistant::destroyContext()
 {
     d->destroyContext();
+}
+
+QVariant CodeAssistant::userData() const
+{
+    return d->userData();
+}
+
+void CodeAssistant::setUserData(const QVariant &data)
+{
+    d->setUserData(data);
 }
 
 void CodeAssistant::invoke(AssistKind kind, IAssistProvider *provider)

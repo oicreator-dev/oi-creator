@@ -85,6 +85,7 @@ ModelPrivate::ModelPrivate(Model *model) :
 {
     m_rootInternalNode = createNode("QtQuick.Item", 1, 0, PropertyListType(), PropertyListType(), QString(), ModelNode::NodeWithoutSource,true);
     m_currentStateNode = m_rootInternalNode;
+    m_currentTimelineMutatorNode = m_rootInternalNode;
 }
 
 ModelPrivate::~ModelPrivate()
@@ -259,6 +260,8 @@ void ModelPrivate::removeNodeFromModel(const InternalNodePointer &internalNodePo
 
     internalNodePointer->resetParentProperty();
 
+
+    m_selectedInternalNodeList.removeAll(internalNodePointer);
     if (!internalNodePointer->id().isEmpty())
         m_idNodeHash.remove(internalNodePointer->id());
     internalNodePointer->setValid(false);
@@ -636,6 +639,33 @@ void ModelPrivate::notifyCurrentStateChanged(const ModelNode &node)
 
     if (nodeInstanceView())
         nodeInstanceView()->currentStateChanged(ModelNode(node.internalNode(), model(), nodeInstanceView()));
+
+    if (resetModel)
+        resetModelByRewriter(description);
+}
+
+void ModelPrivate::notifyCurrentTimelineChanged(const ModelNode &node)
+{
+    bool resetModel = false;
+    QString description;
+
+    m_currentTimelineMutatorNode = node.internalNode();
+
+    try {
+        if (rewriterView())
+            rewriterView()->currentTimelineChanged(ModelNode(node.internalNode(), model(), rewriterView()));
+    } catch (const RewritingException &e) {
+        description = e.description();
+        resetModel = true;
+    }
+
+    for (const QPointer<AbstractView> &view : m_viewList) {
+        Q_ASSERT(view != 0);
+        view->currentTimelineChanged(ModelNode(node.internalNode(), model(), view.data()));
+    }
+
+    if (nodeInstanceView())
+        nodeInstanceView()->currentTimelineChanged(ModelNode(node.internalNode(), model(), nodeInstanceView()));
 
     if (resetModel)
         resetModelByRewriter(description);
@@ -1705,6 +1735,11 @@ void ModelPrivate::setNodeInstanceView(NodeInstanceView *nodeInstanceView)
 NodeInstanceView *ModelPrivate::nodeInstanceView() const
 {
     return m_nodeInstanceView.data();
+}
+
+InternalNodePointer ModelPrivate::currentTimelineNode() const
+{
+    return m_currentTimelineMutatorNode;
 }
 
 InternalNodePointer ModelPrivate::nodeForId(const QString &id) const

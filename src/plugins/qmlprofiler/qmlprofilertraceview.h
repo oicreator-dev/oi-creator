@@ -53,8 +53,8 @@ public:
     qint64 selectionEnd() const;
     void showContextMenu(QPoint position);
     bool isUsable() const;
+    bool isSuspended() const;
 
-public slots:
     void clear();
     void selectByTypeId(int typeId);
     void selectByEventIndex(int modelId, int eventIndex);

@@ -45,12 +45,12 @@
 #include <diffeditor/differ.h>
 #include <projectexplorer/project.h>
 #include <projectexplorer/projecttree.h>
-#include <texteditor/convenience.h>
 #include <texteditor/textdocument.h>
 #include <texteditor/textdocumentlayout.h>
 #include <texteditor/texteditor.h>
 #include <texteditor/texteditorconstants.h>
 #include <utils/algorithm.h>
+#include <utils/textutils.h>
 #include <utils/fileutils.h>
 #include <utils/mimetypes/mimedatabase.h>
 #include <utils/qtcassert.h>
@@ -169,7 +169,7 @@ QString sourceData(TextEditorWidget *editor, int startPos, int endPos)
 {
     return (startPos < 0)
             ? editor->toPlainText()
-            : Convenience::textAt(editor->textCursor(), startPos, (endPos - startPos));
+            : Utils::Text::textAt(editor->textCursor(), startPos, (endPos - startPos));
 }
 
 bool isAutoFormatApplicable(const Core::IDocument *document,
@@ -193,7 +193,7 @@ bool BeautifierPlugin::initialize(const QStringList &arguments, QString *errorSt
     Q_UNUSED(errorString)
 
     Core::ActionContainer *menu = Core::ActionManager::createMenu(Constants::MENU_ID);
-    menu->menu()->setTitle(QCoreApplication::translate("Beautifier", Constants::OPTION_TR_CATEGORY));
+    menu->menu()->setTitle(QCoreApplication::translate("Beautifier", "Bea&utifier"));
     menu->setOnAllDisabledBehavior(Core::ActionContainer::Show);
     Core::ActionManager::actionContainer(Core::Constants::M_TOOLS)->addMenu(menu);
     return true;
@@ -201,9 +201,11 @@ bool BeautifierPlugin::initialize(const QStringList &arguments, QString *errorSt
 
 void BeautifierPlugin::extensionsInitialized()
 {
-    m_tools << new ArtisticStyle::ArtisticStyle(this);
-    m_tools << new ClangFormat::ClangFormat(this);
-    m_tools << new Uncrustify::Uncrustify(this);
+    m_tools = {
+        new ArtisticStyle::ArtisticStyle(this),
+        new ClangFormat::ClangFormat(this),
+        new Uncrustify::Uncrustify(this)
+    };
 
     QStringList toolIds;
     toolIds.reserve(m_tools.count());
@@ -228,11 +230,6 @@ void BeautifierPlugin::extensionsInitialized()
             this, &BeautifierPlugin::autoFormatOnSave);
 }
 
-ExtensionSystem::IPlugin::ShutdownFlag BeautifierPlugin::aboutToShutdown()
-{
-    return SynchronousShutdown;
-}
-
 void BeautifierPlugin::updateActions(Core::IEditor *editor)
 {
     for (BeautifierAbstractTool *tool : m_tools)
@@ -250,8 +247,7 @@ void BeautifierPlugin::autoFormatOnSave(Core::IDocument *document)
     // Check if file is contained in the current project (if wished)
     if (m_generalSettings->autoFormatOnlyCurrentProject()) {
         const ProjectExplorer::Project *pro = ProjectExplorer::ProjectTree::currentProject();
-        if (!pro || !pro->files(ProjectExplorer::Project::SourceFiles).contains(
-                    document->filePath().toString())) {
+        if (!pro || !pro->files(ProjectExplorer::Project::SourceFiles).contains(document->filePath())) {
             return;
         }
     }
@@ -490,13 +486,25 @@ QString BeautifierPlugin::msgCannotGetConfigurationFile(const QString &command)
 QString BeautifierPlugin::msgFormatCurrentFile()
 {
     //: Menu entry
-    return tr("Format Current File");
+    return tr("Format &Current File");
 }
 
 QString BeautifierPlugin::msgFormatSelectedText()
 {
     //: Menu entry
-    return tr("Format Selected Text");
+    return tr("Format &Selected Text");
+}
+
+QString BeautifierPlugin::msgFormatAtCursor()
+{
+    //: Menu entry
+    return tr("&Format at Cursor");
+}
+
+QString BeautifierPlugin::msgDisableFormattingSelectedText()
+{
+    //: Menu entry
+    return tr("&Disable Formatting for Selected Text");
 }
 
 QString BeautifierPlugin::msgCommandPromptDialogTitle(const QString &command)

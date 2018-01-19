@@ -30,6 +30,7 @@
 #include "clangdiagnosticconfig.h"
 #include "clangdiagnosticconfigsmodel.h"
 
+#include <QHash>
 #include <QWidget>
 
 namespace CppTools {
@@ -50,7 +51,6 @@ public:
     Core::Id currentConfigId() const;
     ClangDiagnosticConfigs customConfigs() const;
 
-    void setConfigWithUndecoratedDisplayName(const Core::Id &id);
     void refresh(const ClangDiagnosticConfigsModel &diagnosticConfigsModel,
                  const Core::Id &configToSelect);
 
@@ -73,6 +73,7 @@ private:
     const ClangDiagnosticConfig &currentConfig() const;
 
     void setDiagnosticOptions(const QString &options);
+    void updateValidityWidgets(const QString &errorMessage);
 
     void connectConfigChooserCurrentIndex();
     void disconnectConfigChooserCurrentIndex();
@@ -82,7 +83,7 @@ private:
 private:
     Ui::ClangDiagnosticConfigsWidget *m_ui;
     ClangDiagnosticConfigsModel m_diagnosticConfigsModel;
-    Core::Id m_configWithUndecoratedDisplayName;
+    QHash<Core::Id, QString> m_notAcceptedOptions;
 };
 
 } // CppTools namespace

@@ -196,7 +196,7 @@ bool ModulesModel::contextMenuEvent(const ItemViewEvent &ev)
     addAction(menu, tr("Show Dependencies of \"%1\"").arg(moduleName),
               tr("Show Dependencies"),
               moduleNameValid && !moduleName.isEmpty() && HostOsInfo::isWindowsHost(),
-              [this, modulePath] { QProcess::startDetached("depends", {modulePath}); });
+              [modulePath] { QProcess::startDetached("depends", {modulePath}); });
 
     addAction(menu, tr("Load Symbols for All Modules"),
               enabled && canLoadSymbols,
@@ -256,6 +256,11 @@ ModulesHandler::ModulesHandler(DebuggerEngine *engine)
     m_proxyModel = new QSortFilterProxyModel(this);
     m_proxyModel->setObjectName("ModulesProxyModel");
     m_proxyModel->setSourceModel(m_model);
+}
+
+ModulesHandler::~ModulesHandler()
+{
+    delete m_model;
 }
 
 QAbstractItemModel *ModulesHandler::model() const
@@ -327,7 +332,8 @@ void ModulesHandler::endUpdateAll()
         if (!item->updated)
             toDestroy.append(item);
     });
-    qDeleteAll(toDestroy);
+    for (TreeItem *item : toDestroy)
+        m_model->destroyItem(item);
 }
 
 } // namespace Internal

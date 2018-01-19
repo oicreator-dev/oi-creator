@@ -83,7 +83,11 @@ qtHaveModule(designercomponents_private) {
 
 DO_NOT_BUILD_QMLDESIGNER = $$(DO_NOT_BUILD_QMLDESIGNER)
 isEmpty(DO_NOT_BUILD_QMLDESIGNER):qtHaveModule(quick-private) {
-    #SUBDIRS += qmldesigner
+    exists($$[QT_INSTALL_QML]/QtQuick/Controls/qmldir) {
+       #SUBDIRS += qmldesigner
+    } else {
+        warning("QmlDesigner plugin has been disabled since Qt Quick Controls 1 are not installed.")
+    }
 } else {
     !qtHaveModule(quick-private) {
         warning("QmlDesigner plugin has been disabled since the Qt Quick module is not available.")
@@ -98,21 +102,15 @@ exists(../shared/qbs/qbs.pro)|!isEmpty(QBS_INSTALL_DIR): \
     #SUBDIRS += \
     #    qbsprojectmanager
 
-# prefer qmake variable set on command line over env var
-isEmpty(LLVM_INSTALL_DIR):LLVM_INSTALL_DIR=$$(LLVM_INSTALL_DIR)
-exists($$LLVM_INSTALL_DIR) {
-    SUBDIRS += clangcodemodel
+SUBDIRS += \
+    clangcodemodel
 
-    QTC_NO_CLANG_LIBTOOLING=$$(QTC_NO_CLANG_LIBTOOLING)
-    isEmpty(QTC_NO_CLANG_LIBTOOLING) {
-        SUBDIRS += clangrefactoring
-        SUBDIRS += clangpchmanager
-    } else {
-        warning("Building the Clang refactoring and the pch manager plugins are disabled.")
-    }
+QTC_NO_CLANG_LIBTOOLING=$$(QTC_NO_CLANG_LIBTOOLING)
+isEmpty(QTC_NO_CLANG_LIBTOOLING) {
+    SUBDIRS += clangrefactoring
+    SUBDIRS += clangpchmanager
 } else {
-    warning("Set LLVM_INSTALL_DIR to build the Clang Code Model. " \
-            "For details, see doc/src/editors/creator-clang-codemodel.qdoc.")
+    warning("Not building the clang refactoring plugin and the pch manager plugin.")
 }
 
 isEmpty(IDE_PACKAGE_MODE) {

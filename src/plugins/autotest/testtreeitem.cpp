@@ -29,7 +29,10 @@
 #include "testtreeitem.h"
 
 #include <cplusplus/Icons.h>
+#include <cpptools/cppmodelmanager.h>
+#include <cpptools/cpptoolsreuse.h>
 #include <texteditor/texteditor.h>
+#include <utils/utilsicons.h>
 
 #include <QIcon>
 
@@ -41,20 +44,31 @@ TestTreeItem::TestTreeItem(const QString &name, const QString &filePath, Type ty
       m_filePath(filePath),
       m_type(type)
 {
-    m_checked = (m_type == TestCase || m_type == TestFunctionOrSet) ? Qt::Checked : Qt::Unchecked;
+    switch (m_type) {
+    case Root:
+    case GroupNode:
+    case TestCase:
+    case TestFunctionOrSet:
+        m_checked = Qt::Checked;
+        break;
+    default:
+        m_checked = Qt::Unchecked;
+        break;
+    }
 }
 
 static QIcon testTreeIcon(TestTreeItem::Type type)
 {
     static QIcon icons[] = {
         QIcon(),
+        Utils::Icons::OPENFILE.icon(),
         CPlusPlus::Icons::iconForType(CPlusPlus::Icons::ClassIconType),
         CPlusPlus::Icons::iconForType(CPlusPlus::Icons::SlotPrivateIconType),
         QIcon(":/images/data.png")
     };
 
     if (int(type) >= int(sizeof icons / sizeof *icons))
-        return icons[2];
+        return icons[3];
     return icons[type];
 }
 
@@ -73,8 +87,10 @@ QVariant TestTreeItem::data(int /*column*/, int role) const
     case Qt::CheckStateRole:
         return QVariant();
     case LinkRole: {
+        if (m_type == GroupNode)
+            return QVariant();
         QVariant itemLink;
-        itemLink.setValue(TextEditor::TextEditorWidget::Link(m_filePath, m_line, m_column));
+        itemLink.setValue(Utils::Link(m_filePath, m_line, m_column));
         return itemLink;
     }
     case ItalicRole:
@@ -102,7 +118,8 @@ Qt::ItemFlags TestTreeItem::flags(int /*column*/) const
     static const Qt::ItemFlags defaultFlags = Qt::ItemIsEnabled | Qt::ItemIsSelectable;
     switch (m_type) {
     case Root:
-        return Qt::ItemIsEnabled;
+    case GroupNode:
+        return Qt::ItemIsEnabled | Qt::ItemIsAutoTristate | Qt::ItemIsUserCheckable;
     case TestCase:
         return defaultFlags | Qt::ItemIsAutoTristate | Qt::ItemIsUserCheckable;
     case TestFunctionOrSet:
@@ -160,13 +177,15 @@ void TestTreeItem::setChecked(const Qt::CheckState checkState)
             parent->revalidateCheckState();
         break;
     }
+    case Root:
+    case GroupNode:
     case TestFunctionOrSet:
     case TestCase: {
         Qt::CheckState usedState = (checkState == Qt::Unchecked ? Qt::Unchecked : Qt::Checked);
         for (int row = 0, count = childCount(); row < count; ++row)
             childItem(row)->setChecked(usedState);
         m_checked = usedState;
-        if (m_type == TestFunctionOrSet) {
+        if (m_type != Root) {
             if (auto parent = parentItem())
                 parent->revalidateCheckState();
         }
@@ -180,6 +199,8 @@ void TestTreeItem::setChecked(const Qt::CheckState checkState)
 Qt::CheckState TestTreeItem::checked() const
 {
     switch (m_type) {
+    case Root:
+    case GroupNode:
     case TestCase:
     case TestFunctionOrSet:
     case TestDataTag:
@@ -203,13 +224,11 @@ void TestTreeItem::markForRemovalRecursively(bool mark)
 
 void TestTreeItem::markForRemovalRecursively(const QString &filePath)
 {
-    if (m_filePath == filePath) {
-        markForRemovalRecursively(true);
-    } else {
-        for (int row = 0, count = childCount(); row < count; ++row) {
-            TestTreeItem *child = childItem(row);
-            child->markForRemovalRecursively(filePath);
-        }
+    if (m_filePath == filePath)
+        markForRemoval(true);
+    for (int row = 0, count = childCount(); row < count; ++row) {
+        TestTreeItem *child = childItem(row);
+        child->markForRemovalRecursively(filePath);
     }
 }
 
@@ -265,10 +284,11 @@ bool TestTreeItem::lessThan(const TestTreeItem *other, SortMode mode) const
             return index().row() > other->index().row();
         return lhs > rhs;
     case Naturally: {
-        const TextEditor::TextEditorWidget::Link &leftLink =
-                data(0, LinkRole).value<TextEditor::TextEditorWidget::Link>();
-        const TextEditor::TextEditorWidget::Link &rightLink =
-                other->data(0, LinkRole).value<TextEditor::TextEditorWidget::Link>();
+        if (m_type == GroupNode && other->type() == GroupNode)
+            return m_filePath > other->filePath();
+
+        const Utils::Link &leftLink = data(0, LinkRole).value<Utils::Link>();
+        const Utils::Link &rightLink = other->data(0, LinkRole).value<Utils::Link>();
         if (leftLink.targetFileName == rightLink.targetFileName) {
             return leftLink.targetLine == rightLink.targetLine
                     ? leftLink.targetColumn > rightLink.targetColumn
@@ -281,10 +301,36 @@ bool TestTreeItem::lessThan(const TestTreeItem *other, SortMode mode) const
     }
 }
 
+bool TestTreeItem::isGroupNodeFor(const TestTreeItem *other) const
+{
+    QTC_ASSERT(other, return false);
+    if (type() != TestTreeItem::GroupNode)
+        return false;
+
+    // for now there's only the possibility to have 'Folder' nodes
+    return QFileInfo(other->filePath()).absolutePath() == filePath();
+}
+
+QSet<QString> TestTreeItem::internalTargets() const
+{
+    auto cppMM = CppTools::CppModelManager::instance();
+    const QList<CppTools::ProjectPart::Ptr> projectParts = cppMM->projectPart(m_filePath);
+    // if we have no project parts it's most likely a header with declarations only and CMake based
+    if (projectParts.isEmpty())
+        return TestTreeItem::dependingInternalTargets(cppMM, m_filePath);
+    QSet<QString> targets;
+    for (const CppTools::ProjectPart::Ptr part : projectParts) {
+        targets.insert(part->buildSystemTarget + '|' + part->projectFile);
+        if (part->buildTargetType != CppTools::ProjectPart::Executable)
+            targets.unite(TestTreeItem::dependingInternalTargets(cppMM, m_filePath));
+    }
+    return targets;
+}
+
 void TestTreeItem::revalidateCheckState()
 {
     const Type ttiType = type();
-    if (ttiType != TestCase && ttiType != TestFunctionOrSet)
+    if (ttiType != TestCase && ttiType != TestFunctionOrSet && ttiType != Root && ttiType != GroupNode)
         return;
     if (childCount() == 0) // can this happen? (we're calling revalidateCS() on parentItem()
         return;
@@ -306,13 +352,13 @@ void TestTreeItem::revalidateCheckState()
         foundPartiallyChecked |= (child->checked() == Qt::PartiallyChecked);
         if (foundPartiallyChecked || (foundChecked && foundUnchecked)) {
             m_checked = Qt::PartiallyChecked;
-            if (ttiType == TestFunctionOrSet)
+            if (ttiType == TestFunctionOrSet || ttiType == TestCase || ttiType == GroupNode)
                 parentItem()->revalidateCheckState();
             return;
         }
     }
     m_checked = (foundUnchecked ? Qt::Unchecked : Qt::Checked);
-    if (ttiType == TestFunctionOrSet)
+    if (ttiType == TestFunctionOrSet || ttiType == TestCase || ttiType == GroupNode)
         parentItem()->revalidateCheckState();
 }
 
@@ -342,6 +388,29 @@ TestTreeItem *TestTreeItem::findChildBy(CompareFunction compare) const
             return child;
     }
     return nullptr;
+}
+
+/*
+ * try to find build system target that depends on the given file - if the file is no header
+ * try to find the corresponding header and use this instead to find the respective target
+ */
+QSet<QString> TestTreeItem::dependingInternalTargets(CppTools::CppModelManager *cppMM,
+                                                     const QString &file)
+{
+    QSet<QString> result;
+    QTC_ASSERT(cppMM, return result);
+    const CPlusPlus::Snapshot snapshot = cppMM->snapshot();
+    QTC_ASSERT(snapshot.contains(file), return result);
+    bool wasHeader;
+    const QString correspondingFile
+            = CppTools::correspondingHeaderOrSource(file, &wasHeader, CppTools::CacheUsage::ReadOnly);
+    const Utils::FileNameList dependingFiles = snapshot.filesDependingOn(
+                wasHeader ? file : correspondingFile);
+    for (const Utils::FileName &fn : dependingFiles) {
+        for (const CppTools::ProjectPart::Ptr part : cppMM->projectPart(fn))
+            result.insert(part->buildSystemTarget + '|' + part->projectFile);
+    }
+    return result;
 }
 
 } // namespace Internal

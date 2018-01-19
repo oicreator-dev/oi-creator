@@ -70,6 +70,8 @@ public:
     // Don't call in constructors of derived classes
     virtual void setFontSettings(const TextEditor::FontSettings &fontSettings);
 
+    void setNoAutomaticHighlighting(bool noAutomatic);
+
 public slots:
     void rehighlight();
     void rehighlightBlock(const QTextBlock &block);
@@ -78,7 +80,10 @@ protected:
     void setDefaultTextFormatCategories();
     void setTextFormatCategories(int count, std::function<TextStyle(int)> formatMapping);
     QTextCharFormat formatForCategory(int categoryIndex) const;
-    virtual void highlightBlock(const QString &text) = 0;
+
+    // implement in subclasses
+    // default implementation highlights whitespace
+    virtual void highlightBlock(const QString &text);
 
     void setFormat(int start, int count, const QTextCharFormat &format);
     void setFormat(int start, int count, const QColor &color);

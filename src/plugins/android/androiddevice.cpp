@@ -30,6 +30,8 @@
 #include <projectexplorer/runconfiguration.h>
 #include <projectexplorer/runnables.h>
 
+#include <utils/url.h>
+
 #include <QCoreApplication>
 
 using namespace ProjectExplorer;
@@ -94,14 +96,22 @@ DeviceProcessSignalOperation::Ptr AndroidDevice::signalOperation() const
     return DeviceProcessSignalOperation::Ptr(new AndroidSignalOperation());
 }
 
+Utils::OsType AndroidDevice::osType() const
+{
+    return Utils::OsTypeOtherUnix;
+}
+
 IDevice::Ptr AndroidDevice::clone() const
 {
     return IDevice::Ptr(new AndroidDevice(*this));
 }
 
-Connection AndroidDevice::toolControlChannel(const ControlChannelHint &) const
+QUrl AndroidDevice::toolControlChannel(const ControlChannelHint &) const
 {
-    return HostName("localhost");
+    QUrl url;
+    url.setScheme(Utils::urlTcpScheme());
+    url.setHost("localhost");
+    return url;
 }
 
 } // namespace Internal

@@ -27,6 +27,7 @@
 
 #include <coreplugin/icore.h>
 #include <coreplugin/messagemanager.h>
+#include <utils/asconst.h>
 #include <utils/macroexpander.h>
 
 #include <QMessageBox>
@@ -38,7 +39,7 @@ ExecuteFilter::ExecuteFilter()
 {
     setId("Execute custom commands");
     setDisplayName(tr("Execute Custom Commands"));
-    setShortcutString(QString(QLatin1Char('!')));
+    setShortcutString("!");
     setPriority(High);
     setIncludedByDefault(false);
 
@@ -61,7 +62,7 @@ QList<LocatorFilterEntry> ExecuteFilter::matchesFor(QFutureInterface<LocatorFilt
         value.append(LocatorFilterEntry(this, entry, QVariant()));
     QList<LocatorFilterEntry> others;
     const Qt::CaseSensitivity entryCaseSensitivity = caseSensitivity(entry);
-    foreach (const QString &cmd, m_commandHistory) {
+    for (const QString &cmd : Utils::asConst(m_commandHistory)) {
         if (future.isCanceled())
             break;
         if (cmd == entry) // avoid repeated entry
@@ -79,8 +80,12 @@ QList<LocatorFilterEntry> ExecuteFilter::matchesFor(QFutureInterface<LocatorFilt
     return value;
 }
 
-void ExecuteFilter::accept(LocatorFilterEntry selection) const
+void ExecuteFilter::accept(LocatorFilterEntry selection,
+                           QString *newText, int *selectionStart, int *selectionLength) const
 {
+    Q_UNUSED(newText)
+    Q_UNUSED(selectionStart)
+    Q_UNUSED(selectionLength)
     ExecuteFilter *p = const_cast<ExecuteFilter *>(this);
 
     const QString value = selection.displayName.trimmed();
@@ -97,7 +102,7 @@ void ExecuteFilter::accept(LocatorFilterEntry selection) const
 
     ExecuteData d;
     d.workingDirectory = workingDirectory;
-    const int pos = value.indexOf(QLatin1Char(' '));
+    const int pos = value.indexOf(' ');
     if (pos == -1) {
         d.executable = value;
     } else {
@@ -183,6 +188,5 @@ QString ExecuteFilter::headCommand() const
     const ExecuteData &data = m_taskQueue.head();
     if (data.arguments.isEmpty())
         return data.executable;
-    else
-        return data.executable + QLatin1Char(' ') + data.arguments;
+    return data.executable + ' ' + data.arguments;
 }

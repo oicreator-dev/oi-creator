@@ -37,7 +37,6 @@ DesignerActionManagerView::DesignerActionManagerView()
       m_isInRewriterTransaction(false),
       m_setupContextDirty(false)
 {
-    m_designerActionManager.createDefaultDesignerActions();
 }
 
 void DesignerActionManagerView::modelAttached(Model *model)
@@ -148,7 +147,7 @@ void DesignerActionManagerView::bindingPropertiesChanged(const QList<BindingProp
 void DesignerActionManagerView::instancePropertyChanged(const QList<QPair<ModelNode, PropertyName> > &)
 {
     if (hasSingleSelectedModelNode())
-        setupContext();
+        setupContext(SelectionContext::UpdateMode::Fast);
 }
 
 DesignerActionManager &DesignerActionManagerView::designerActionManager()
@@ -161,15 +160,22 @@ const DesignerActionManager &DesignerActionManagerView::designerActionManager() 
     return m_designerActionManager;
 }
 
+void DesignerActionManagerView::emitSelectionChanged()
+{
+    if (model())
+        emit selectionChanged(!selectedModelNodes().isEmpty(), singleSelectedModelNode().isRootNode());
+}
+
 /* We should consider compressing this. */
 /* One update every 100ms should be enough. */
-void DesignerActionManagerView::setupContext()
+void DesignerActionManagerView::setupContext(SelectionContext::UpdateMode updateMode)
 {
     if (m_isInRewriterTransaction) {
         m_setupContextDirty = true;
         return;
     }
     SelectionContext selectionContext(this);
+    selectionContext.setUpdateMode(updateMode);
     foreach (ActionInterface* action, m_designerActionList) {
         action->currentContextChanged(selectionContext);
     }

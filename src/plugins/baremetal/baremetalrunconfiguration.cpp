@@ -25,6 +25,7 @@
 
 #include "baremetalrunconfiguration.h"
 
+#include "baremetalcustomrunconfiguration.h"
 #include "baremetalrunconfigurationwidget.h"
 
 #include <debugger/debuggerrunconfigurationaspect.h>
@@ -44,46 +45,21 @@ namespace Internal {
 const char ProFileKey[] = "Qt4ProjectManager.MaemoRunConfiguration.ProFile";
 const char WorkingDirectoryKey[] = "BareMetal.RunConfig.WorkingDirectory";
 
-
-BareMetalRunConfiguration::BareMetalRunConfiguration(Target *parent, BareMetalRunConfiguration *other)
-    : RunConfiguration(parent, other),
-      m_projectFilePath(other->m_projectFilePath),
-      m_workingDirectory(other->m_workingDirectory)
+BareMetalRunConfiguration::BareMetalRunConfiguration(Target *target)
+    : RunConfiguration(target, IdPrefix)
 {
-    init();
-}
-
-BareMetalRunConfiguration::BareMetalRunConfiguration(Target *parent,
-                                                     const Core::Id id,
-                                                     const QString &projectFilePath)
-    : RunConfiguration(parent, id),
-      m_projectFilePath(projectFilePath)
-{
-    addExtraAspect(new ArgumentsAspect(this, QLatin1String("Qt4ProjectManager.MaemoRunConfiguration.Arguments")));
-    init();
-}
-
-void BareMetalRunConfiguration::init()
-{
-    setDefaultDisplayName(defaultDisplayName());
-
-    connect(target(), &Target::deploymentDataChanged,
+    addExtraAspect(new ArgumentsAspect(this, "Qt4ProjectManager.MaemoRunConfiguration.Arguments"));
+    connect(target, &Target::deploymentDataChanged,
             this, &BareMetalRunConfiguration::handleBuildSystemDataUpdated);
-    connect(target(), &Target::applicationTargetsChanged,
+    connect(target, &Target::applicationTargetsChanged,
             this, &BareMetalRunConfiguration::handleBuildSystemDataUpdated);
-    connect(target(), &Target::kitChanged,
+    connect(target, &Target::kitChanged,
             this, &BareMetalRunConfiguration::handleBuildSystemDataUpdated); // Handles device changes, etc.
 }
 
-bool BareMetalRunConfiguration::isEnabled() const
+QString BareMetalRunConfiguration::extraId() const
 {
-    m_disabledReason.clear(); // FIXME: Check this makes sense.
-    return true;
-}
-
-QString BareMetalRunConfiguration::disabledReason() const
-{
-    return m_disabledReason;
+    return m_projectFilePath;
 }
 
 QWidget *BareMetalRunConfiguration::createConfigurationWidget()
@@ -115,8 +91,11 @@ bool BareMetalRunConfiguration::fromMap(const QVariantMap &map)
             = QDir::cleanPath(dir.filePath(map.value(QLatin1String(ProFileKey)).toString()));
     m_workingDirectory = map.value(QLatin1String(WorkingDirectoryKey)).toString();
 
-    setDefaultDisplayName(defaultDisplayName());
+    // Hack for old-style mangled ids. FIXME: Remove.
+    if (m_projectFilePath.isEmpty())
+        m_projectFilePath = ProjectExplorer::idFromMap(map).suffixAfter(id());
 
+    setDefaultDisplayName(defaultDisplayName());
     return true;
 }
 
@@ -124,15 +103,15 @@ QString BareMetalRunConfiguration::defaultDisplayName()
 {
     if (!m_projectFilePath.isEmpty())
         //: %1 is the name of the project run via hardware debugger
-        return tr("%1 (via GDB server or hardware debugger)").arg(QFileInfo(m_projectFilePath).completeBaseName());
+        return tr("%1 (via GDB server or hardware debugger)").arg(QFileInfo(m_projectFilePath).fileName());
     //: Bare Metal run configuration default run name
     return tr("Run on GDB server or hardware debugger");
 }
 
 QString BareMetalRunConfiguration::localExecutableFilePath() const
 {
-    return target()->applicationTargets()
-            .targetForProject(FileName::fromString(m_projectFilePath)).toString();
+    const QString targetName = QFileInfo(m_projectFilePath).fileName();
+    return target()->applicationTargets().targetFilePath(targetName).toString();
 }
 
 QString BareMetalRunConfiguration::arguments() const
@@ -158,15 +137,11 @@ QString BareMetalRunConfiguration::projectFilePath() const
 QString BareMetalRunConfiguration::buildSystemTarget() const
 {
     const BuildTargetInfoList targets = target()->applicationTargets();
-    const Utils::FileName projectFilePath = Utils::FileName::fromString(m_projectFilePath);
+    const Utils::FileName projectFilePath = Utils::FileName::fromString(QFileInfo(m_projectFilePath).path());
+    const QString targetName = QFileInfo(m_projectFilePath).fileName();
     auto bst = std::find_if(targets.list.constBegin(), targets.list.constEnd(),
-                            [&projectFilePath](const BuildTargetInfo &bti) { return bti.projectFilePath == projectFilePath; });
+                            [&projectFilePath,&targetName](const BuildTargetInfo &bti) { return bti.projectFilePath == projectFilePath && bti.targetName == targetName; });
     return (bst == targets.list.constEnd()) ? QString() : bst->targetName;
-}
-
-void BareMetalRunConfiguration::setDisabledReason(const QString &reason) const
-{
-    m_disabledReason = reason;
 }
 
 void BareMetalRunConfiguration::handleBuildSystemDataUpdated()

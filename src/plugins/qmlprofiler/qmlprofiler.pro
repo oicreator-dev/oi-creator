@@ -9,7 +9,6 @@ SOURCES += \
     flamegraphmodel.cpp \
     flamegraphview.cpp \
     inputeventsmodel.cpp \
-    localqmlprofilerrunner.cpp \
     memoryusagemodel.cpp \
     pixmapcachemodel.cpp \
     qmlevent.cpp \
@@ -29,7 +28,6 @@ SOURCES += \
     qmlprofilerrangemodel.cpp \
     qmlprofilerrunconfigurationaspect.cpp \
     qmlprofilerruncontrol.cpp \
-    qmlprofilerruncontrolfactory.cpp \
     qmlprofilersettings.cpp \
     qmlprofilerstatemanager.cpp \
     qmlprofilerstatewidget.cpp \
@@ -50,7 +48,6 @@ HEADERS += \
     flamegraphmodel.h \
     flamegraphview.h \
     inputeventsmodel.h \
-    localqmlprofilerrunner.h \
     memoryusagemodel.h \
     pixmapcachemodel.h \
     qmlevent.h \
@@ -74,7 +71,6 @@ HEADERS += \
     qmlprofilerrangemodel.h \
     qmlprofilerrunconfigurationaspect.h \
     qmlprofilerruncontrol.h \
-    qmlprofilerruncontrolfactory.h \
     qmlprofilersettings.h \
     qmlprofilerstatemanager.h \
     qmlprofilerstatewidget.h \

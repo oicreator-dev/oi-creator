@@ -25,11 +25,13 @@
 
 #pragma once
 
-#include <clangbackendipc/clangcodemodelserverinterface.h>
+#include <clangsupport/clangcodemodelserverinterface.h>
+#include <ipcclientprovider.h>
 
 namespace ClangBackEnd {
 
-class EchoClangCodeModelServer : public ClangCodeModelServerInterface
+class EchoClangCodeModelServer : public ClangCodeModelServerInterface,
+                                 public IpcClientProvider<ClangCodeModelClientInterface>
 {
 public:
     void dispatch(const MessageEnvelop &message) override;
@@ -43,6 +45,9 @@ public:
     void unregisterUnsavedFilesForEditor(const UnregisterUnsavedFilesForEditorMessage &message) override;
     void completeCode(const CompleteCodeMessage &message) override;
     void requestDocumentAnnotations(const RequestDocumentAnnotationsMessage &message) override;
+    void requestReferences(const RequestReferencesMessage &message) override;
+    void requestFollowSymbol(const RequestFollowSymbolMessage &message) override;
+    void requestToolTip(const RequestToolTipMessage &message) override;
     void updateVisibleTranslationUnits(const UpdateVisibleTranslationUnitsMessage &message) override;
 
 private:

@@ -26,6 +26,7 @@
 #include "qttesttreeitem.h"
 #include "qttestconfiguration.h"
 #include "qttestparser.h"
+#include "../testframeworkmanager.h"
 
 #include <projectexplorer/session.h>
 #include <utils/qtcassert.h>
@@ -49,7 +50,6 @@ QVariant QtTestTreeItem::data(int column, int role) const
         return QVariant(name() + nameSuffix());
     case Qt::CheckStateRole:
         switch (type()) {
-        case Root:
         case TestDataFunction:
         case TestSpecialFunction:
             return QVariant();
@@ -134,6 +134,8 @@ TestConfiguration *QtTestTreeItem::testConfiguration() const
     default:
         return nullptr;
     }
+    if (config)
+        config->setInternalTargets(internalTargets());
     return config;
 }
 
@@ -141,7 +143,7 @@ TestConfiguration *QtTestTreeItem::debugConfiguration() const
 {
     QtTestConfiguration *config = static_cast<QtTestConfiguration *>(testConfiguration());
     if (config)
-        config->setRunMode(DebuggableTestConfiguration::Debug);
+        config->setRunMode(TestRunMode::Debug);
     return config;
 }
 
@@ -160,6 +162,7 @@ QList<TestConfiguration *> QtTestTreeItem::getAllTestConfigurations() const
         tc->setTestCaseCount(child->childCount());
         tc->setProjectFile(child->proFile());
         tc->setProject(project);
+        tc->setInternalTargets(child->internalTargets());
         result << tc;
     }
     return result;
@@ -185,6 +188,7 @@ QList<TestConfiguration *> QtTestTreeItem::getSelectedTestConfigurations() const
             testConfiguration->setTestCaseCount(child->childCount());
             testConfiguration->setProjectFile(child->proFile());
             testConfiguration->setProject(project);
+            testConfiguration->setInternalTargets(child->internalTargets());
             result << testConfiguration;
             continue;
         case Qt::PartiallyChecked:
@@ -210,6 +214,7 @@ QList<TestConfiguration *> QtTestTreeItem::getSelectedTestConfigurations() const
             testConfiguration->setTestCases(testCases);
             testConfiguration->setProjectFile(child->proFile());
             testConfiguration->setProject(project);
+            testConfiguration->setInternalTargets(child->internalTargets());
             result << testConfiguration;
         }
     }
@@ -223,6 +228,19 @@ TestTreeItem *QtTestTreeItem::find(const TestParseResult *result)
 
     switch (type()) {
     case Root:
+        if (TestFrameworkManager::instance()->groupingEnabled(result->frameworkId)) {
+            const QString path = QFileInfo(result->fileName).absolutePath();
+            for (int row = 0; row < childCount(); ++row) {
+                TestTreeItem *group = childItem(row);
+                if (group->filePath() != path)
+                    continue;
+                if (auto groupChild = group->findChildByFile(result->fileName))
+                    return groupChild;
+            }
+            return nullptr;
+        }
+        return findChildByFile(result->fileName);
+    case GroupNode:
         return findChildByFile(result->fileName);
     case TestCase: {
         const QtTestParseResult *qtResult = static_cast<const QtTestParseResult *>(result);
@@ -253,6 +271,13 @@ bool QtTestTreeItem::modify(const TestParseResult *result)
     default:
         return false;
     }
+}
+
+TestTreeItem *QtTestTreeItem::createParentGroupNode() const
+{
+    const QFileInfo fileInfo(filePath());
+    const QFileInfo base(fileInfo.absolutePath());
+    return new QtTestTreeItem(base.baseName(), fileInfo.absolutePath(), TestTreeItem::GroupNode);
 }
 
 TestTreeItem *QtTestTreeItem::findChildByNameAndInheritance(const QString &name, bool inherited) const

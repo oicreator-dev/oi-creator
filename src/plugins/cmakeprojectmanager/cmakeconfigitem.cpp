@@ -44,7 +44,8 @@ CMakeConfigItem::CMakeConfigItem() = default;
 
 CMakeConfigItem::CMakeConfigItem(const CMakeConfigItem &other) :
     key(other.key), type(other.type), isAdvanced(other.isAdvanced),
-    value(other.value), documentation(other.documentation), values(other.values)
+    inCMakeCache(false), isUnset(other.isUnset), value(other.value),
+    documentation(other.documentation), values(other.values)
 {}
 
 CMakeConfigItem::CMakeConfigItem(const QByteArray &k, Type t,
@@ -170,15 +171,20 @@ std::function<bool (const CMakeConfigItem &a, const CMakeConfigItem &b)> CMakeCo
 
 CMakeConfigItem CMakeConfigItem::fromString(const QString &s)
 {
-    // Strip comments:
+    // Strip comments (only at start of line!):
     int commentStart = s.count();
-    int pos = s.indexOf(QLatin1Char('#'));
-    if (pos >= 0)
-        commentStart = pos;
-    pos = s.indexOf(QLatin1String("//"));
-    if (pos >= 0 && pos < commentStart)
-        commentStart = pos;
-
+    for (int i = 0; i < s.count(); ++i) {
+        const QChar c = s.at(i);
+        if (c == ' ' || c == '\t')
+            continue;
+        else if ((c == '#')
+                 || (c == '/' && i < s.count() - 1 && s.at(i + 1) == '/')) {
+            commentStart = i;
+            break;
+        } else {
+            break;
+        }
+    }
     const QString line = s.mid(0, commentStart);
 
     // Split up line:
@@ -311,6 +317,9 @@ QString CMakeConfigItem::toString(const Utils::MacroExpander *expander) const
     if (key.isEmpty() || type == CMakeProjectManager::CMakeConfigItem::STATIC)
         return QString();
 
+    if (isUnset)
+        return "unset " + QString::fromUtf8(key);
+
     QString typeStr;
     switch (type)
     {
@@ -339,13 +348,15 @@ QString CMakeConfigItem::toString(const Utils::MacroExpander *expander) const
 
 QString CMakeConfigItem::toArgument(const Utils::MacroExpander *expander) const
 {
+    if (isUnset)
+        return "-U" + QString::fromUtf8(key);
     return "-D" + toString(expander);
 }
 
 bool CMakeConfigItem::operator==(const CMakeConfigItem &o) const
 {
     // type, isAdvanced and documentation do not matter for a match!
-    return o.key == key && o.value == value;
+    return o.key == key && o.value == value && o.isUnset == isUnset;
 }
 
 #if WITH_TESTS

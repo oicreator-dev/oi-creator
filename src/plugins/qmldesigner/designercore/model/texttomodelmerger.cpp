@@ -55,6 +55,7 @@
 #include <QSet>
 #include <QDir>
 #include <QLoggingCategory>
+#include <QRegularExpression>
 
 using namespace LanguageUtils;
 using namespace QmlJS;
@@ -71,7 +72,7 @@ static inline bool isSupportedAttachedProperties(const QString &propertyName)
 static inline QStringList supportedVersionsList()
 {
     static const QStringList list = {
-        "2.0", "2.1", "2.2", "2.3", "2.4", "2.5", "2.6", "2.7", "2.8"
+        "2.0", "2.1", "2.2", "2.3", "2.4", "2.5", "2.6", "2.7", "2.8", "2.9", "2.10"
     };
     return list;
 }
@@ -81,7 +82,8 @@ static inline QStringList globalQtEnums()
     static const QStringList list = {
         "Horizontal", "Vertical", "AlignVCenter", "AlignLeft", "LeftToRight", "RightToLeft",
         "AlignHCenter", "AlignRight", "AlignBottom", "AlignBaseline", "AlignTop", "BottomLeft",
-        "LeftEdge", "RightEdge", "BottomEdge", "TopEdge"
+        "LeftEdge", "RightEdge", "BottomEdge", "TopEdge", "TabFocus", "ClickFocus", "StrongFocus",
+        "WheelFocus", "NoFocus"
     };
 
     return list;
@@ -328,6 +330,19 @@ static inline QString extractComponentFromQml(const QString &source)
         result = source; //implicit component
     }
     return result;
+}
+
+static QString normalizeJavaScriptExpression(const QString &expression)
+{
+    static const QRegularExpression regExp("\\n(\\s)+");
+
+    QString result = expression;
+    return result.replace(regExp, "\n");
+}
+
+static bool compareJavaScriptExpression(const QString &expression1, const QString &expression2)
+{
+    return normalizeJavaScriptExpression(expression1) == normalizeJavaScriptExpression(expression2);
 }
 
 } // anonymous namespace
@@ -792,7 +807,6 @@ static bool isBlacklistImport(const ImportKey &importKey)
             || importKey.libraryQualifiedPath() == QStringLiteral("Qt.WebSockets")
             || importKey.libraryQualifiedPath() == QStringLiteral("QtWebkit")
             || importKey.libraryQualifiedPath() == QStringLiteral("QtLocation")
-            || importKey.libraryQualifiedPath() == QStringLiteral("QtWebEngine")
             || importKey.libraryQualifiedPath() == QStringLiteral("QtWebChannel")
             || importKey.libraryQualifiedPath() == QStringLiteral("QtWinExtras")
             || importKey.libraryQualifiedPath() == QStringLiteral("QtPurchasing")
@@ -1380,8 +1394,8 @@ void TextToModelMerger::syncExpressionProperty(AbstractProperty &modelProperty,
 {
     if (modelProperty.isBindingProperty()) {
         BindingProperty bindingProperty = modelProperty.toBindingProperty();
-        if (bindingProperty.expression() != javascript
-                || !astType.isEmpty() != bindingProperty.isDynamic()
+        if (!compareJavaScriptExpression(bindingProperty.expression(), javascript)
+                || astType.isEmpty() == bindingProperty.isDynamic()
                 || astType != bindingProperty.dynamicTypeName()) {
             differenceHandler.bindingExpressionsDiffer(bindingProperty, javascript, astType);
         }
@@ -1450,7 +1464,7 @@ void TextToModelMerger::syncVariantProperty(AbstractProperty &modelProperty,
         VariantProperty modelVariantProperty = modelProperty.toVariantProperty();
 
         if (!equals(modelVariantProperty.value(), astValue)
-                || !astType.isEmpty() != modelVariantProperty.isDynamic()
+                || astType.isEmpty() == modelVariantProperty.isDynamic()
                 || astType != modelVariantProperty.dynamicTypeName()) {
             differenceHandler.variantValuesDiffer(modelVariantProperty,
                                                   astValue,
@@ -1575,7 +1589,7 @@ void ModelValidator::bindingExpressionsDiffer(BindingProperty &modelProperty,
     Q_UNUSED(modelProperty)
     Q_UNUSED(javascript)
     Q_UNUSED(astType)
-    Q_ASSERT(modelProperty.expression() == javascript);
+    Q_ASSERT(compareJavaScriptExpression(modelProperty.expression(), javascript));
     Q_ASSERT(modelProperty.dynamicTypeName() == astType);
     Q_ASSERT(0);
 }

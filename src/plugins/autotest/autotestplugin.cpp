@@ -25,6 +25,7 @@
 
 #include "autotestplugin.h"
 #include "autotestconstants.h"
+#include "autotesticons.h"
 #include "testcodeparser.h"
 #include "testframeworkmanager.h"
 #include "testrunner.h"
@@ -42,12 +43,14 @@
 
 #include <coreplugin/icore.h>
 #include <coreplugin/icontext.h>
+#include <coreplugin/actionmanager/actioncontainer.h>
 #include <coreplugin/actionmanager/actionmanager.h>
 #include <coreplugin/actionmanager/command.h>
-#include <coreplugin/actionmanager/actioncontainer.h>
 #include <coreplugin/coreconstants.h>
-
 #include <extensionsystem/pluginmanager.h>
+#include <projectexplorer/buildmanager.h>
+#include <projectexplorer/projectexplorer.h>
+#include <utils/utilsicons.h>
 
 #include <QAction>
 #include <QMessageBox>
@@ -98,30 +101,44 @@ void AutotestPlugin::initializeMenuEntries()
     menu->setOnAllDisabledBehavior(ActionContainer::Show);
 
     QAction *action = new QAction(tr("Run &All Tests"), this);
+    action->setIcon(Utils::Icons::RUN_SMALL_TOOLBAR.icon());
+    action->setToolTip(tr("Run All Tests"));
     Command *command = ActionManager::registerAction(action, Constants::ACTION_RUN_ALL_ID);
     command->setDefaultKeySequence(QKeySequence(tr("Alt+Shift+T,Alt+A")));
-    connect(action, &QAction::triggered,
-            this, &AutotestPlugin::onRunAllTriggered);
+    connect(action, &QAction::triggered, this, &AutotestPlugin::onRunAllTriggered);
+    action->setEnabled(false);
     menu->addAction(command);
 
     action = new QAction(tr("&Run Selected Tests"), this);
+    Utils::Icon runSelectedIcon = Utils::Icons::RUN_SMALL_TOOLBAR;
+    for (const Utils::IconMaskAndColor &maskAndColor : Icons::RUN_SELECTED_OVERLAY)
+        runSelectedIcon.append(maskAndColor);
+    action->setIcon(runSelectedIcon.icon());
+    action->setToolTip(tr("Run Selected Tests"));
     command = ActionManager::registerAction(action, Constants::ACTION_RUN_SELECTED_ID);
     command->setDefaultKeySequence(QKeySequence(tr("Alt+Shift+T,Alt+R")));
-    connect(action, &QAction::triggered,
-            this, &AutotestPlugin::onRunSelectedTriggered);
+    connect(action, &QAction::triggered, this, &AutotestPlugin::onRunSelectedTriggered);
+    action->setEnabled(false);
     menu->addAction(command);
 
     action = new QAction(tr("Re&scan Tests"), this);
     command = ActionManager::registerAction(action, Constants::ACTION_SCAN_ID);
     command->setDefaultKeySequence(QKeySequence(tr("Alt+Shift+T,Alt+S")));
-    connect(action, &QAction::triggered, [this] () {
+    connect(action, &QAction::triggered, this, [] () {
         TestTreeModel::instance()->parser()->updateTestTree();
     });
     menu->addAction(command);
 
     ActionContainer *toolsMenu = ActionManager::actionContainer(Core::Constants::M_TOOLS);
     toolsMenu->addMenu(menu);
-    connect(toolsMenu->menu(), &QMenu::aboutToShow,
+    using namespace ProjectExplorer;
+    connect(BuildManager::instance(), &BuildManager::buildStateChanged,
+            this, &AutotestPlugin::updateMenuItemsEnabledState);
+    connect(BuildManager::instance(), &BuildManager::buildQueueFinished,
+            this, &AutotestPlugin::updateMenuItemsEnabledState);
+    connect(ProjectExplorerPlugin::instance(), &ProjectExplorerPlugin::updateRunActions,
+            this, &AutotestPlugin::updateMenuItemsEnabledState);
+    connect(TestTreeModel::instance(), &TestTreeModel::testTreeModelChanged,
             this, &AutotestPlugin::updateMenuItemsEnabledState);
 }
 
@@ -130,9 +147,8 @@ bool AutotestPlugin::initialize(const QStringList &arguments, QString *errorStri
     Q_UNUSED(arguments)
     Q_UNUSED(errorString)
 
-    initializeMenuEntries();
-
     m_frameworkManager = TestFrameworkManager::instance();
+    initializeMenuEntries();
     m_frameworkManager->registerTestFramework(new QtTestFramework);
     m_frameworkManager->registerTestFramework(new QuickTestFramework);
     m_frameworkManager->registerTestFramework(new GTestFramework);
@@ -163,7 +179,7 @@ void AutotestPlugin::onRunAllTriggered()
     TestRunner *runner = TestRunner::instance();
     TestTreeModel *model = TestTreeModel::instance();
     runner->setSelectedTests(model->getAllTestCases());
-    runner->prepareToRunTests(TestRunner::Run);
+    runner->prepareToRunTests(TestRunMode::Run);
 }
 
 void AutotestPlugin::onRunSelectedTriggered()
@@ -171,13 +187,16 @@ void AutotestPlugin::onRunSelectedTriggered()
     TestRunner *runner = TestRunner::instance();
     TestTreeModel *model = TestTreeModel::instance();
     runner->setSelectedTests(model->getSelectedTests());
-    runner->prepareToRunTests(TestRunner::Run);
+    runner->prepareToRunTests(TestRunMode::Run);
 }
 
 void AutotestPlugin::updateMenuItemsEnabledState()
 {
-    const bool enabled = !TestRunner::instance()->isTestRunning()
-            && TestTreeModel::instance()->parser()->state() == TestCodeParser::Idle;
+    const bool enabled = !ProjectExplorer::BuildManager::isBuilding()
+            && !TestRunner::instance()->isTestRunning()
+            && TestTreeModel::instance()->parser()->state() == TestCodeParser::Idle
+            && ProjectExplorer::ProjectExplorerPlugin::canRunStartupProject(
+                ProjectExplorer::Constants::NORMAL_RUN_MODE);
     const bool hasTests = TestTreeModel::instance()->hasTests();
 
     ActionManager::command(Constants::ACTION_RUN_ALL_ID)->action()->setEnabled(enabled && hasTests);

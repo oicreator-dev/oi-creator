@@ -27,14 +27,8 @@
 
 #include "googletest.h"
 
-#include <clangbackendipc/clangcodemodelclientinterface.h>
-#include <clangbackendipc/cmbcodecompletedmessage.h>
-#include <clangbackendipc/cmbechomessage.h>
-#include <clangbackendipc/documentannotationschangedmessage.h>
-#include <clangbackendipc/projectpartsdonotexistmessage.h>
-#include <clangbackendipc/translationunitdoesnotexistmessage.h>
-#include <clangbackendipc/updatetranslationunitsforeditormessage.h>
-#include <clangbackendipc/updatevisibletranslationunitsmessage.h>
+#include <clangsupport/clangcodemodelclientinterface.h>
+#include <clangsupport/clangcodemodelclientmessages.h>
 
 class MockClangCodeModelClient : public ClangBackEnd::ClangCodeModelClientInterface
 {
@@ -45,10 +39,12 @@ public:
                  void(const ClangBackEnd::EchoMessage &message));
     MOCK_METHOD1(codeCompleted,
                  void(const ClangBackEnd::CodeCompletedMessage &message));
-    MOCK_METHOD1(translationUnitDoesNotExist,
-                 void(const ClangBackEnd::TranslationUnitDoesNotExistMessage &message));
-    MOCK_METHOD1(projectPartsDoNotExist,
-                 void(const ClangBackEnd::ProjectPartsDoNotExistMessage &message));
     MOCK_METHOD1(documentAnnotationsChanged,
                  void(const ClangBackEnd::DocumentAnnotationsChangedMessage &message));
+    MOCK_METHOD1(references,
+                 void(const ClangBackEnd::ReferencesMessage &message));
+    MOCK_METHOD1(followSymbol,
+                 void(const ClangBackEnd::FollowSymbolMessage &message));
+    MOCK_METHOD1(tooltip,
+                 void(const ClangBackEnd::ToolTipMessage &message));
 };

@@ -34,7 +34,6 @@ namespace Utils { class ParameterAction; }
 namespace CMakeProjectManager {
 
 class CMakeProject;
-class CMakeToolManager;
 
 namespace Internal {
 
@@ -61,6 +60,9 @@ private slots:
 
     void testCMakeProjectImporterToolChain_data();
     void testCMakeProjectImporterToolChain();
+
+    void testServerModeReaderProgress_data();
+    void testServerModeReaderProgress();
 #endif
 
 private:

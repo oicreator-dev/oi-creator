@@ -33,6 +33,7 @@
 #include <QAbstractItemView>
 #include <QPainter>
 #include <QTextLayout>
+#include <QWindow>
 
 namespace Autotest {
 namespace Internal {
@@ -41,8 +42,8 @@ const static int outputLimit = 100000;
 
 static bool isSummaryItem(Result::Type type)
 {
-    return type == Result::MessageTestCaseSuccess || type == Result::MessageTestCaseFail
-            || type == Result::MessageTestCaseWarn;
+    return type == Result::MessageTestCaseSuccess || type == Result::MessageTestCaseSuccessWarn
+            || type == Result::MessageTestCaseFail || type == Result::MessageTestCaseFailWarn;
 }
 
 TestResultDelegate::TestResultDelegate(QObject *parent)
@@ -57,20 +58,20 @@ void TestResultDelegate::paint(QPainter *painter, const QStyleOptionViewItem &op
     painter->save();
 
     QFontMetrics fm(opt.font);
+    QBrush background;
     QColor foreground;
 
     const QAbstractItemView *view = qobject_cast<const QAbstractItemView *>(opt.widget);
     const bool selected = opt.state & QStyle::State_Selected;
 
     if (selected) {
-        painter->setBrush(opt.palette.highlight().color());
+        background = opt.palette.highlight().color();
         foreground = opt.palette.highlightedText().color();
     } else {
-        painter->setBrush(opt.palette.window().color());
+        background = opt.palette.window().color();
         foreground = opt.palette.text().color();
     }
-    painter->setPen(Qt::NoPen);
-    painter->drawRect(opt.rect);
+    painter->fillRect(opt.rect, background);
     painter->setPen(foreground);
 
     TestResultFilterModel *resultFilterModel = static_cast<TestResultFilterModel *>(view->model());
@@ -78,10 +79,13 @@ void TestResultDelegate::paint(QPainter *painter, const QStyleOptionViewItem &op
     const TestResult *testResult = resultFilterModel->testResult(index);
     QTC_ASSERT(testResult, painter->restore();return);
 
+    const QWidget *widget = dynamic_cast<const QWidget*>(painter->device());
+    QWindow *window = widget ? widget->window()->windowHandle() : nullptr;
+
     QIcon icon = index.data(Qt::DecorationRole).value<QIcon>();
     if (!icon.isNull())
         painter->drawPixmap(positions.left(), positions.top(),
-                            icon.pixmap(positions.iconSize(), positions.iconSize()));
+                            icon.pixmap(window, QSize(positions.iconSize(), positions.iconSize())));
 
     QString typeStr = TestResult::resultToString(testResult->result());
     if (selected) {
@@ -130,9 +134,10 @@ void TestResultDelegate::paint(QPainter *painter, const QStyleOptionViewItem &op
         painter->drawText(positions.lineAreaLeft(), positions.top() + fm.ascent(), line);
     }
 
-    painter->setClipRect(opt.rect);
+    painter->setClipping(false);
     painter->setPen(opt.palette.mid().color());
-    painter->drawLine(0, opt.rect.bottom(), opt.rect.right(), opt.rect.bottom());
+    const QRectF adjustedRect(QRectF(opt.rect).adjusted(0.5, 0.5, -0.5, -0.5));
+    painter->drawLine(adjustedRect.bottomLeft(), adjustedRect.bottomRight());
     painter->restore();
 }
 
@@ -179,6 +184,12 @@ void TestResultDelegate::currentChanged(const QModelIndex &current, const QModel
 {
     emit sizeHintChanged(current);
     emit sizeHintChanged(previous);
+}
+
+void TestResultDelegate::clearCache()
+{
+    m_lastProcessedIndex = QModelIndex();
+    m_lastProcessedFont = QFont();
 }
 
 void TestResultDelegate::recalculateTextLayout(const QModelIndex &index, const QString &output,

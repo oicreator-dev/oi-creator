@@ -45,7 +45,7 @@ CMakeLocatorFilter::CMakeLocatorFilter()
 {
     setId("Build CMake target");
     setDisplayName(tr("Build CMake target"));
-    setShortcutString(QLatin1String("cm"));
+    setShortcutString("cm");
     setPriority(High);
 
     connect(SessionManager::instance(), &SessionManager::projectAdded,
@@ -60,11 +60,13 @@ CMakeLocatorFilter::CMakeLocatorFilter()
 void CMakeLocatorFilter::prepareSearch(const QString &entry)
 {
     m_result.clear();
-    for (Project *p : SessionManager::projects()) {
+    const QList<Project *> projects = SessionManager::projects();
+    for (Project *p : projects) {
         CMakeProject *cmakeProject = qobject_cast<CMakeProject *>(p);
         if (!cmakeProject)
             continue;
-        foreach (const QString &title, cmakeProject->buildTargetTitles()) {
+        const QStringList buildTargetTitles = cmakeProject->buildTargetTitles();
+        for (const QString &title : buildTargetTitles) {
             const int index = title.indexOf(entry);
             if (index >= 0) {
                 Core::LocatorFilterEntry filterEntry(this, title, cmakeProject->projectFilePath().toString());
@@ -83,8 +85,12 @@ QList<Core::LocatorFilterEntry> CMakeLocatorFilter::matchesFor(QFutureInterface<
     return m_result;
 }
 
-void CMakeLocatorFilter::accept(Core::LocatorFilterEntry selection) const
+void CMakeLocatorFilter::accept(Core::LocatorFilterEntry selection,
+                                QString *newText, int *selectionStart, int *selectionLength) const
 {
+    Q_UNUSED(newText)
+    Q_UNUSED(selectionStart)
+    Q_UNUSED(selectionLength)
     // Get the project containing the target selected
     const auto cmakeProject = qobject_cast<CMakeProject *>(
                 Utils::findOrDefault(SessionManager::projects(), [selection](Project *p) {

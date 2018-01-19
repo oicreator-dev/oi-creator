@@ -32,6 +32,7 @@
 #include "qmljstypedescriptionreader.h"
 #include "qmljsdialect.h"
 #include "qmljsviewercontext.h"
+#include "qmljsutils.h"
 
 #include <cplusplus/cppmodelmanagerbase.h>
 #include <utils/algorithm.h>
@@ -811,33 +812,11 @@ static bool findNewQmlLibraryInPath(const QString &path,
     return true;
 }
 
-static void findNewQmlLibrary(
-    const QString &path,
-    const LanguageUtils::ComponentVersion &version,
-    const Snapshot &snapshot,
-    ModelManagerInterface *modelManager,
-    QStringList *importedFiles,
-    QSet<QString> *scannedPaths,
-    QSet<QString> *newLibraries)
+static QString modulePath(const ImportInfo &import, const QStringList &paths)
 {
-    QString libraryPath = QString::fromLatin1("%1.%2.%3").arg(
-                path,
-                QString::number(version.majorVersion()),
-                QString::number(version.minorVersion()));
-    findNewQmlLibraryInPath(
-                libraryPath, snapshot, modelManager,
-                importedFiles, scannedPaths, newLibraries, false);
-
-    libraryPath = QString::fromLatin1("%1.%2").arg(
-                path,
-                QString::number(version.majorVersion()));
-    findNewQmlLibraryInPath(
-                libraryPath, snapshot, modelManager,
-                importedFiles, scannedPaths, newLibraries, false);
-
-    findNewQmlLibraryInPath(
-                path, snapshot, modelManager,
-                importedFiles, scannedPaths, newLibraries, false);
+    if (!import.version().isValid())
+        return QString();
+    return modulePath(import.name(), import.version().toString(), paths);
 }
 
 static void findNewLibraryImports(const Document::Ptr &doc, const Snapshot &snapshot,
@@ -849,7 +828,7 @@ static void findNewLibraryImports(const Document::Ptr &doc, const Snapshot &snap
                             importedFiles, scannedPaths, newLibraries, false);
 
     // scan dir and lib imports
-    const PathsAndLanguages importPaths = modelManager->importPaths();
+    const QStringList importPaths = modelManager->importPathsNames();
     foreach (const ImportInfo &import, doc->bind()->imports()) {
         if (import.type() == ImportType::Directory) {
             const QString targetPath = import.path();
@@ -858,13 +837,11 @@ static void findNewLibraryImports(const Document::Ptr &doc, const Snapshot &snap
         }
 
         if (import.type() == ImportType::Library) {
-            if (!import.version().isValid())
+            const QString libraryPath = modulePath(import, importPaths);
+            if (libraryPath.isEmpty())
                 continue;
-            foreach (const PathAndLanguage &importPath, importPaths) {
-                const QString targetPath = importPath.path().appendPath(import.path()).toString();
-                findNewQmlLibrary(targetPath, import.version(), snapshot, modelManager,
-                                  importedFiles, scannedPaths, newLibraries);
-            }
+            findNewQmlLibraryInPath(libraryPath, snapshot, modelManager, importedFiles,
+                                    scannedPaths, newLibraries, false);
         }
     }
 }
@@ -911,6 +888,8 @@ void ModelManagerInterface::parseLoop(QSet<QString> &scannedPaths,
                 QTextStream ins(&inFile);
                 contents = ins.readAll();
                 inFile.close();
+            } else {
+                continue;
             }
         }
 
@@ -1071,10 +1050,14 @@ void ModelManagerInterface::importScan(QFutureInterface<void> &future,
     }
 }
 
-PathsAndLanguages ModelManagerInterface::importPaths() const
+QStringList ModelManagerInterface::importPathsNames() const
 {
+    QStringList names;
     QMutexLocker l(&m_mutex);
-    return m_allImportPaths;
+    names.reserve(m_allImportPaths.size());
+    for (const PathAndLanguage &x: m_allImportPaths)
+        names << x.path().toString();
+    return names;
 }
 
 QmlLanguageBundles ModelManagerInterface::activeBundles() const
@@ -1295,13 +1278,13 @@ bool rescanExports(const QString &fileName, FindExportedCppTypes &finder,
     return hasNewInfo;
 }
 
-void ModelManagerInterface::updateCppQmlTypes(QFutureInterface<void> &interface,
+void ModelManagerInterface::updateCppQmlTypes(QFutureInterface<void> &futureInterface,
                                      ModelManagerInterface *qmlModelManager,
                                      CPlusPlus::Snapshot snapshot,
                                      QHash<QString, QPair<CPlusPlus::Document::Ptr, bool> > documents)
 {
-    interface.setProgressRange(0, documents.size());
-    interface.setProgressValue(0);
+    futureInterface.setProgressRange(0, documents.size());
+    futureInterface.setProgressValue(0);
 
     CppDataHash newData;
     QHash<QString, QList<CPlusPlus::Document::Ptr> > newDeclarations;
@@ -1316,9 +1299,9 @@ void ModelManagerInterface::updateCppQmlTypes(QFutureInterface<void> &interface,
     bool hasNewInfo = false;
     typedef QPair<CPlusPlus::Document::Ptr, bool> DocScanPair;
     foreach (const DocScanPair &pair, documents) {
-        if (interface.isCanceled())
+        if (futureInterface.isCanceled())
             return;
-        interface.setProgressValue(interface.progressValue() + 1);
+        futureInterface.setProgressValue(futureInterface.progressValue() + 1);
 
         CPlusPlus::Document::Ptr doc = pair.first;
         const bool scan = pair.second;

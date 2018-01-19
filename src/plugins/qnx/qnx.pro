@@ -8,11 +8,8 @@ SOURCES += qnxplugin.cpp \
     qnxdevicefactory.cpp \
     qnxdevicewizard.cpp \
     qnxrunconfiguration.cpp \
-    qnxruncontrolfactory.cpp \
     qnxanalyzesupport.cpp \
     qnxdebugsupport.cpp \
-    qnxdeploystepfactory.cpp \
-    qnxdeployconfigurationfactory.cpp \
     qnxrunconfigurationfactory.cpp \
     qnxqtversionfactory.cpp \
     qnxqtversion.cpp \
@@ -24,8 +21,6 @@ SOURCES += qnxplugin.cpp \
     qnxdeviceprocesslist.cpp \
     qnxtoolchain.cpp \
     slog2inforunner.cpp \
-    qnxattachdebugsupport.cpp \
-    qnxattachdebugdialog.cpp \
     qnxconfiguration.cpp \
     qnxsettingswidget.cpp \
     qnxconfigurationmanager.cpp \
@@ -41,11 +36,8 @@ HEADERS += qnxplugin.h\
     qnxdevicefactory.h \
     qnxdevicewizard.h \
     qnxrunconfiguration.h \
-    qnxruncontrolfactory.h \
     qnxanalyzesupport.h \
     qnxdebugsupport.h \
-    qnxdeploystepfactory.h \
-    qnxdeployconfigurationfactory.h \
     qnxrunconfigurationfactory.h \
     qnxqtversionfactory.h \
     qnxqtversion.h \
@@ -57,8 +49,6 @@ HEADERS += qnxplugin.h\
     qnxdeviceprocesslist.h \
     qnxtoolchain.h \
     slog2inforunner.h \
-    qnxattachdebugsupport.h \
-    qnxattachdebugdialog.h \
     qnxconfiguration.h \
     qnxsettingswidget.h \
     qnxconfigurationmanager.h \

@@ -16,7 +16,6 @@ HEADERS += \
     genericlinuxdeviceconfigurationfactory.h \
     remotelinuxrunconfigurationwidget.h \
     remotelinuxrunconfigurationfactory.h \
-    remotelinuxruncontrolfactory.h \
     remotelinuxdebugsupport.h \
     genericlinuxdeviceconfigurationwizardpages.h \
     abstractremotelinuxdeploystep.h \
@@ -26,8 +25,6 @@ HEADERS += \
     abstractuploadandinstallpackageservice.h \
     genericdirectuploadservice.h \
     remotelinuxdeployconfiguration.h \
-    remotelinuxdeployconfigurationfactory.h \
-    genericremotelinuxdeploystepfactory.h \
     abstractpackagingstep.h \
     tarpackagecreationstep.h \
     remotelinuxpackageinstaller.h \
@@ -43,8 +40,9 @@ HEADERS += \
     genericlinuxdeviceconfigurationwidget.h \
     remotelinuxcheckforfreediskspaceservice.h \
     remotelinuxcheckforfreediskspacestep.h \
-    remotelinuxanalyzesupport.h \
-    abstractremotelinuxrunsupport.h \
+    remotelinuxkillappservice.h \
+    remotelinuxkillappstep.h \
+    remotelinuxqmltoolingsupport.h \
     linuxdeviceprocess.h \
     remotelinuxcustomrunconfiguration.h \
     remotelinuxsignaloperation.h \
@@ -63,7 +61,6 @@ SOURCES += \
     genericlinuxdeviceconfigurationfactory.cpp \
     remotelinuxrunconfigurationwidget.cpp \
     remotelinuxrunconfigurationfactory.cpp \
-    remotelinuxruncontrolfactory.cpp \
     remotelinuxdebugsupport.cpp \
     genericlinuxdeviceconfigurationwizardpages.cpp \
     abstractremotelinuxdeploystep.cpp \
@@ -73,8 +70,6 @@ SOURCES += \
     abstractuploadandinstallpackageservice.cpp \
     genericdirectuploadservice.cpp \
     remotelinuxdeployconfiguration.cpp \
-    remotelinuxdeployconfigurationfactory.cpp \
-    genericremotelinuxdeploystepfactory.cpp \
     abstractpackagingstep.cpp \
     tarpackagecreationstep.cpp \
     remotelinuxpackageinstaller.cpp \
@@ -89,8 +84,9 @@ SOURCES += \
     genericlinuxdeviceconfigurationwidget.cpp \
     remotelinuxcheckforfreediskspaceservice.cpp \
     remotelinuxcheckforfreediskspacestep.cpp \
-    remotelinuxanalyzesupport.cpp \
-    abstractremotelinuxrunsupport.cpp \
+    remotelinuxkillappservice.cpp \
+    remotelinuxkillappstep.cpp \
+    remotelinuxqmltoolingsupport.cpp \
     linuxdeviceprocess.cpp \
     remotelinuxcustomrunconfiguration.cpp \
     remotelinuxsignaloperation.cpp \

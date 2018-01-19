@@ -25,6 +25,7 @@
 
 #include "kitinformation.h"
 
+#include "abi.h"
 #include "devicesupport/desktopdevice.h"
 #include "devicesupport/devicemanager.h"
 #include "projectexplorerconstants.h"
@@ -33,8 +34,6 @@
 #include "toolchain.h"
 #include "toolchainmanager.h"
 
-#include <extensionsystem/pluginmanager.h>
-#include <projectexplorer/abi.h>
 #include <ssh/sshconnection.h>
 
 #include <utils/algorithm.h>
@@ -74,16 +73,19 @@ QList<Task> SysRootKitInformation::validate(const Kit *k) const
     if (dir.isEmpty())
         return result;
 
+    if (dir.toString().startsWith("target:") || dir.toString().startsWith("remote:"))
+        return result;
+
     const QFileInfo fi = dir.toFileInfo();
 
     if (!fi.exists()) {
-        result << Task(Task::Error, tr("Sys Root \"%1\" does not exist in the file system.").arg(dir.toUserOutput()),
+        result << Task(Task::Warning, tr("Sys Root \"%1\" does not exist in the file system.").arg(dir.toUserOutput()),
                        Utils::FileName(), -1, Core::Id(Constants::TASK_CATEGORY_BUILDSYSTEM));
     } else if (!fi.isDir()) {
-        result << Task(Task::Error, tr("Sys Root \"%1\" is not a directory.").arg(dir.toUserOutput()),
+        result << Task(Task::Warning, tr("Sys Root \"%1\" is not a directory.").arg(dir.toUserOutput()),
                        Utils::FileName(), -1, Core::Id(Constants::TASK_CATEGORY_BUILDSYSTEM));
     } else if (QDir(dir.toString()).entryList(QDir::AllEntries | QDir::NoDotAndDotDot).isEmpty()) {
-        result << Task(Task::Error, tr("Sys Root \"%1\" is empty.").arg(dir.toUserOutput()),
+        result << Task(Task::Warning, tr("Sys Root \"%1\" is empty.").arg(dir.toUserOutput()),
                        Utils::FileName(), -1, Core::Id(Constants::TASK_CATEGORY_BUILDSYSTEM));
     }
     return result;
@@ -101,7 +103,7 @@ KitInformation::ItemList SysRootKitInformation::toUserOutput(const Kit *k) const
 
 void SysRootKitInformation::addToMacroExpander(Kit *kit, Utils::MacroExpander *expander) const
 {
-    expander->registerFileVariables("SysRoot", tr("Sys Root"), [this, kit]() -> QString {
+    expander->registerFileVariables("SysRoot", tr("Sys Root"), [kit]() -> QString {
         return SysRootKitInformation::sysRoot(kit).toString();
     });
 }
@@ -190,7 +192,8 @@ QList<Task> ToolChainKitInformation::validate(const Kit *k) const
             result << tc->validateKit(k);
         }
         if (targetAbis.count() != 1) {
-            result << Task(Task::Error, tr("Compilers produce code for different ABIs."),
+            result << Task(Task::Error, tr("Compilers produce code for different ABIs: %1")
+                           .arg(Utils::transform(targetAbis, &Abi::toString).toList().join(", ")),
                            Utils::FileName(), -1, Core::Id(Constants::TASK_CATEGORY_BUILDSYSTEM));
         }
     }
@@ -335,24 +338,24 @@ void ToolChainKitInformation::addToMacroExpander(Kit *kit, Utils::MacroExpander 
 {
     // Compatibility with Qt Creator < 4.2:
     expander->registerVariable("Compiler:Name", tr("Compiler"),
-                               [this, kit]() -> QString {
+                               [kit]() -> QString {
                                    const ToolChain *tc = toolChain(kit, Constants::CXX_LANGUAGE_ID);
                                    return tc ? tc->displayName() : tr("None");
                                });
 
     expander->registerVariable("Compiler:Executable", tr("Path to the compiler executable"),
-                               [this, kit]() -> QString {
+                               [kit]() -> QString {
                                    const ToolChain *tc = toolChain(kit, Constants::CXX_LANGUAGE_ID);
                                    return tc ? tc->compilerCommand().toString() : QString();
                                });
 
     expander->registerPrefix("Compiler:Name", tr("Compiler for different languages"),
-                             [this, kit](const QString &ls) -> QString {
+                             [kit](const QString &ls) -> QString {
                                  const ToolChain *tc = toolChain(kit, findLanguage(ls));
                                  return tc ? tc->displayName() : tr("None");
                              });
     expander->registerPrefix("Compiler:Executable", tr("Compiler executable for different languages"),
-                             [this, kit](const QString &ls) -> QString {
+                             [kit](const QString &ls) -> QString {
                                  const ToolChain *tc = toolChain(kit, findLanguage(ls));
                                  return tc ? tc->compilerCommand().toString() : QString();
                              });
@@ -406,6 +409,54 @@ void ToolChainKitInformation::setToolChain(Kit *k, ToolChain *tc)
     QTC_ASSERT(tc, return);
     QVariantMap result = k->value(ToolChainKitInformation::id()).toMap();
     result.insert(tc->language().toString(), tc->id());
+
+    k->setValue(id(), result);
+}
+
+/**
+ * @brief ToolChainKitInformation::setAllToolChainsToMatch
+ *
+ * Set up all toolchains to be similar to the one toolchain provided. Similar ideally means
+ * that all toolchains use the "same" compiler from the same installation, but we will
+ * settle for a toolchain with a matching API instead.
+ *
+ * @param k The kit to set up
+ * @param tc The toolchain to match other languages for.
+ */
+void ToolChainKitInformation::setAllToolChainsToMatch(Kit *k, ToolChain *tc)
+{
+    QTC_ASSERT(tc, return);
+
+    const QList<ToolChain *> allTcList = ToolChainManager::toolChains();
+    QTC_ASSERT(allTcList.contains(tc), return);
+
+    QVariantMap result = k->value(ToolChainKitInformation::id()).toMap();
+    result.insert(tc->language().toString(), tc->id());
+
+    for (Core::Id l : ToolChainManager::allLanguages()) {
+        if (l == tc->language())
+            continue;
+
+        ToolChain *match = nullptr;
+        ToolChain *bestMatch = nullptr;
+        for (ToolChain *other : allTcList) {
+            if (!other->isValid() || other->language() != l)
+                continue;
+            if (other->targetAbi() == tc->targetAbi())
+                match = other;
+            if (match == other
+                    && other->compilerCommand().parentDir() == tc->compilerCommand().parentDir()) {
+                bestMatch = other;
+                break;
+            }
+        }
+        if (bestMatch)
+            result.insert(l.toString(), bestMatch->id());
+        else if (match)
+            result.insert(l.toString(), match->id());
+        else
+            result.insert(l.toString(), QByteArray());
+    }
 
     k->setValue(id(), result);
 }
@@ -470,7 +521,7 @@ void ToolChainKitInformation::kitsWereLoaded()
 
 void ToolChainKitInformation::toolChainUpdated(ToolChain *tc)
 {
-    for (Kit *k : KitManager::kits([tc, this](const Kit *k) { return toolChain(k, tc->language()) == tc; }))
+    for (Kit *k : KitManager::kits([tc](const Kit *k) { return toolChain(k, tc->language()) == tc; }))
         notifyAboutUpdate(k);
 }
 
@@ -514,7 +565,7 @@ KitInformation::ItemList DeviceTypeKitInformation::toUserOutput(const Kit *k) co
     Core::Id type = deviceTypeId(k);
     QString typeDisplayName = tr("Unknown device type");
     if (type.isValid()) {
-        IDeviceFactory *factory = ExtensionSystem::PluginManager::getObject<IDeviceFactory>(
+        IDeviceFactory *factory = Utils::findOrDefault(IDeviceFactory::allDeviceFactories(),
             [&type](IDeviceFactory *factory) {
                 return factory->availableCreationIds().contains(type);
             });
@@ -643,24 +694,29 @@ KitInformation::ItemList DeviceKitInformation::toUserOutput(const Kit *k) const
 void DeviceKitInformation::addToMacroExpander(Kit *kit, Utils::MacroExpander *expander) const
 {
     expander->registerVariable("Device:HostAddress", tr("Host address"),
-        [this, kit]() -> QString {
+        [kit]() -> QString {
             const IDevice::ConstPtr device = DeviceKitInformation::device(kit);
-            return device ? device->sshParameters().host : QString();
+            return device ? device->sshParameters().host() : QString();
     });
     expander->registerVariable("Device:SshPort", tr("SSH port"),
-        [this, kit]() -> QString {
+        [kit]() -> QString {
             const IDevice::ConstPtr device = DeviceKitInformation::device(kit);
-            return device ? QString::number(device->sshParameters().port) : QString();
+            return device ? QString::number(device->sshParameters().port()) : QString();
     });
     expander->registerVariable("Device:UserName", tr("User name"),
-        [this, kit]() -> QString {
+        [kit]() -> QString {
             const IDevice::ConstPtr device = DeviceKitInformation::device(kit);
-            return device ? device->sshParameters().userName : QString();
+            return device ? device->sshParameters().userName() : QString();
     });
     expander->registerVariable("Device:KeyFile", tr("Private key file"),
-        [this, kit]() -> QString {
+        [kit]() -> QString {
             const IDevice::ConstPtr device = DeviceKitInformation::device(kit);
             return device ? device->sshParameters().privateKeyFile : QString();
+    });
+    expander->registerVariable("Device:Name", tr("Device name"),
+        [kit]() -> QString {
+            const IDevice::ConstPtr device = DeviceKitInformation::device(kit);
+            return device ? device->displayName() : QString();
     });
 }
 
@@ -766,8 +822,12 @@ void EnvironmentKitInformation::fix(Kit *k)
 void EnvironmentKitInformation::addToEnvironment(const Kit *k, Utils::Environment &env) const
 {
     const QVariant envValue = k->value(EnvironmentKitInformation::id());
-    if (envValue.isValid())
-        env.modify(Utils::EnvironmentItem::fromStringList(envValue.toStringList()));
+    if (envValue.isValid()) {
+        const QStringList values = Utils::transform(envValue.toStringList(), [k](const QString &v) {
+            return k->macroExpander()->expand(v);
+        });
+        env.modify(Utils::EnvironmentItem::fromStringList(values));
+    }
 }
 
 KitConfigWidget *EnvironmentKitInformation::createConfigWidget(Kit *k) const

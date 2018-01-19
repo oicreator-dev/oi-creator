@@ -29,7 +29,7 @@
 
 #include <coreplugin/icore.h>
 #include <coreplugin/messagemanager.h>
-#include <extensionsystem/pluginmanager.h>
+
 #include <projectexplorer/project.h>
 #include <projectexplorer/projectexplorerconstants.h>
 #include <ssh/sshhostkeydatabase.h>
@@ -150,7 +150,7 @@ void DeviceManager::load()
     // read devices file from global settings path
     QHash<Core::Id, Core::Id> defaultDevices;
     QList<IDevice::Ptr> sdkDevices;
-    if (reader.load(systemSettingsFilePath(QLatin1String("/qtcreator/devices.xml"))))
+    if (reader.load(systemSettingsFilePath(QLatin1String("/devices.xml"))))
         sdkDevices = fromMap(reader.restoreValues().value(DeviceManagerKey).toMap(), &defaultDevices);
     // read devices file from user settings path
     QList<IDevice::Ptr> userDevices;
@@ -230,9 +230,8 @@ Utils::FileName DeviceManager::settingsFilePath(const QString &extension)
 
 Utils::FileName DeviceManager::systemSettingsFilePath(const QString &deviceFileRelativePath)
 {
-    return Utils::FileName::fromString(
-              QFileInfo(Core::ICore::settings(QSettings::SystemScope)->fileName()).absolutePath()
-              + deviceFileRelativePath);
+    return Utils::FileName::fromString(Core::ICore::installerResourcePath()
+                                       + deviceFileRelativePath);
 }
 
 void DeviceManager::addDevice(const IDevice::ConstPtr &_device)
@@ -338,7 +337,7 @@ void DeviceManager::setDefaultDevice(Core::Id id)
 
 const IDeviceFactory *DeviceManager::restoreFactory(const QVariantMap &map)
 {
-    IDeviceFactory *factory = ExtensionSystem::PluginManager::getObject<IDeviceFactory>(
+    IDeviceFactory *factory = Utils::findOrDefault(IDeviceFactory::allDeviceFactories(),
         [&map](IDeviceFactory *factory) {
             return factory->canRestore(map);
         });
@@ -441,6 +440,7 @@ private:
     {
         return DeviceProcessSignalOperation::Ptr();
     }
+    Utils::OsType osType() const override { return Utils::HostOsInfo::hostOs(); }
 };
 
 void ProjectExplorerPlugin::testDeviceManager()

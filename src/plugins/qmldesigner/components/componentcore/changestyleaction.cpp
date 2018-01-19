@@ -38,9 +38,9 @@ static QString styleConfigFileName(const QString &qmlFileName)
     ProjectExplorer::Project *currentProject = ProjectExplorer::SessionManager::projectForFile(Utils::FileName::fromString(qmlFileName));
 
     if (currentProject)
-        foreach (const QString &fileName, currentProject->files(ProjectExplorer::Project::SourceFiles))
+        foreach (const Utils::FileName &fileName, currentProject->files(ProjectExplorer::Project::SourceFiles))
             if (fileName.endsWith("qtquickcontrols2.conf"))
-                return fileName;
+                return fileName.toString();
 
     return QString();
 }
@@ -74,7 +74,7 @@ QWidget *ChangeStyleWidgetAction::createWidget(QWidget *parent)
         if (!comboBox)
             return;
 
-        bool block = comboBox->blockSignals(true);
+        QSignalBlocker blocker(comboBox);
 
         if (style.isEmpty()) { /* The .conf file is misssing. */
             comboBox->setDisabled(true);
@@ -85,14 +85,12 @@ QWidget *ChangeStyleWidgetAction::createWidget(QWidget *parent)
             comboBox->setToolTip(tr(enabledTooltip));
             comboBox->setEditText(style);
         }
-
-        comboBox->blockSignals(block);
     });
 
     connect(comboBox,
             static_cast<void (QComboBox::*)(const QString &)>(&QComboBox::activated),
             this,
-            [comboBox, this](const QString &style) {
+            [this](const QString &style) {
 
         if (style.isEmpty())
             return;

@@ -26,6 +26,7 @@
 #include "ilocatorfilter.h"
 
 #include <coreplugin/coreconstants.h>
+#include <utils/fuzzymatcher.h>
 
 #include <QBoxLayout>
 #include <QCheckBox>
@@ -34,6 +35,7 @@
 #include <QDialogButtonBox>
 #include <QLabel>
 #include <QLineEdit>
+#include <QRegularExpression>
 
 using namespace Core;
 
@@ -46,12 +48,25 @@ using namespace Core;
     The filter is added to \uicontrol Tools > \uicontrol Locate.
 */
 
+static QList<ILocatorFilter *> g_locatorFilters;
+
 /*!
     Constructs a locator filter with \a parent. Call from subclasses.
 */
 ILocatorFilter::ILocatorFilter(QObject *parent):
     QObject(parent)
 {
+    g_locatorFilters.append(this);
+}
+
+ILocatorFilter::~ILocatorFilter()
+{
+    g_locatorFilters.removeOne(this);
+}
+
+const QList<ILocatorFilter *> ILocatorFilter::allLocatorFilters()
+{
+    return g_locatorFilters;
 }
 
 /*!
@@ -192,13 +207,18 @@ Qt::CaseSensitivity ILocatorFilter::caseSensitivity(const QString &str)
     return str == str.toLower() ? Qt::CaseInsensitive : Qt::CaseSensitive;
 }
 
-/*!
-    Returns whether the search term \a str contains wildcard characters.
-    Can be used for choosing an optimal matching strategy.
-*/
-bool ILocatorFilter::containsWildcard(const QString &str)
+QRegularExpression ILocatorFilter::createRegExp(const QString &text)
 {
-    return str.contains(QLatin1Char('*')) || str.contains(QLatin1Char('?'));
+    return FuzzyMatcher::createRegExp(text);
+}
+
+LocatorFilterEntry::HighlightInfo ILocatorFilter::highlightInfo(
+        const QRegularExpressionMatch &match, LocatorFilterEntry::HighlightInfo::DataType dataType)
+{
+    const FuzzyMatcher::HighlightingPositions positions =
+            FuzzyMatcher::highlightingPositions(match);
+
+    return LocatorFilterEntry::HighlightInfo(positions.starts, positions.lengths, dataType);
 }
 
 /*!
@@ -324,6 +344,11 @@ Id ILocatorFilter::id() const
     return m_id;
 }
 
+Id ILocatorFilter::actionId() const
+{
+    return m_id.withPrefix("Locator.");
+}
+
 /*!
     Returns the filter's translated display name.
 
@@ -419,10 +444,12 @@ void ILocatorFilter::setConfigurable(bool configurable)
 */
 
 /*!
-    \fn void ILocatorFilter::accept(LocatorFilterEntry selection) const
+    \fn void ILocatorFilter::accept(LocatorFilterEntry selection, QString *newText, int *selectionStart, int *selectionLength) const
 
     Called with the entry specified by \a selection when the user activates it
     in the result list.
+    Implementations can return a new search term \a newText, which has \a selectionLength characters
+    starting from \a selectionStart preselected, and the cursor set to the end of the selection.
 */
 
 /*!

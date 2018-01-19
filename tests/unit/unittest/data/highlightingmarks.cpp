@@ -482,12 +482,12 @@ void f25()
     NonConstPointerArgument(x);
 }
 
-void ConstPointerArgument(const int *argument);
-
+void PointerToConstArgument(const int *argument);
+void ConstPointerArgument(int *const argument);
 void f26()
 {
     int *x;
-
+    PointerToConstArgument(x);
     ConstPointerArgument(x);
 }
 
@@ -554,3 +554,37 @@ template<class T> class Coo<T*>;
 
 namespace N { void goo(); }
 using N::goo;
+
+#if 1
+#endif
+
+#include <new>
+
+struct OtherOperator { void operator()(int); };
+void g(OtherOperator o, int var)
+{
+    o(var);
+}
+
+void NonConstPointerArgument(int &argument);
+
+struct PointerGetterClass
+{
+    int &getter();
+};
+
+void f32()
+{
+    PointerGetterClass x;
+
+    NonConstPointerArgument(x.getter());
+}
+
+namespace N { template <typename T> void SizeIs(); }
+using N::SizeIs;
+
+void BaseClass::VirtualFunction() {}
+
+class WithVirtualFunctionDefined {
+  virtual void VirtualFunctionDefinition() {};
+};

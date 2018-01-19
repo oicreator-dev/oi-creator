@@ -35,7 +35,9 @@ def main():
     analyzerTargets = Targets.desktopTargetClasses()
     checkedTargets, projectName = createNewQtQuickApplication(workingDir, targets=analyzerTargets)
     editor = waitForObject(":Qt Creator_QmlJSEditor::QmlJSTextEditorWidget")
-    if placeCursorToLine(editor, "MouseArea.*", True):
+    if placeCursorToLine(editor, "}"):
+        type(editor, '<Left>')
+        type(editor, '<Return>')
         type(editor, '<Up>')
         type(editor, '<Return>')
         typeLines(editor, ['Timer {',
@@ -110,7 +112,7 @@ def performTest(workingDir, projectName, targetCount, availableConfigs):
             test.compare(dumpItems(model, column=colPercent)[0], '100.00 %')
             # cannot run following test on colShortest (unstable)
             for i in [colTotal, colMean, colMedian, colLongest]:
-                for item in dumpItems(model, column=i)[1:5]:
+                for item in dumpItems(model, column=i)[2:5]:
                     test.verify(item.endswith('ms'), "Verify that '%s' ends with 'ms'" % item)
             for i in [colTotal, colMean, colMedian, colLongest, colShortest]:
                 for item in dumpItems(model, column=i):
@@ -167,9 +169,3 @@ def safeClickTab(tab):
             pass
     test.fatal("Tab %s is not being shown." % tab)
     return False
-
-def init():
-    removeQmlDebugFolderIfExists()
-
-def cleanup():
-    removeQmlDebugFolderIfExists()

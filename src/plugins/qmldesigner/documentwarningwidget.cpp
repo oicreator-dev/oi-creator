@@ -117,15 +117,16 @@ void DocumentWarningWidget::refreshContent()
         m_continueButton->setText(tr("OK"));
     } else {
         m_headerLabel->setText(tr("This QML file contains features which are not supported by Qt Quick Designer at:"));
-        bool block = m_ignoreWarningsCheckBox->blockSignals(true);
-        m_ignoreWarningsCheckBox->setChecked(!warningsEnabled());
-        m_ignoreWarningsCheckBox->blockSignals(block);
+        {
+            QSignalBlocker blocker(m_ignoreWarningsCheckBox);
+            m_ignoreWarningsCheckBox->setChecked(!warningsEnabled());
+        }
         m_ignoreWarningsCheckBox->show();
         m_continueButton->setText(tr("Ignore"));
     }
 
     QString messageString;
-    DocumentMessage message = m_messages.at(m_currentMessage);
+    DocumentMessage message = m_messages.value(m_currentMessage);
     if (message.type() == DocumentMessage::ParseError) {
         messageString += errorToString(message);
         m_navigateLabel->setText(generateNavigateLinks());

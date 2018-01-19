@@ -79,12 +79,7 @@ public:
 };
 
 SearchResultWidget::SearchResultWidget(QWidget *parent) :
-    QWidget(parent),
-    m_count(0),
-    m_preserveCaseSupported(true),
-    m_isShowingReplaceUI(false),
-    m_searchAgainSupported(false),
-    m_replaceSupported(false)
+    QWidget(parent)
 {
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->setMargin(0);
@@ -295,8 +290,6 @@ void SearchResultWidget::addResults(const QList<SearchResultItem> &items, Search
     }
 }
 
-
-
 int SearchResultWidget::count() const
 {
     return m_count;
@@ -308,7 +301,6 @@ void SearchResultWidget::setSupportsReplace(bool replaceSupported, const QString
     setShowReplaceUI(replaceSupported);
     m_dontAskAgainGroup = group;
 }
-
 
 void SearchResultWidget::setTextToReplace(const QString &textToReplace)
 {
@@ -419,7 +411,7 @@ void SearchResultWidget::restart()
     m_count = 0;
     Id sizeWarningId(SIZE_WARNING_ID);
     m_infoBar.removeInfo(sizeWarningId);
-    m_infoBar.enableInfo(sizeWarningId);
+    m_infoBar.unsuppressInfo(sizeWarningId);
     m_cancelButton->setVisible(true);
     m_searchAgainButton->setVisible(false);
     m_messageWidget->setVisible(false);
@@ -442,7 +434,7 @@ void SearchResultWidget::finishSearch(bool canceled)
 {
     Id sizeWarningId(SIZE_WARNING_ID);
     m_infoBar.removeInfo(sizeWarningId);
-    m_infoBar.enableInfo(sizeWarningId);
+    m_infoBar.unsuppressInfo(sizeWarningId);
     m_replaceTextEdit->setEnabled(m_count > 0);
     m_replaceButton->setEnabled(m_count > 0);
     m_preserveCaseCheck->setEnabled(m_count > 0);

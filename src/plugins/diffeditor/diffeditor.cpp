@@ -34,7 +34,10 @@
 #include <coreplugin/minisplitter.h>
 
 #include <texteditor/displaysettings.h>
+#include <texteditor/fontsettings.h>
 #include <texteditor/marginsettings.h>
+#include <texteditor/syntaxhighlighter.h>
+#include <texteditor/textdocument.h>
 #include <texteditor/texteditor.h>
 #include <texteditor/texteditorsettings.h>
 
@@ -105,7 +108,6 @@ DescriptionEditorWidget::DescriptionEditorWidget(QWidget *parent)
     DisplaySettings settings = displaySettings();
     settings.m_textWrapping = false;
     settings.m_displayLineNumbers = false;
-    settings.m_highlightCurrentLine = false;
     settings.m_displayFoldingMarkers = false;
     settings.m_markTextChanges = false;
     settings.m_highlightBlocks = false;
@@ -120,6 +122,8 @@ DescriptionEditorWidget::DescriptionEditorWidget(QWidget *parent)
     m_context->setWidget(this);
     m_context->setContext(Core::Context(Constants::C_DIFF_EDITOR_DESCRIPTION));
     Core::ICore::addContextObject(m_context);
+
+    textDocument()->setSyntaxHighlighter(new SyntaxHighlighter);
 }
 
 DescriptionEditorWidget::~DescriptionEditorWidget()
@@ -138,6 +142,8 @@ void DescriptionEditorWidget::setDisplaySettings(const DisplaySettings &ds)
 {
     DisplaySettings settings = displaySettings();
     settings.m_visualizeWhitespace = ds.m_visualizeWhitespace;
+    settings.m_scrollBarHighlights = ds.m_scrollBarHighlights;
+    settings.m_highlightCurrentLine = ds.m_highlightCurrentLine;
     TextEditorWidget::setDisplaySettings(settings);
 }
 
@@ -186,7 +192,7 @@ void DescriptionEditorWidget::mouseReleaseEvent(QMouseEvent *e)
 bool DescriptionEditorWidget::findContentsUnderCursor(const QTextCursor &cursor)
 {
     m_currentCursor = cursor;
-    return cursor.block().text() == QLatin1String(Constants::EXPAND_BRANCHES);
+    return cursor.block().text() == Constants::EXPAND_BRANCHES;
 }
 
 void DescriptionEditorWidget::highlightCurrentContents()
@@ -194,7 +200,9 @@ void DescriptionEditorWidget::highlightCurrentContents()
     QTextEdit::ExtraSelection sel;
     sel.cursor = m_currentCursor;
     sel.cursor.select(QTextCursor::LineUnderCursor);
-    sel.format.setFontUnderline(true);
+    sel.format.setUnderlineStyle(QTextCharFormat::SingleUnderline);
+    const QColor textColor = TextEditorSettings::fontSettings().formatFor(C_TEXT).foreground();
+    sel.format.setUnderlineColor(textColor.isValid() ? textColor : palette().color(QPalette::Foreground));
     setExtraSelections(TextEditorWidget::OtherSelection,
                        QList<QTextEdit::ExtraSelection>() << sel);
 }
@@ -203,28 +211,13 @@ void DescriptionEditorWidget::handleCurrentContents()
 {
     m_currentCursor.select(QTextCursor::LineUnderCursor);
     m_currentCursor.removeSelectedText();
-    m_currentCursor.insertText(QLatin1String("Branches: Expanding..."));
+    m_currentCursor.insertText("Branches: Expanding...");
     emit requestBranchList();
 }
 
 ///////////////////////////////// DiffEditor //////////////////////////////////
 
 DiffEditor::DiffEditor()
-    : m_document(0)
-    , m_descriptionWidget(0)
-    , m_stackedWidget(0)
-    , m_toolBar(0)
-    , m_entriesComboBox(0)
-    , m_contextSpinBox(0)
-    , m_toggleSyncAction(0)
-    , m_whitespaceButtonAction(0)
-    , m_toggleDescriptionAction(0)
-    , m_reloadAction(0)
-    , m_viewSwitcherAction(0)
-    , m_currentViewIndex(-1)
-    , m_currentDiffFileIndex(-1)
-    , m_sync(false)
-    , m_showDescription(true)
 {
     // Editor:
     setDuplicateSupported(true);
@@ -390,16 +383,15 @@ TextEditorWidget *DiffEditor::rightEditorWidget() const
 void DiffEditor::documentHasChanged()
 {
     Utils::GuardLocker guard(m_ignoreChanges);
-    const QList<FileData> diffFileList = m_document->diffFiles();
+    const QList<FileData> &diffFileList = m_document->diffFiles();
 
     updateDescription();
     currentView()->setDiff(diffFileList, m_document->baseDirectory());
 
     m_entriesComboBox->clear();
-    const int count = diffFileList.count();
-    for (int i = 0; i < count; i++) {
-        const DiffFileInfo leftEntry = diffFileList.at(i).leftFileInfo;
-        const DiffFileInfo rightEntry = diffFileList.at(i).rightFileInfo;
+    for (const FileData &diffFile : diffFileList) {
+        const DiffFileInfo &leftEntry = diffFile.leftFileInfo;
+        const DiffFileInfo &rightEntry = diffFile.rightFileInfo;
         const QString leftShortFileName = Utils::FileName::fromString(leftEntry.fileName).fileName();
         const QString rightShortFileName = Utils::FileName::fromString(rightEntry.fileName).fileName();
         QString itemText;
@@ -452,7 +444,7 @@ void DiffEditor::toggleDescription()
         return;
 
     m_showDescription = !m_showDescription;
-    saveSetting(QLatin1String(descriptionVisibleKeyC), m_showDescription);
+    saveSetting(descriptionVisibleKeyC, m_showDescription);
     updateDescription();
 }
 
@@ -480,7 +472,7 @@ void DiffEditor::contextLineCountHasChanged(int lines)
         return;
 
     m_document->setContextLineCount(lines);
-    saveSetting(QLatin1String(contextLineCountKeyC), lines);
+    saveSetting(contextLineCountKeyC, lines);
 
     m_document->reload();
 }
@@ -492,7 +484,7 @@ void DiffEditor::ignoreWhitespaceHasChanged()
     if (m_ignoreChanges.isLocked() || ignore == m_document->ignoreWhitespace())
         return;
     m_document->setIgnoreWhitespace(ignore);
-    saveSetting(QLatin1String(ignoreWhitespaceKeyC), ignore);
+    saveSetting(ignoreWhitespaceKeyC, ignore);
 
     m_document->reload();
 }
@@ -528,11 +520,12 @@ void DiffEditor::reloadHasFinished(bool success)
 
     int index = -1;
     const QString startupFile = m_document->startupFile();
-    const QList<FileData> diffFileList = m_document->diffFiles();
+    const QList<FileData> &diffFileList = m_document->diffFiles();
     const int count = diffFileList.count();
     for (int i = 0; i < count; i++) {
-        const DiffFileInfo leftEntry = diffFileList.at(i).leftFileInfo;
-        const DiffFileInfo rightEntry = diffFileList.at(i).rightFileInfo;
+        const FileData &diffFile = diffFileList.at(i);
+        const DiffFileInfo &leftEntry = diffFile.leftFileInfo;
+        const DiffFileInfo &rightEntry = diffFile.rightFileInfo;
         if ((m_currentFileChunk.first.isEmpty()
              && m_currentFileChunk.second.isEmpty()
              && startupFile.endsWith(rightEntry.fileName))
@@ -598,7 +591,7 @@ void DiffEditor::toggleSync()
 
     QTC_ASSERT(currentView(), return);
     m_sync = !m_sync;
-    saveSetting(QLatin1String(horizontalScrollBarSynchronizationKeyC), m_sync);
+    saveSetting(horizontalScrollBarSynchronizationKeyC, m_sync);
     currentView()->setSync(m_sync);
 }
 
@@ -608,12 +601,12 @@ IDiffView *DiffEditor::loadSettings()
     QSettings *s = Core::ICore::settings();
 
     // Read current settings:
-    s->beginGroup(QLatin1String(settingsGroupC));
-    m_showDescription = s->value(QLatin1String(descriptionVisibleKeyC), true).toBool();
-    m_sync = s->value(QLatin1String(horizontalScrollBarSynchronizationKeyC), true).toBool();
-    m_document->setIgnoreWhitespace(s->value(QLatin1String(ignoreWhitespaceKeyC), false).toBool());
-    m_document->setContextLineCount(s->value(QLatin1String(contextLineCountKeyC), 3).toInt());
-    Core::Id id = Core::Id::fromSetting(s->value(QLatin1String(diffViewKeyC)));
+    s->beginGroup(settingsGroupC);
+    m_showDescription = s->value(descriptionVisibleKeyC, true).toBool();
+    m_sync = s->value(horizontalScrollBarSynchronizationKeyC, true).toBool();
+    m_document->setIgnoreWhitespace(s->value(ignoreWhitespaceKeyC, false).toBool());
+    m_document->setContextLineCount(s->value(contextLineCountKeyC, 3).toInt());
+    Core::Id id = Core::Id::fromSetting(s->value(diffViewKeyC));
     s->endGroup();
 
     IDiffView *view = Utils::findOr(m_views, m_views.at(0),
@@ -626,7 +619,7 @@ IDiffView *DiffEditor::loadSettings()
 void DiffEditor::saveSetting(const QString &key, const QVariant &value) const
 {
     QSettings *s = Core::ICore::settings();
-    s->beginGroup(QLatin1String(settingsGroupC));
+    s->beginGroup(settingsGroupC);
     s->setValue(key, value);
     s->endGroup();
 }
@@ -670,7 +663,7 @@ void DiffEditor::setupView(IDiffView *view)
     QTC_ASSERT(view, return);
     setCurrentView(view);
 
-    saveSetting(QLatin1String(diffViewKeyC), currentView()->id().toSetting());
+    saveSetting(diffViewKeyC, currentView()->id().toSetting());
 
     {
         Utils::GuardLocker guard(m_ignoreChanges);

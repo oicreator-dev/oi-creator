@@ -23,6 +23,8 @@
 **
 ****************************************************************************/
 
+#include "cppeditor.h"
+#include "cppeditorwidget.h"
 #include "cppeditorplugin.h"
 #include "cppeditortestcase.h"
 #include "cppquickfixassistant.h"
@@ -236,7 +238,6 @@ QuickFixOperationTest::QuickFixOperationTest(const QList<QuickFixTestDocument::P
     QuickFixOperations operations;
     factory->match(quickFixInterface, operations);
     if (operations.isEmpty()) {
-        QEXPECT_FAIL("onBaseOfQualifiedClassName", "QTCREATORBUG-14499", Continue);
         QVERIFY(testDocuments.first()->m_expectedSource.isEmpty());
         return;
     }
@@ -3025,6 +3026,37 @@ void CppEditorPlugin::test_quickfix_AddIncludeForUndefinedIdentifier_data()
         ;
     testDocuments << QuickFixTestDocument::create("afile.cpp", original, expected);
     QTest::newRow("onBaseOfQualifiedClassName")
+            << TestIncludePaths::globalIncludePath()
+            << testDocuments << firstRefactoringOperation << "";
+    testDocuments.clear();
+
+    // -------------------------------------------------------------------------------------------
+
+    // Header File
+    original = "template <typename T> class Foo { static void bar() {} };\n";
+    expected = original;
+    testDocuments << QuickFixTestDocument::create("afile.h", original, expected);
+
+    // Source File
+    original =
+        "#include \"header.h\"\n"
+        "\n"
+        "void f()\n"
+        "{\n"
+        "    @Foo<int>::bar();\n"
+        "}\n"
+        ;
+    expected =
+        "#include \"afile.h\"\n"
+        "#include \"header.h\"\n"
+        "\n"
+        "void f()\n"
+        "{\n"
+        "    Foo<int>::bar();\n"
+        "}\n"
+        ;
+    testDocuments << QuickFixTestDocument::create("afile.cpp", original, expected);
+    QTest::newRow("onBaseOfQualifiedTemplateClassName")
             << TestIncludePaths::globalIncludePath()
             << testDocuments << firstRefactoringOperation << "";
     testDocuments.clear();

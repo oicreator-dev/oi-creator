@@ -30,9 +30,11 @@
 #include "searchinterface.h"
 
 #include <refactoringserverinterface.h>
-#include <requestsourcerangesanddiagnosticsforquerymessage.h>
+#include <clangrefactoringservermessages.h>
 
-#include <cpptools/clangcompileroptionsbuilder.h>
+#include <cpptools/compileroptionsbuilder.h>
+
+#include <QPointer>
 
 namespace ClangRefactoring {
 
@@ -40,10 +42,11 @@ ClangQueryProjectsFindFilter::ClangQueryProjectsFindFilter(
         ClangBackEnd::RefactoringServerInterface &server,
         SearchInterface &searchInterface,
         RefactoringClient &refactoringClient)
-    : server(server),
-      searchInterface(searchInterface),
-      refactoringClient(refactoringClient)
+    : m_server(server),
+      m_searchInterface(searchInterface),
+      m_refactoringClient(refactoringClient)
 {
+    temporaryFile.open();
 }
 
 QString ClangQueryProjectsFindFilter::id() const
@@ -61,19 +64,57 @@ bool ClangQueryProjectsFindFilter::isEnabled() const
     return true;
 }
 
-void ClangQueryProjectsFindFilter::findAll(const QString &queryText, Core::FindFlags)
+namespace {
+Utils::SmallString toNative(const QString &path)
 {
-    searchHandle = searchInterface.startNewSearch(tr("Clang Query"), queryText);
+    Utils::SmallString nativePath = path;
 
-    searchHandle->setRefactoringServer(&server);
+#ifdef Q_OS_WIN
+    nativePath.replace('/', '\\');
+#endif
 
-    refactoringClient.setSearchHandle(searchHandle.get());
+    return nativePath;
+}
+}
+
+void ClangQueryProjectsFindFilter::requestSourceRangesAndDiagnostics(const QString &queryText,
+                                                                     const QString &exampleContent)
+{
+    const QString filePath = temporaryFile.fileName();
+
+    ClangBackEnd::RequestSourceRangesAndDiagnosticsForQueryMessage message(queryText,
+                                                                           {ClangBackEnd::FilePath(filePath),
+                                                                            exampleContent,
+                                                                            {"cc",  "-std=c++1z", toNative(filePath)}});
+
+    m_server.requestSourceRangesAndDiagnosticsForQueryMessage(std::move(message));
+}
+
+SearchHandle *ClangQueryProjectsFindFilter::find(const QString &queryText)
+{
+    m_searchHandle = m_searchInterface.startNewSearch(tr("Clang Query"), queryText);
+
+    m_searchHandle->setRefactoringServer(&m_server);
+
+    m_refactoringClient.setSearchHandle(m_searchHandle.get());
 
     auto message = createMessage(queryText);
 
-    refactoringClient.setExpectedResultCount(uint(message.sources().size()));
+    m_refactoringClient.setExpectedResultCount(uint(message.sources().size()));
 
-    server.requestSourceRangesAndDiagnosticsForQueryMessage(std::move(message));
+    m_server.requestSourceRangesForQueryMessage(std::move(message));
+
+    return m_searchHandle.get();
+}
+
+void ClangQueryProjectsFindFilter::findAll(const QString &, Core::FindFlags)
+{
+    find(queryText());
+}
+
+bool ClangQueryProjectsFindFilter::showSearchTermInput() const
+{
+    return false;
 }
 
 Core::FindFlags ClangQueryProjectsFindFilter::supportedFindFlags() const
@@ -83,62 +124,44 @@ Core::FindFlags ClangQueryProjectsFindFilter::supportedFindFlags() const
 
 void ClangQueryProjectsFindFilter::setProjectParts(const std::vector<CppTools::ProjectPart::Ptr> &projectParts)
 {
-    this->projectParts = projectParts;
+    this->m_projectParts = projectParts;
 }
 
-bool ClangQueryProjectsFindFilter::isUsable() const
+bool ClangQueryProjectsFindFilter::isAvailable() const
 {
-    return server.isUsable();
+    return m_server.isAvailable();
 }
 
-void ClangQueryProjectsFindFilter::setUsable(bool isUsable)
+void ClangQueryProjectsFindFilter::setAvailable(bool isAvailable)
 {
-    server.setUsable(isUsable);
+    m_server.setAvailable(isAvailable);
 }
 
 SearchHandle *ClangQueryProjectsFindFilter::searchHandleForTestOnly() const
 {
-    return searchHandle.get();
+    return m_searchHandle.get();
 }
 
 void ClangQueryProjectsFindFilter::setUnsavedContent(
         std::vector<ClangBackEnd::V2::FileContainer> &&unsavedContent)
 {
-    this->unsavedContent = std::move(unsavedContent);
+    this->m_unsavedContent = std::move(unsavedContent);
 }
 
 Utils::SmallStringVector ClangQueryProjectsFindFilter::compilerArguments(CppTools::ProjectPart *projectPart,
                                                                          CppTools::ProjectFile::Kind fileKind)
 {
-    using CppTools::ClangCompilerOptionsBuilder;
+    using CppTools::CompilerOptionsBuilder;
 
-    ClangCompilerOptionsBuilder builder(*projectPart, CLANG_VERSION, CLANG_RESOURCE_DIR);
+    CompilerOptionsBuilder builder(*projectPart, CLANG_VERSION, CLANG_RESOURCE_DIR);
 
-    builder.addWordWidth();
-    builder.addTargetTriple();
-    builder.addLanguageOption(fileKind);
-    builder.addOptionsForLanguage(/*checkForBorlandExtensions*/ true);
-    builder.enableExceptions();
+    return Utils::SmallStringVector(builder.build(fileKind,
+                                                  CompilerOptionsBuilder::PchUsage::None));
+}
 
-    builder.addDefineToAvoidIncludingGccOrMinGwIntrinsics();
-    builder.addDefineFloat128ForMingw();
-    builder.addToolchainAndProjectDefines();
-    builder.undefineCppLanguageFeatureMacrosForMsvc2015();
-
-    builder.addPredefinedMacrosAndHeaderPathsOptions();
-    builder.addWrappedQtHeadersIncludePath();
-    builder.addPrecompiledHeaderOptions(ClangCompilerOptionsBuilder::PchUsage::None);
-    builder.addHeaderPathOptions();
-    builder.addProjectConfigFileInclude();
-
-    builder.addMsvcCompatibilityVersion();
-
-    builder.add("-fmessage-length=0");
-    builder.add("-fmacro-backtrace-limit=0");
-    builder.add("-w");
-    builder.add("-ferror-limit=1000000");
-
-    return Utils::SmallStringVector(builder.options());
+QWidget *ClangQueryProjectsFindFilter::widget() const
+{
+    return nullptr;
 }
 
 namespace {
@@ -147,7 +170,7 @@ Utils::SmallStringVector createCommandLine(CppTools::ProjectPart *projectPart,
                                            const QString &documentFilePath,
                                            CppTools::ProjectFile::Kind fileKind)
 {
-    using CppTools::ClangCompilerOptionsBuilder;
+    using CppTools::CompilerOptionsBuilder;
 
     Utils::SmallStringVector commandLine = ClangQueryProjectsFindFilter::compilerArguments(projectPart, fileKind);
 
@@ -205,12 +228,22 @@ createSources(const std::vector<CppTools::ProjectPart::Ptr> &projectParts,
 
 }
 
-ClangBackEnd::RequestSourceRangesAndDiagnosticsForQueryMessage ClangQueryProjectsFindFilter::createMessage(const QString &queryText) const
+ClangBackEnd::RequestSourceRangesForQueryMessage ClangQueryProjectsFindFilter::createMessage(const QString &queryText) const
 {
-    return ClangBackEnd::RequestSourceRangesAndDiagnosticsForQueryMessage(
+    return ClangBackEnd::RequestSourceRangesForQueryMessage(
                 Utils::SmallString(queryText),
-                createSources(projectParts, unsavedContent),
-                Utils::clone(unsavedContent));
+                createSources(m_projectParts, m_unsavedContent),
+                Utils::clone(m_unsavedContent));
+}
+
+QString ClangQueryProjectsFindFilter::queryText() const
+{
+    return QString();
+}
+
+RefactoringClient &ClangQueryProjectsFindFilter::refactoringClient()
+{
+    return m_refactoringClient;
 }
 
 

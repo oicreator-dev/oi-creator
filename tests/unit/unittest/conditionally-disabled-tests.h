@@ -24,9 +24,18 @@
 ****************************************************************************/
 
 #include <QtGlobal>
+#include <clang-c/Index.h>
+
+#include <clangbackend_global.h>
 
 #ifdef Q_OS_WIN
 #  define DISABLED_ON_WINDOWS(x) DISABLED_##x
 #else
 #  define DISABLED_ON_WINDOWS(x) x
+#endif
+
+#ifdef IS_PRETTY_DECL_SUPPORTED
+#  define DISABLED_WITHOUT_PRETTYDECL_PATCH(x) x
+#else
+#  define DISABLED_WITHOUT_PRETTYDECL_PATCH(x) DISABLED_##x
 #endif

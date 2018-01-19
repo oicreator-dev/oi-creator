@@ -36,7 +36,7 @@ def main():
         return
 
     runButton = findObject(':*Qt Creator.Run_Core::Internal::FancyToolButton')
-    openQmakeProject(pathSpeedcrunch, [Targets.DESKTOP_480_DEFAULT])
+    openQmakeProject(pathSpeedcrunch, [Targets.DESKTOP_487_DEFAULT])
     # Wait for parsing to complete
     waitFor("runButton.enabled", 30000)
     # Starting before opening, because this is where Creator froze (QTCREATORBUG-10733)
@@ -66,13 +66,13 @@ def main():
     generalMessages = str(waitForObject(":Qt Creator_Core::OutputWindow").plainText)
     test.compare(generalMessages.count("Project MESSAGE: Cannot build Qt Creator with Qt version 5.3.1."), 1,
                  "Warning about outdated Qt shown?")
-    test.compare(generalMessages.count("Project ERROR: Use at least Qt 5.5.0."), 1,
-                 "Minimum Qt version shown?")
+    test.compare(generalMessages.count("Project ERROR: Use at least Qt 5.6.2."), 2,
+                 "Minimum Qt version shown (once when parsing with default kit, once with selected)?")
 
     # Verify that qmljs.g is in the project even when we don't know where (QTCREATORBUG-17609)
     selectFromLocator("p qmljs.g", "qmljs.g")
     # Now check some basic lookups in the search box
-    selectFromLocator(": Qlist::QList", "QList::QList")
+    selectFromLocator(": qlist::qlist", "QList::QList")
     test.compare(wordUnderCursor(waitForObject(":Qt Creator_CppEditor::Internal::CPPEditorWidget")), "QList")
 
     invokeMenuItem("File", "Exit")

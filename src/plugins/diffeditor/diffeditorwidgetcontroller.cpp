@@ -65,7 +65,7 @@ DiffEditorWidgetController::DiffEditorWidgetController(QWidget *diffEditorWidget
 void DiffEditorWidgetController::setDocument(DiffEditorDocument *document)
 {
     if (!m_progressIndicator) {
-        m_progressIndicator = new Utils::ProgressIndicator(Utils::ProgressIndicator::Large);
+        m_progressIndicator = new Utils::ProgressIndicator(Utils::ProgressIndicatorSize::Large);
         m_progressIndicator->attachToWidget(m_diffEditorWidget);
         m_progressIndicator->hide();
     }
@@ -78,7 +78,7 @@ void DiffEditorWidgetController::setDocument(DiffEditorDocument *document)
         disconnect(m_document, &IDocument::reloadFinished, this, &DiffEditorWidgetController::hideProgress);
     }
 
-    const bool wasRunning = m_document && m_document->isReloading();
+    const bool wasRunning = m_document && m_document->state() == DiffEditorDocument::Reloading;
 
     m_document = document;
 
@@ -87,7 +87,7 @@ void DiffEditorWidgetController::setDocument(DiffEditorDocument *document)
         connect(m_document, &IDocument::reloadFinished, this, &DiffEditorWidgetController::hideProgress);
     }
 
-    const bool isRunning = m_document && m_document->isReloading();
+    const bool isRunning = m_document && m_document->state() == DiffEditorDocument::Reloading;
 
     if (wasRunning == isRunning)
         return;
@@ -289,7 +289,7 @@ void DiffEditorWidgetController::slotSendChunkToCodePaster()
     if (patch.isEmpty())
         return;
 
-    pasteService->postText(patch, QLatin1String(Constants::DIFF_EDITOR_MIMETYPE));
+    pasteService->postText(patch, Constants::DIFF_EDITOR_MIMETYPE);
 }
 
 void DiffEditorWidgetController::slotApplyChunk()

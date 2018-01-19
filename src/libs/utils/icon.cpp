@@ -36,6 +36,7 @@
 #include <QPainter>
 #include <QPaintEngine>
 #include <QWidget>
+#include <QDebug>
 
 namespace Utils {
 
@@ -67,7 +68,12 @@ static MasksAndColors masksAndColors(const Icon &icon, int dpr)
         const QColor color = creatorTheme()->color(i.second);
         const QString dprFileName = StyleHelper::availableImageResolutions(i.first).contains(dpr) ?
                     StyleHelper::imageFileWithResolution(fileName, dpr) : fileName;
-        result.append(qMakePair(QPixmap(dprFileName), color));
+        QPixmap pixmap;
+        if (!pixmap.load(dprFileName)) {
+            pixmap = QPixmap(1, 1);
+            qWarning() << "Could not load image: " << dprFileName;
+        }
+        result.append({pixmap, color});
     }
     return result;
 }
@@ -197,7 +203,7 @@ QIcon Icon::icon() const
     }
 }
 
-QPixmap Icon::pixmap() const
+QPixmap Icon::pixmap(QIcon::Mode iconMode) const
 {
     if (isEmpty()) {
         return QPixmap();
@@ -207,7 +213,9 @@ QPixmap Icon::pixmap() const
         const MasksAndColors masks =
                 masksAndColors(*this, qRound(qApp->devicePixelRatio()));
         const QPixmap combinedMask = Utils::combinedMask(masks, m_style);
-        return masksToIcon(masks, combinedMask, m_style);
+        return iconMode == QIcon::Disabled
+                ? maskToColorAndAlpha(combinedMask, creatorTheme()->color(Theme::IconsDisabledColor))
+                : masksToIcon(masks, combinedMask, m_style);
     }
 }
 

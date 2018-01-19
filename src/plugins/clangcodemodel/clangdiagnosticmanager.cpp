@@ -33,14 +33,15 @@
 
 #include <cpptools/cpptoolsconstants.h>
 
-#include <texteditor/convenience.h>
 #include <texteditor/fontsettings.h>
 #include <texteditor/textdocument.h>
 #include <texteditor/texteditorsettings.h>
 
+#include <utils/textutils.h>
 #include <utils/fileutils.h>
 #include <utils/proxyaction.h>
 #include <utils/qtcassert.h>
+#include <utils/theme/theme.h>
 
 #include <QFileInfo>
 #include <QTextBlock>
@@ -175,7 +176,7 @@ void addErrorSelections(const QVector<ClangBackEnd::DiagnosticContainer> &diagno
 ClangBackEnd::SourceLocationContainer toSourceLocation(QTextDocument *textDocument, int position)
 {
     int line, column;
-    if (TextEditor::Convenience::convertPosition(textDocument, position, &line, &column))
+    if (Utils::Text::convertPosition(textDocument, position, &line, &column))
         return ClangBackEnd::SourceLocationContainer(Utf8String(), line, column);
 
     return ClangBackEnd::SourceLocationContainer();
@@ -277,6 +278,8 @@ namespace Internal {
 ClangDiagnosticManager::ClangDiagnosticManager(TextEditor::TextDocument *textDocument)
     : m_textDocument(textDocument)
 {
+    m_textMarkDelay.setInterval(1500);
+    m_textMarkDelay.setSingleShot(true);
 }
 
 ClangDiagnosticManager::~ClangDiagnosticManager()
@@ -294,6 +297,7 @@ void ClangDiagnosticManager::cleanMarks()
 }
 void ClangDiagnosticManager::generateTextMarks()
 {
+    QObject::disconnect(&m_textMarkDelay, &QTimer::timeout, 0, 0);
     cleanMarks();
     m_clangTextMarks.reserve(m_warningDiagnostics.size() + m_errorDiagnostics.size());
     addClangTextMarks(m_warningDiagnostics);
@@ -347,6 +351,20 @@ ClangDiagnosticManager::diagnosticsAt(uint line, uint column) const
     return diagnostics;
 }
 
+void ClangDiagnosticManager::invalidateDiagnostics()
+{
+    m_textMarkDelay.start();
+    if (m_diagnosticsInvalidated)
+        return;
+
+    m_diagnosticsInvalidated = true;
+    for (ClangTextMark *textMark : m_clangTextMarks) {
+        textMark->setColor(::Utils::Theme::Color::IconsDisabledColor);
+        textMark->updateIcon(/*valid=*/ false);
+        textMark->updateMarker();
+    }
+}
+
 void ClangDiagnosticManager::clearDiagnosticsWithFixIts()
 {
     m_fixItdiagnostics.clear();
@@ -362,13 +380,25 @@ void ClangDiagnosticManager::generateEditorSelections()
 }
 
 void ClangDiagnosticManager::processNewDiagnostics(
-        const QVector<ClangBackEnd::DiagnosticContainer> &allDiagnostics)
+        const QVector<ClangBackEnd::DiagnosticContainer> &allDiagnostics,
+        bool showTextMarkAnnotations)
 {
+    m_diagnosticsInvalidated = false;
+    m_showTextMarkAnnotations = showTextMarkAnnotations;
     filterDiagnostics(allDiagnostics);
 
-    generateTextMarks();
     generateEditorSelections();
     generateFixItAvailableMarkers();
+    if (m_firstDiagnostics) {
+        m_firstDiagnostics = false;
+        generateTextMarks();
+    } else if (!m_textMarkDelay.isActive()) {
+        generateTextMarks();
+    } else {
+        QObject::connect(&m_textMarkDelay, &QTimer::timeout, [this]() {
+            generateTextMarks();
+        });
+    }
 }
 
 const QVector<ClangBackEnd::DiagnosticContainer> &
@@ -386,7 +416,8 @@ void ClangDiagnosticManager::addClangTextMarks(
             m_clangTextMarks.erase(it, m_clangTextMarks.end());
             delete mark;
          };
-        auto textMark = new ClangTextMark(filePath(), diagnostic, onMarkRemoved);
+        auto textMark = new ClangTextMark(filePath(), diagnostic, onMarkRemoved,
+                                          m_showTextMarkAnnotations);
         m_clangTextMarks.push_back(textMark);
         m_textDocument->addMark(textMark);
     }

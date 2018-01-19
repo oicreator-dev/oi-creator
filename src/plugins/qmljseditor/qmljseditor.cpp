@@ -34,6 +34,7 @@
 #include "qmljshighlighter.h"
 #include "qmljshoverhandler.h"
 #include "qmljsquickfixassist.h"
+#include "qmljstextmark.h"
 #include "qmloutlinemodel.h"
 
 #include <qmljs/qmljsbind.h>
@@ -68,6 +69,7 @@
 #include <texteditor/codeassist/genericproposal.h>
 #include <texteditor/codeassist/genericproposalmodel.h>
 #include <texteditor/texteditoractionhandler.h>
+#include <texteditor/textmark.h>
 
 #include <utils/annotateditemdelegate.h>
 #include <utils/changeset.h>
@@ -201,12 +203,14 @@ static void appendExtraSelectionsForMessages(
 
 void QmlJSEditorWidget::updateCodeWarnings(Document::Ptr doc)
 {
+    cleanDiagnosticMarks();
     if (doc->ast()) {
         setExtraSelections(CodeWarningsSelection, QList<QTextEdit::ExtraSelection>());
     } else if (doc->language().isFullySupportedLanguage()) {
         // show parsing errors
         QList<QTextEdit::ExtraSelection> selections;
         appendExtraSelectionsForMessages(&selections, doc->diagnosticMessages(), document());
+        createTextMarks(doc->diagnosticMessages());
         setExtraSelections(CodeWarningsSelection, selections);
     } else {
         setExtraSelections(CodeWarningsSelection, QList<QTextEdit::ExtraSelection>());
@@ -221,7 +225,7 @@ void QmlJSEditorWidget::modificationChanged(bool changed)
 
 bool QmlJSEditorWidget::isOutlineCursorChangesBlocked()
 {
-    return hasFocus() || m_blockOutLineCursorChanges;
+    return hasFocus();
 }
 
 void QmlJSEditorWidget::jumpToOutlineElement(int /*index*/)
@@ -257,14 +261,12 @@ void QmlJSEditorWidget::updateOutlineIndexNow()
     emit outlineModelIndexChanged(m_outlineModelIndex);
 
     if (comboIndex.isValid()) {
-        bool blocked = m_outlineCombo->blockSignals(true);
+        QSignalBlocker blocker(m_outlineCombo);
 
         // There is no direct way to select a non-root item
         m_outlineCombo->setRootModelIndex(comboIndex.parent());
         m_outlineCombo->setCurrentIndex(comboIndex.row());
         m_outlineCombo->setRootModelIndex(QModelIndex());
-
-        m_outlineCombo->blockSignals(blocked);
     }
 }
 } // namespace Internal
@@ -656,8 +658,16 @@ static QString inspectCppComponent(const CppComponentValue *cppValue)
     const int enumeratorCount = cppValue->metaObject()->enumeratorCount();
     for (int index = cppValue->metaObject()->enumeratorOffset(); index < enumeratorCount; ++index) {
         LanguageUtils::FakeMetaEnum enumerator = cppValue->metaObject()->enumerator(index);
-        bufWriter << "    // Enum " << enumerator.name() << " { " <<
-                     enumerator.keys().join(QLatin1Char(',')) << " }" << endl;
+        bufWriter << "    enum " << enumerator.name() << " {" << endl;
+        const QStringList keys = enumerator.keys();
+        const int keysCount = keys.size();
+        for (int i = 0; i < keysCount; ++i) {
+            bufWriter << "        " << keys.at(i);
+            if (i != keysCount - 1)
+                bufWriter << ',';
+            bufWriter << endl;
+        }
+        bufWriter << "    }" << endl;
     }
 
     bufWriter << "}" << endl;
@@ -705,36 +715,36 @@ void QmlJSEditorWidget::inspectElementUnderCursor() const
     widget->textDocument()->setPlainText(buf);
 }
 
-TextEditorWidget::Link QmlJSEditorWidget::findLinkAt(const QTextCursor &cursor,
-                                                             bool /*resolveTarget*/,
-                                                             bool /*inNextSplit*/)
+Utils::Link QmlJSEditorWidget::findLinkAt(const QTextCursor &cursor,
+                                          bool /*resolveTarget*/,
+                                          bool /*inNextSplit*/)
 {
     const SemanticInfo semanticInfo = m_qmlJsEditorDocument->semanticInfo();
     if (! semanticInfo.isValid())
-        return Link();
+        return Utils::Link();
 
     const unsigned cursorPosition = cursor.position();
 
     AST::Node *node = semanticInfo.astNodeAt(cursorPosition);
-    QTC_ASSERT(node, return Link());
+    QTC_ASSERT(node, return Utils::Link());
 
     if (AST::UiImport *importAst = cast<AST::UiImport *>(node)) {
         // if it's a file import, link to the file
         foreach (const ImportInfo &import, semanticInfo.document->bind()->imports()) {
             if (import.ast() == importAst && import.type() == ImportType::File) {
-                TextEditorWidget::Link link(import.path());
+                Utils::Link link(import.path());
                 link.linkTextStart = importAst->firstSourceLocation().begin();
                 link.linkTextEnd = importAst->lastSourceLocation().end();
                 return link;
             }
         }
-        return Link();
+        return Utils::Link();
     }
 
     // string literals that could refer to a file link to them
     if (StringLiteral *literal = cast<StringLiteral *>(node)) {
         const QString &text = literal->value.toString();
-        TextEditorWidget::Link link;
+        Utils::Link link;
         link.linkTextStart = literal->literalToken.begin();
         link.linkTextEnd = literal->literalToken.end();
         if (semanticInfo.snapshot.document(text)) {
@@ -758,9 +768,9 @@ TextEditorWidget::Link QmlJSEditorWidget::findLinkAt(const QTextCursor &cursor,
     int line = 0, column = 0;
 
     if (! (value && value->getSourceLocation(&fileName, &line, &column)))
-        return Link();
+        return Utils::Link();
 
-    TextEditorWidget::Link link;
+    Utils::Link link;
     link.targetFileName = fileName;
     link.targetLine = line;
     link.targetColumn = column - 1; // adjust the column
@@ -785,7 +795,7 @@ TextEditorWidget::Link QmlJSEditorWidget::findLinkAt(const QTextCursor &cursor,
         return link;
     }
 
-    return Link();
+    return Utils::Link();
 }
 
 void QmlJSEditorWidget::findUsages()
@@ -814,7 +824,6 @@ void QmlJSEditorWidget::showContextPane()
 
 void QmlJSEditorWidget::contextMenuEvent(QContextMenuEvent *e)
 {
-    m_blockOutLineCursorChanges = true;
     QPointer<QMenu> menu(new QMenu(this));
 
     QMenu *refactoringMenu = new QMenu(tr("Refactoring"), menu);
@@ -859,7 +868,6 @@ void QmlJSEditorWidget::contextMenuEvent(QContextMenuEvent *e)
 
     menu->exec(e->globalPos());
     delete menu;
-    m_blockOutLineCursorChanges = false;
 }
 
 bool QmlJSEditorWidget::event(QEvent *e)
@@ -927,6 +935,8 @@ void QmlJSEditorWidget::semanticInfoUpdated(const SemanticInfo &semanticInfo)
         }
     }
 
+    createTextMarks(semanticInfo);
+
     updateUses();
 }
 
@@ -966,6 +976,61 @@ bool QmlJSEditorWidget::hideContextPane()
     if (b)
         m_contextPane->apply(this, m_qmlJsEditorDocument->semanticInfo().document, 0, 0, false);
     return b;
+}
+
+void QmlJSEditorWidget::createTextMarks(const QList<DiagnosticMessage> &diagnostics)
+{
+    for (const DiagnosticMessage &diagnostic : diagnostics) {
+        const auto onMarkRemoved = [this](QmlJSTextMark *mark) {
+            m_diagnosticMarks.removeAll(mark);
+            delete mark;
+         };
+
+        auto mark = new QmlJSTextMark(textDocument()->filePath().toString(),
+                                      diagnostic, onMarkRemoved);
+        m_diagnosticMarks.append(mark);
+        textDocument()->addMark(mark);
+    }
+}
+
+static void cleanMarks(QVector<TextMark *> *marks, TextDocument *doc)
+{
+    for (TextEditor::TextMark *mark : *marks) {
+        doc->removeMark(mark);
+        delete mark;
+    }
+    marks->clear();
+}
+
+void QmlJSEditorWidget::cleanDiagnosticMarks()
+{
+    cleanMarks(&m_diagnosticMarks, textDocument());
+}
+
+void QmlJSEditorWidget::createTextMarks(const SemanticInfo &info)
+{
+    cleanSemanticMarks();
+    const auto onMarkRemoved = [this](QmlJSTextMark *mark) {
+        m_semanticMarks.removeAll(mark);
+        delete mark;
+    };
+    for (const DiagnosticMessage &diagnostic : info.semanticMessages) {
+        auto mark = new QmlJSTextMark(textDocument()->filePath().toString(),
+                                      diagnostic, onMarkRemoved);
+        m_semanticMarks.append(mark);
+        textDocument()->addMark(mark);
+    }
+    for (const QmlJS::StaticAnalysis::Message &message : info.staticAnalysisMessages) {
+        auto mark = new QmlJSTextMark(textDocument()->filePath().toString(),
+                                      message, onMarkRemoved);
+        m_semanticMarks.append(mark);
+        textDocument()->addMark(mark);
+    }
+}
+
+void QmlJSEditorWidget::cleanSemanticMarks()
+{
+    cleanMarks(&m_semanticMarks, textDocument());
 }
 
 AssistInterface *QmlJSEditorWidget::createAssistInterface(
@@ -1034,6 +1099,7 @@ QmlJSEditorFactory::QmlJSEditorFactory()
     setDisplayName(QCoreApplication::translate("OpenWith::Editors", Constants::C_QMLJSEDITOR_DISPLAY_NAME));
 
     addMimeType(QmlJSTools::Constants::QML_MIMETYPE);
+    addMimeType(QmlJSTools::Constants::QMLUI_MIMETYPE);
     addMimeType(QmlJSTools::Constants::QMLPROJECT_MIMETYPE);
     addMimeType(QmlJSTools::Constants::QBS_MIMETYPE);
     addMimeType(QmlJSTools::Constants::QMLTYPES_MIMETYPE);

@@ -119,6 +119,15 @@ bool TextEditorPlugin::initialize(const QStringList &arguments, QString *errorMe
             editor->editorWidget()->invokeAssist(QuickFix);
     });
 
+    QAction *showContextMenuAction = new QAction(tr("Show Context Menu"), this);
+    ActionManager::registerAction(showContextMenuAction,
+                                  Constants::SHOWCONTEXTMENU,
+                                  context);
+    connect(showContextMenuAction, &QAction::triggered, []() {
+        if (BaseTextEditor *editor = BaseTextEditor::currentTextEditor())
+            editor->editorWidget()->showContextMenu();
+    });
+
     // Generic highlighter.
     connect(ICore::instance(), &ICore::coreOpened, Manager::instance(), &Manager::registerHighlightingFiles);
 
@@ -138,8 +147,6 @@ bool TextEditorPlugin::initialize(const QStringList &arguments, QString *errorMe
 
 void TextEditorPlugin::extensionsInitialized()
 {
-    m_outlineFactory->setWidgetFactories(ExtensionSystem::PluginManager::getObjects<TextEditor::IOutlineWidgetFactory>());
-
     connect(m_settings, &TextEditorSettings::fontSettingsChanged,
             this, &TextEditorPlugin::updateSearchResultsFont);
 

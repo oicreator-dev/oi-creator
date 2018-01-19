@@ -27,13 +27,16 @@
 
 #include "builddirreader.h"
 #include "servermode.h"
+#include "cmakeparser.h"
+
+#include <QList>
 
 #include <memory>
 
+namespace ProjectExplorer { class ProjectNode; }
+
 namespace CMakeProjectManager {
 namespace Internal {
-
-class CMakeListsNode;
 
 class ServerModeReader : public BuildDirReader
 {
@@ -43,18 +46,17 @@ public:
     ServerModeReader();
     ~ServerModeReader() final;
 
-    void setParameters(const Parameters &p) final;
+    void setParameters(const BuildDirParameters &p) final;
 
-    bool isCompatible(const Parameters &p) final;
+    bool isCompatible(const BuildDirParameters &p) final;
     void resetData() final;
-    void parse(bool force) final;
+    void parse(bool forceConfiguration) final;
     void stop() final;
 
     bool isReady() const final;
     bool isParsing() const final;
-    bool hasData() const final;
 
-    QList<CMakeBuildTarget> buildTargets() const final;
+    QList<CMakeBuildTarget> takeBuildTargets() final;
     CMakeConfig takeParsedConfiguration() final;
     void generateProjectTree(CMakeProjectNode *root,
                              const QList<const ProjectExplorer::FileNode *> &allFiles) final;
@@ -65,6 +67,10 @@ private:
     void handleError(const QString &message);
     void handleProgress(int min, int cur, int max, const QString &inReplyTo);
     void handleSignal(const QString &signal, const QVariantMap &data);
+
+    int calculateProgress(const int minRange, const int min,
+                          const int cur,
+                          const int max, const int maxRange);
 
     struct Target;
     struct Project;
@@ -79,15 +85,33 @@ private:
 
         Target *target = nullptr;
         QString compileFlags;
-        QStringList defines;
+        ProjectExplorer::Macros macros;
         QList<IncludePath *> includePaths;
         QString language;
         QList<Utils::FileName> sources;
         bool isGenerated;
     };
 
+    struct BacktraceItem {
+        int line = -1;
+        QString path;
+        QString name;
+    };
+
+    struct CrossReference {
+        ~CrossReference() { qDeleteAll(backtrace); backtrace.clear(); }
+        QList<BacktraceItem *> backtrace;
+        enum Type { TARGET, LIBRARIES, DEFINES, INCLUDES, UNKNOWN };
+        Type type;
+    };
+
     struct Target {
-        ~Target() { qDeleteAll(fileGroups); fileGroups.clear(); }
+        ~Target() {
+            qDeleteAll(fileGroups);
+            fileGroups.clear();
+            qDeleteAll(crossReferences);
+            crossReferences.clear();
+        }
 
         Project *project = nullptr;
         QString name;
@@ -96,6 +120,7 @@ private:
         Utils::FileName sourceDirectory;
         Utils::FileName buildDirectory;
         QList<FileGroup *> fileGroups;
+        QList<CrossReference *> crossReferences;
     };
 
     struct Project {
@@ -110,6 +135,9 @@ private:
     Project *extractProjectData(const QVariantMap &data, QSet<QString> &knownTargets);
     Target *extractTargetData(const QVariantMap &data, Project *p, QSet<QString> &knownTargets);
     FileGroup *extractFileGroupData(const QVariantMap &data, const QDir &srcDir, Target *t);
+    QList<CrossReference *> extractCrossReferences(const QVariantMap &data);
+    QList<BacktraceItem *> extractBacktrace(const QVariantList &data);
+    BacktraceItem *extractBacktraceItem(const QVariantMap &data);
     void extractCMakeInputsData(const QVariantMap &data);
     void extractCacheData(const QVariantMap &data);
 
@@ -132,22 +160,26 @@ private:
                         const QList<ProjectExplorer::FileNode *> knownHeaders,
                         const QList<const ProjectExplorer::FileNode *> &allFiles);
 
-    bool m_hasData = false;
-
     std::unique_ptr<ServerMode> m_cmakeServer;
     std::unique_ptr<QFutureInterface<void>> m_future;
 
     int m_progressStepMinimum = 0;
     int m_progressStepMaximum = 1000;
 
-    CMakeConfig m_cmakeCache;
+    CMakeConfig m_cmakeConfiguration;
 
     QSet<Utils::FileName> m_cmakeFiles;
     QList<ProjectExplorer::FileNode *> m_cmakeInputsFileNodes;
 
     QList<Project *> m_projects;
-    mutable QList<Target *> m_targets;
+    QList<Target *> m_targets;
     QList<FileGroup *> m_fileGroups;
+
+    CMakeParser m_parser;
+
+#if defined(WITH_TESTS)
+    friend class CMakeProjectPlugin;
+#endif
 };
 
 } // namespace Internal

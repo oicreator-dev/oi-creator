@@ -70,7 +70,7 @@ protected:
     // inside reload() (for synchronous reload)
     // or later (for asynchronous reload)
     virtual void reload() = 0;
-    virtual void reloadFinished(bool success);
+    void reloadFinished(bool success);
 
     void setDiffFiles(const QList<FileData> &diffFileList,
                       const QString &baseDirectory = QString(),
@@ -85,9 +85,9 @@ private:
 
     Internal::DiffEditorDocument *const m_document;
 
-    bool m_isReloading;
-    int m_diffFileIndex;
-    int m_chunkIndex;
+    bool m_isReloading = false;
+    int m_diffFileIndex = -1;
+    int m_chunkIndex = -1;
 
     friend class Internal::DiffEditorDocument;
 };

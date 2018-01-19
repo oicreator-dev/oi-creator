@@ -243,7 +243,7 @@ def getOutputFromCmdline(cmdline, environment=None, acceptedError=0):
             test.warning("Command '%s' returned %d" % (e.cmd, e.returncode))
         return e.output
 
-def selectFromFileDialog(fileName, waitForFile=False):
+def selectFromFileDialog(fileName, waitForFile=False, ignoreFinalSnooze=False):
     if platform.system() == "Darwin":
         snooze(1)
         nativeType("<Command+Shift+g>")
@@ -253,7 +253,8 @@ def selectFromFileDialog(fileName, waitForFile=False):
         nativeType("<Return>")
         snooze(3)
         nativeType("<Return>")
-        snooze(1)
+        if not ignoreFinalSnooze:
+            snooze(1)
     else:
         fName = os.path.basename(os.path.abspath(fileName))
         pName = os.path.dirname(os.path.abspath(fileName)) + os.sep
@@ -271,9 +272,12 @@ def selectFromFileDialog(fileName, waitForFile=False):
             nativeType("<Ctrl+a>")
             nativeType("<Delete>")
             nativeType(pName + fName)
-            snooze(1)
+            seconds = len(pName + fName) / 20
+            test.log("Using snooze(%d) [problems with event processing of nativeType()]" % seconds)
+            snooze(seconds)
             nativeType("<Return>")
-            snooze(3)
+            if not ignoreFinalSnooze:
+                snooze(3)
     if waitForFile:
         fileCombo = waitForObject(":Qt Creator_FilenameQComboBox")
         if not waitFor("str(fileCombo.currentText) in fileName", 5000):
@@ -540,13 +544,24 @@ def iterateKits(keepOptionsOpen=False, alreadyOnOptionsDialog=False,
     else:
         return result
 
-# set "Always Start Full Help" in "Tools" -> "Options..." -> "Help" -> "General"
-def setAlwaysStartFullHelp():
+# set a help viewer that will always be used, regardless of Creator's width
+
+class HelpViewer:
+    HELPMODE, SIDEBYSIDE, EXTERNALWINDOW = range(3)
+
+def setFixedHelpViewer(helpViewer):
     invokeMenuItem("Tools", "Options...")
     waitForObjectItem(":Options_QListView", "Help")
     clickItem(":Options_QListView", "Help", 5, 5, 0, Qt.LeftButton)
     clickOnTab(":Options.qt_tabwidget_tabbar_QTabBar", "General")
-    selectFromCombo(":Startup.contextHelpComboBox_QComboBox", "Always Show in Help Mode")
+    mode = "Always Show "
+    if helpViewer == HelpViewer.HELPMODE:
+        mode += "in Help Mode"
+    elif helpViewer == HelpViewer.SIDEBYSIDE:
+        mode += "Side-by-Side"
+    elif helpViewer == HelpViewer.EXTERNALWINDOW:
+        mode += "in External Window"
+    selectFromCombo(":Startup.contextHelpComboBox_QComboBox", mode)
     clickButton(waitForObject(":Options.OK_QPushButton"))
 
 def removePackagingDirectory(projectPath):

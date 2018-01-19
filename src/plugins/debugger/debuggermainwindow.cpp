@@ -50,6 +50,8 @@
 #include <QHBoxLayout>
 #include <QMenu>
 #include <QStackedWidget>
+#include <QStandardItemModel>
+#include <QTimer>
 #include <QToolButton>
 
 using namespace Debugger;
@@ -126,6 +128,16 @@ QDockWidget *DebuggerMainWindow::dockWidget(const QByteArray &dockId) const
     return m_dockForDockId.value(dockId);
 }
 
+void DebuggerMainWindow::raiseDock(const QByteArray &dockId)
+{
+    QDockWidget *dock = m_dockForDockId.value(dockId);
+    QTC_ASSERT(dock, return);
+    QAction *act = dock->toggleViewAction();
+    if (!act->isChecked())
+        QTimer::singleShot(1, act, [act] { act->trigger(); });
+    dock->raise();
+}
+
 void DebuggerMainWindow::onModeChanged(Core::Id mode)
 {
     if (mode == Debugger::Constants::MODE_DEBUG) {
@@ -140,6 +152,16 @@ void DebuggerMainWindow::onModeChanged(Core::Id mode)
                 dockWidget->hide();
         }
     }
+}
+
+void DebuggerMainWindow::setPerspectiveEnabled(const QByteArray &perspectiveId, bool enabled)
+{
+    const int index = m_perspectiveChooser->findData(perspectiveId);
+    QTC_ASSERT(index != -1, return);
+    auto model = qobject_cast<QStandardItemModel*>(m_perspectiveChooser->model());
+    QTC_ASSERT(model, return);
+    QStandardItem *item = model->item(index, 0);
+    item->setFlags(enabled ? item->flags() | Qt::ItemIsEnabled : item->flags() & ~Qt::ItemIsEnabled );
 }
 
 void DebuggerMainWindow::resetCurrentPerspective()
@@ -161,7 +183,7 @@ void DebuggerMainWindow::restorePerspective(const QByteArray &perspectiveId)
 void DebuggerMainWindow::finalizeSetup()
 {
     auto viewButton = new QToolButton;
-    viewButton->setText(tr("Views"));
+    viewButton->setText(tr("&Views"));
 
     auto toolbar = new Utils::StyledBar;
     toolbar->setProperty("topBorder", true);

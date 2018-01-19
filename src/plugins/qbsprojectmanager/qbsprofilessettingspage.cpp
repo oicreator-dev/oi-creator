@@ -26,14 +26,15 @@
 #include "qbsprofilessettingspage.h"
 #include "ui_qbsprofilessettingswidget.h"
 
-#include "customqbspropertiesdialog.h"
 #include "qbsprojectmanager.h"
 #include "qbsprojectmanagerconstants.h"
 #include "qbsprojectmanagersettings.h"
 
+#include <app/app_version.h>
 #include <coreplugin/icore.h>
 #include <projectexplorer/kit.h>
 #include <projectexplorer/kitmanager.h>
+#include <projectexplorer/projectexplorerconstants.h>
 #include <utils/algorithm.h>
 #include <utils/qtcassert.h>
 
@@ -57,16 +58,9 @@ public:
 private:
     void refreshKitsList();
     void displayCurrentProfile();
-    void editProfile();
-    void setupCustomProperties(const ProjectExplorer::Kit *kit);
-    void mergeCustomPropertiesIntoModel();
 
     Ui::QbsProfilesSettingsWidget m_ui;
     qbs::SettingsModel m_model;
-
-    typedef QHash<Core::Id, QVariantMap> CustomProperties;
-    CustomProperties m_customProperties;
-    bool m_applyingProperties;
 };
 
 QbsProfilesSettingsPage::QbsProfilesSettingsPage(QObject *parent)
@@ -75,12 +69,12 @@ QbsProfilesSettingsPage::QbsProfilesSettingsPage(QObject *parent)
     , m_useQtcSettingsDirPersistent(QbsProjectManagerSettings::useCreatorSettingsDirForQbs())
 
 {
-    setId("AA.QbsProfiles");
-    setDisplayName(QCoreApplication::translate("QbsProjectManager", "Profiles"));
-    setCategory(Constants::QBS_SETTINGS_CATEGORY);
-    setDisplayCategory(QCoreApplication::translate("QbsProjectManager",
-                                                   Constants::QBS_SETTINGS_TR_CATEGORY));
-    setCategoryIcon(Utils::Icon(Constants::QBS_SETTINGS_CATEGORY_ICON));
+    setId("Y.QbsProfiles");
+    setDisplayName(QCoreApplication::translate("QbsProjectManager", "Qbs"));
+    setCategory(ProjectExplorer::Constants::PROJECTEXPLORER_SETTINGS_CATEGORY);
+    setDisplayCategory(QCoreApplication::translate("ProjectExplorer",
+       ProjectExplorer::Constants::PROJECTEXPLORER_SETTINGS_TR_CATEGORY));
+    setCategoryIcon(Utils::Icon(ProjectExplorer::Constants::PROJECTEXPLORER_SETTINGS_CATEGORY_ICON));
 }
 
 QWidget *QbsProfilesSettingsPage::widget()
@@ -109,11 +103,13 @@ void QbsProfilesSettingsPage::finish()
 QbsProfilesSettingsWidget::QbsProfilesSettingsWidget(QWidget *parent)
     : QWidget(parent)
     , m_model(QbsProjectManagerSettings::qbsSettingsBaseDir())
-    , m_applyingProperties(false)
 {
     m_model.setEditable(false);
     m_ui.setupUi(this);
+    m_ui.settingsDirCheckBox->setText(tr("Store profiles in %1 settings directory")
+                                      .arg(Core::Constants::IDE_DISPLAY_NAME));
     m_ui.settingsDirCheckBox->setChecked(QbsProjectManagerSettings::useCreatorSettingsDirForQbs());
+    m_ui.versionValueLabel->setText(qbs::LanguageInfo::qbsVersion());
     connect(ProjectExplorer::KitManager::instance(), &ProjectExplorer::KitManager::kitsChanged,
             this, &QbsProfilesSettingsWidget::refreshKitsList);
     connect(m_ui.settingsDirCheckBox, &QCheckBox::stateChanged, [this]() {
@@ -125,31 +121,17 @@ QbsProfilesSettingsWidget::QbsProfilesSettingsWidget(QWidget *parent)
             m_ui.propertiesView, &QTreeView::expandAll);
     connect(m_ui.collapseButton, &QAbstractButton::clicked,
             m_ui.propertiesView, &QTreeView::collapseAll);
-    connect(m_ui.editButton, &QAbstractButton::clicked,
-            this, &QbsProfilesSettingsWidget::editProfile);
     refreshKitsList();
 }
 
 void QbsProfilesSettingsWidget::apply()
 {
-    QTC_ASSERT(!m_applyingProperties, return);
-    m_applyingProperties = true; // The following will cause kitsChanged() to be emitted.
-    for (CustomProperties::ConstIterator it = m_customProperties.constBegin();
-         it != m_customProperties.constEnd(); ++it) {
-        ProjectExplorer::Kit * const kit = ProjectExplorer::KitManager::kit(it.key());
-        QTC_ASSERT(kit, continue);
-        kit->setValue(Core::Id(Constants::QBS_PROPERTIES_KEY_FOR_KITS), it.value());
-    }
-    m_applyingProperties = false;
     m_model.reload();
     displayCurrentProfile();
 }
 
 void QbsProfilesSettingsWidget::refreshKitsList()
 {
-    if (m_applyingProperties)
-        return;
-
     m_ui.kitsComboBox->disconnect(this);
     m_ui.propertiesView->setModel(0);
     m_model.reload();
@@ -162,15 +144,11 @@ void QbsProfilesSettingsWidget::refreshKitsList()
     QList<ProjectExplorer::Kit *> validKits = ProjectExplorer::KitManager::kits();
     Utils::erase(validKits, [](const ProjectExplorer::Kit *k) { return !k->isValid(); });
     const bool hasKits = !validKits.isEmpty();
-    m_customProperties.clear();
     foreach (const ProjectExplorer::Kit * const kit, validKits) {
         if (kit->id() == currentId)
             newCurrentIndex = m_ui.kitsComboBox->count();
         m_ui.kitsComboBox->addItem(kit->displayName(), kit->id().toSetting());
-        setupCustomProperties(kit);
     }
-    mergeCustomPropertiesIntoModel();
-    m_ui.editButton->setEnabled(hasKits);
     if (newCurrentIndex != -1)
         m_ui.kitsComboBox->setCurrentIndex(newCurrentIndex);
     else if (hasKits)
@@ -206,45 +184,6 @@ void QbsProfilesSettingsWidget::displayCurrentProfile()
             return;
         }
     }
-}
-
-void QbsProfilesSettingsWidget::editProfile()
-{
-    QTC_ASSERT(m_ui.kitsComboBox->currentIndex() != -1, return);
-
-    const Core::Id kitId = Core::Id::fromSetting(m_ui.kitsComboBox->currentData());
-    CustomQbsPropertiesDialog dlg(m_customProperties.value(kitId), this);
-    if (dlg.exec() != QDialog::Accepted)
-        return;
-
-    m_customProperties.insert(kitId, dlg.properties());
-    mergeCustomPropertiesIntoModel();
-    displayCurrentProfile();
-}
-
-void QbsProfilesSettingsWidget::setupCustomProperties(const ProjectExplorer::Kit *kit)
-{
-    const QVariantMap &properties
-            = kit->value(Core::Id(Constants::QBS_PROPERTIES_KEY_FOR_KITS)).toMap();
-    m_customProperties.insert(kit->id(), properties);
-}
-
-void QbsProfilesSettingsWidget::mergeCustomPropertiesIntoModel()
-{
-    QVariantMap customProperties;
-    for (CustomProperties::ConstIterator it = m_customProperties.constBegin();
-         it != m_customProperties.constEnd(); ++it) {
-        const Core::Id kitId = it.key();
-        const ProjectExplorer::Kit * const kit = ProjectExplorer::KitManager::kit(kitId);
-        QTC_ASSERT(kit, continue);
-        const QString keyPrefix = QLatin1String("profiles.")
-                + QbsManager::instance()->profileForKit(kit) + QLatin1Char('.');
-        for (QVariantMap::ConstIterator it2 = it.value().constBegin(); it2 != it.value().constEnd();
-             ++it2) {
-            customProperties.insert(keyPrefix + it2.key(), it2.value());
-        }
-    }
-    m_model.setAdditionalProperties(customProperties);
 }
 
 } // namespace Internal

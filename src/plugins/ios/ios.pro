@@ -10,14 +10,11 @@ macx: LIBS += -framework CoreFoundation -framework IOKit
 HEADERS += \
     iosconstants.h \
     iosconfigurations.h \
-    iosmanager.h \
     iosrunconfiguration.h \
-    iosruncontrol.h \
     iosrunfactories.h \
     iossettingspage.h \
     iossettingswidget.h \
     iosrunner.h \
-    iosdebugsupport.h \
     iosdsymbuildstep.h \
     iosqtversionfactory.h \
     iosqtversion.h \
@@ -33,22 +30,21 @@ HEADERS += \
     iosdeploystep.h \
     iosdeploystepfactory.h \
     iosdeploystepwidget.h \
-    iosanalyzesupport.h \
     simulatorcontrol.h \
     iosbuildconfiguration.h \
-    iosbuildsettingswidget.h
+    iosbuildsettingswidget.h \
+    createsimulatordialog.h \
+    simulatoroperationdialog.h \
+    simulatorinfomodel.h
 
 
 SOURCES += \
     iosconfigurations.cpp \
-    iosmanager.cpp \
     iosrunconfiguration.cpp \
-    iosruncontrol.cpp \
     iosrunfactories.cpp \
     iossettingspage.cpp \
     iossettingswidget.cpp \
     iosrunner.cpp \
-    iosdebugsupport.cpp \
     iosdsymbuildstep.cpp \
     iosqtversionfactory.cpp \
     iosqtversion.cpp \
@@ -64,17 +60,21 @@ SOURCES += \
     iosdeploystep.cpp \
     iosdeploystepfactory.cpp \
     iosdeploystepwidget.cpp \
-    iosanalyzesupport.cpp \
     simulatorcontrol.cpp \
     iosbuildconfiguration.cpp \
-    iosbuildsettingswidget.cpp
+    iosbuildsettingswidget.cpp \
+    createsimulatordialog.cpp \
+    simulatoroperationdialog.cpp \
+    simulatorinfomodel.cpp
 
 FORMS += \
     iossettingswidget.ui \
     iosbuildstep.ui \
     iosdeploystepwidget.ui \
     iospresetbuildstep.ui \
-    iosbuildsettingswidget.ui
+    iosbuildsettingswidget.ui \
+    createsimulatordialog.ui \
+    simulatoroperationdialog.ui
 
 DEFINES += IOS_LIBRARY
 

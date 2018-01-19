@@ -59,12 +59,12 @@ DebuggerKitInformation::DebuggerKitInformation()
 QVariant DebuggerKitInformation::defaultValue(const Kit *k) const
 {
     const Abi toolChainAbi = ToolChainKitInformation::targetAbi(k);
-    const QStringList paths = Environment::systemEnvironment().path();
+    const Utils::FileNameList paths = Environment::systemEnvironment().path();
     QVariant nextBestFit;
     foreach (const DebuggerItem &item, DebuggerItemManager::debuggers()) {
         foreach (const Abi targetAbi, item.abis()) {
             if (targetAbi.isCompatibleWith(toolChainAbi)) {
-                if (paths.contains(item.command().toFileInfo().absolutePath()))
+                if (paths.contains(item.command()))
                     return item.id(); // prefer debuggers found in PATH over those found elsewhere
                 if (nextBestFit.isNull())
                     nextBestFit = item.id();
@@ -300,26 +300,26 @@ KitConfigWidget *DebuggerKitInformation::createConfigWidget(Kit *k) const
 void DebuggerKitInformation::addToMacroExpander(Kit *kit, MacroExpander *expander) const
 {
     expander->registerVariable("Debugger:Name", tr("Name of Debugger"),
-                               [this, kit]() -> QString {
+                               [kit]() -> QString {
                                    const DebuggerItem *item = debugger(kit);
                                    return item ? item->displayName() : tr("Unknown debugger");
                                });
 
     expander->registerVariable("Debugger:Type", tr("Type of Debugger Backend"),
-                               [this, kit]() -> QString {
+                               [kit]() -> QString {
                                    const DebuggerItem *item = debugger(kit);
                                    return item ? item->engineTypeName() : tr("Unknown debugger type");
                                });
 
     expander->registerVariable("Debugger:Version", tr("Debugger"),
-                               [this, kit]() -> QString {
+                               [kit]() -> QString {
                                    const DebuggerItem *item = debugger(kit);
                                    return item && !item->version().isEmpty()
                                         ? item->version() : tr("Unknown debugger version");
                                });
 
     expander->registerVariable("Debugger:Abi", tr("Debugger"),
-                               [this, kit]() -> QString {
+                               [kit]() -> QString {
                                    const DebuggerItem *item = debugger(kit);
                                    return item && !item->abis().isEmpty()
                                            ? item->abiNames().join(QLatin1Char(' '))

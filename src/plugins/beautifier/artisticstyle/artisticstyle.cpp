@@ -69,7 +69,7 @@ ArtisticStyle::~ArtisticStyle()
 bool ArtisticStyle::initialize()
 {
     Core::ActionContainer *menu = Core::ActionManager::createMenu(Constants::ArtisticStyle::MENU_ID);
-    menu->menu()->setTitle(tr(Constants::ArtisticStyle::DISPLAY_NAME));
+    menu->menu()->setTitle(tr("&Artistic Style"));
 
     m_formatFile = new QAction(BeautifierPlugin::msgFormatCurrentFile(), this);
     menu->addAction(Core::ActionManager::registerAction(m_formatFile,
@@ -118,13 +118,13 @@ QString ArtisticStyle::configurationFile() const
     if (m_settings->useOtherFiles()) {
         if (const ProjectExplorer::Project *project
                 = ProjectExplorer::ProjectTree::currentProject()) {
-            const QStringList files = project->files(ProjectExplorer::Project::AllFiles);
-            for (const QString &file : files) {
+            const Utils::FileNameList files = project->files(ProjectExplorer::Project::AllFiles);
+            for (const Utils::FileName &file : files) {
                 if (!file.endsWith(".astylerc"))
                     continue;
-                const QFileInfo fi(file);
+                const QFileInfo fi = file.toFileInfo();
                 if (fi.isReadable())
-                    return file;
+                    return file.toString();
             }
         }
     }

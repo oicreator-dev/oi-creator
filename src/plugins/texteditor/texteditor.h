@@ -29,9 +29,11 @@
 #include "blockrange.h"
 #include "codeassist/assistenums.h"
 
+#include <coreplugin/editormanager/editormanager.h>
 #include <coreplugin/editormanager/ieditor.h>
 #include <coreplugin/editormanager/ieditorfactory.h>
 
+#include <utils/link.h>
 #include <utils/uncommentselection.h>
 
 #include <QLabel>
@@ -49,14 +51,16 @@ class QRect;
 class QTextBlock;
 QT_END_NAMESPACE
 
+namespace Core {
+class HighlightScrollBarController;
+}
+
 namespace TextEditor {
 class TextDocument;
 class BaseHoverHandler;
-class TabSettings;
 class RefactorOverlay;
 struct RefactorMarker;
 class SyntaxHighlighter;
-class IAssistMonitorInterface;
 class AssistInterface;
 class IAssistProvider;
 class ICodeStylePreferences;
@@ -183,7 +187,7 @@ public:
     // IEditor
     QByteArray saveState() const;
     bool restoreState(const QByteArray &state);
-    void gotoLine(int line, int column = 0, bool centerLine = true);
+    void gotoLine(int line, int column = 0, bool centerLine = true, bool animate = false);
     int position(TextPositionOperation posOp = CurrentPosition,
          int at = -1) const;
     void convertPosition(int pos, int *line, int *column) const;
@@ -297,6 +301,7 @@ public:
     const BehaviorSettings &behaviorSettings() const;
 
     void ensureCursorVisible();
+    void ensureBlockIsUnfolded(QTextBlock block);
 
     static Core::Id FakeVimSelection;
     static Core::Id SnippetPlaceholderSelection;
@@ -401,6 +406,8 @@ public:
     virtual bool selectBlockDown();
     void selectWordUnderCursor();
 
+    void showContextMenu();
+
     void moveLineUp();
     void moveLineDown();
 
@@ -419,6 +426,8 @@ public:
 
     void uppercaseSelection();
     void lowercaseSelection();
+
+    void sortSelectedLines();
 
     void cleanWhitespace();
 
@@ -452,6 +461,8 @@ public:
     int lastVisibleLine() const;
     /*! Returns the line visible closest to the vertical center of the editor. */
     int centerVisibleLine() const;
+
+    Core::HighlightScrollBarController *highlightScrollBarController() const;
 
 signals:
     void assistFinished(); // Used in tests.
@@ -509,34 +520,9 @@ protected:
     virtual void finalizeInitializationAfterDuplication(TextEditorWidget *) {}
     static QTextCursor flippedCursor(const QTextCursor &cursor);
 
+    void addHoverHandler(BaseHoverHandler *handler);
+
 public:
-    struct Link
-    {
-        Link(const QString &fileName = QString(), int line = 0, int column = 0)
-            : linkTextStart(-1)
-            , linkTextEnd(-1)
-            , targetFileName(fileName)
-            , targetLine(line)
-            , targetColumn(column)
-        {}
-
-        bool hasValidTarget() const
-        { return !targetFileName.isEmpty(); }
-
-        bool hasValidLinkText() const
-        { return linkTextStart != linkTextEnd; }
-
-        bool operator==(const Link &other) const
-        { return linkTextStart == other.linkTextStart && linkTextEnd == other.linkTextEnd; }
-
-        int linkTextStart;
-        int linkTextEnd;
-
-        QString targetFileName;
-        int targetLine;
-        int targetColumn;
-    };
-
     QString selectedText() const;
 
     void setupGenericHighlighter();
@@ -559,13 +545,13 @@ protected:
        \a resolveTarget is set to true when the target of the link is relevant
        (it isn't until the link is used).
      */
-    virtual Link findLinkAt(const QTextCursor &, bool resolveTarget = true,
-                            bool inNextSplit = false);
+    virtual Utils::Link findLinkAt(const QTextCursor &, bool resolveTarget = true,
+                                   bool inNextSplit = false);
 
     /*!
        Returns whether the link was opened successfully.
      */
-    bool openLink(const Link &link, bool inNextSplit = false);
+    bool openLink(const Utils::Link &link, bool inNextSplit = false);
 
     /*!
       Reimplement this function to change the default replacement text.
@@ -587,7 +573,7 @@ signals:
     void tooltipOverrideRequested(TextEditor::TextEditorWidget *widget,
         const QPoint &globalPos, int position, bool *handled);
     void tooltipRequested(const QPoint &globalPos, int position);
-    void activateEditor();
+    void activateEditor(Core::EditorManager::OpenEditorFlags flags = 0);
 
 protected:
     virtual void slotCursorPositionChanged(); // Used in VcsBase
@@ -611,8 +597,8 @@ class TEXTEDITOR_EXPORT TextEditorLinkLabel : public QLabel
 public:
     TextEditorLinkLabel(QWidget *parent = 0);
 
-    void setLink(TextEditorWidget::Link link);
-    TextEditorWidget::Link link() const;
+    void setLink(Utils::Link link);
+    Utils::Link link() const;
 
 protected:
     void mousePressEvent(QMouseEvent *event);
@@ -621,7 +607,7 @@ protected:
 
 private:
     QPoint m_dragStartPosition;
-    TextEditorWidget::Link m_link;
+    Utils::Link m_link;
 };
 
 class TEXTEDITOR_EXPORT TextEditorFactory : public Core::IEditorFactory
@@ -669,4 +655,8 @@ private:
 
 } // namespace TextEditor
 
-Q_DECLARE_METATYPE(TextEditor::TextEditorWidget::Link)
+QT_BEGIN_NAMESPACE
+
+uint qHash(const QColor &color);
+
+QT_END_NAMESPACE

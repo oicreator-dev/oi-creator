@@ -32,12 +32,19 @@
 #include <QPointer>
 #include <QWidget>
 
+#include <memory>
+
 QT_FORWARD_DECLARE_CLASS(QComboBox)
 QT_FORWARD_DECLARE_CLASS(QSettings)
 
 namespace CppTools {
 
 class ClangDiagnosticConfigsWidget;
+
+namespace Ui {
+class ClazyChecks;
+class TidyChecks;
+} // namespace Ui
 
 namespace Internal {
 
@@ -57,14 +64,25 @@ public:
 private:
     void setupGeneralWidgets();
     void setupClangCodeModelWidgets();
+    void setupPluginsWidgets();
+    void setupTidyChecks();
+    void setupClazyChecks();
 
     bool applyGeneralWidgetsToSettings() const;
     bool applyClangCodeModelWidgetsToSettings() const;
 
 private:
-    Ui::CppCodeModelSettingsPage *m_ui;
+    Ui::CppCodeModelSettingsPage *m_ui = nullptr;
     QPointer<ClangDiagnosticConfigsWidget> m_clangDiagnosticConfigsWidget;
     QSharedPointer<CppCodeModelSettings> m_settings;
+
+    std::unique_ptr<CppTools::Ui::ClazyChecks> m_clazyChecks;
+    QWidget *m_clazyChecksWidget = nullptr;
+    QString m_currentClazyChecks;
+
+    std::unique_ptr<CppTools::Ui::TidyChecks> m_tidyChecks;
+    QWidget *m_tidyChecksWidget = nullptr;
+    QString m_currentTidyChecks;
 };
 
 class CppCodeModelSettingsPage: public Core::IOptionsPage

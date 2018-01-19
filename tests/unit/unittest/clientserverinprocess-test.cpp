@@ -30,25 +30,10 @@
 
 #include <clangcodemodelclientproxy.h>
 #include <clangcodemodelserverproxy.h>
-#include <projectpartsdonotexistmessage.h>
 
-#include <cmbalivemessage.h>
-#include <cmbcodecompletedmessage.h>
-#include <cmbcompletecodemessage.h>
-#include <cmbechomessage.h>
-#include <cmbendmessage.h>
-#include <cmbregisterprojectsforeditormessage.h>
-#include <cmbregistertranslationunitsforeditormessage.h>
-#include <cmbunregisterprojectsforeditormessage.h>
-#include <cmbunregistertranslationunitsforeditormessage.h>
-#include <documentannotationschangedmessage.h>
+#include <clangcodemodelservermessages.h>
+
 #include <readmessageblock.h>
-#include <registerunsavedfilesforeditormessage.h>
-#include <requestdocumentannotations.h>
-#include <translationunitdoesnotexistmessage.h>
-#include <unregisterunsavedfilesforeditormessage.h>
-#include <updatetranslationunitsforeditormessage.h>
-#include <updatevisibletranslationunitsmessage.h>
 #include <writemessageblock.h>
 
 #include <QBuffer>
@@ -240,32 +225,9 @@ TEST_F(ClientServerInProcess, UpdateVisibleTranslationUnitsMessage)
     scheduleServerMessages();
 }
 
-TEST_F(ClientServerInProcess, SendTranslationUnitDoesNotExistMessage)
-{
-    ClangBackEnd::TranslationUnitDoesNotExistMessage message(fileContainer);
-
-    EXPECT_CALL(mockClangCodeModelClient, translationUnitDoesNotExist(message))
-        .Times(1);
-
-    clientProxy.translationUnitDoesNotExist(message);
-    scheduleClientMessages();
-}
-
-
-TEST_F(ClientServerInProcess, SendProjectPartDoesNotExistMessage)
-{
-    ClangBackEnd::ProjectPartsDoNotExistMessage message({Utf8StringLiteral("projectId")});
-
-    EXPECT_CALL(mockClangCodeModelClient, projectPartsDoNotExist(message))
-        .Times(1);
-
-    clientProxy.projectPartsDoNotExist(message);
-    scheduleClientMessages();
-}
-
 TEST_F(ClientServerInProcess, SendDocumentAnnotationsChangedMessage)
 {
-    ClangBackEnd::HighlightingMarkContainer highlightingMark(1, 1, 1, ClangBackEnd::HighlightingType::Keyword);
+    ClangBackEnd::TokenInfoContainer tokenInfo(1, 1, 1, ClangBackEnd::HighlightingType::Keyword);
     ClangBackEnd::DiagnosticContainer diagnostic(Utf8StringLiteral("don't do that"),
                                                 Utf8StringLiteral("warning"),
                                                 {Utf8StringLiteral("-Wpadded"), Utf8StringLiteral("-Wno-padded")},
@@ -278,7 +240,7 @@ TEST_F(ClientServerInProcess, SendDocumentAnnotationsChangedMessage)
     ClangBackEnd::DocumentAnnotationsChangedMessage message(fileContainer,
                                                             {diagnostic},
                                                             {},
-                                                            {highlightingMark},
+                                                            {tokenInfo},
                                                             QVector<SourceRangeContainer>());
 
 

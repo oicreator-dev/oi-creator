@@ -113,6 +113,7 @@ static bool hasPriority(const QStringList &files)
     QString type = Utils::mimeTypeForFile(files.at(0)).name();
     if (type.startsWith(QLatin1String("image/"))
             || type == QLatin1String(QmlJSTools::Constants::QML_MIMETYPE)
+            || type == QLatin1String(QmlJSTools::Constants::QMLUI_MIMETYPE)
             || type == QLatin1String(QmlJSTools::Constants::JS_MIMETYPE))
         return true;
     return false;
@@ -160,7 +161,7 @@ public:
                      ResourceTopLevelNode *topLevel, ResourceFolderNode *prefixNode);
 
     QString displayName() const final;
-    bool supportsAction(ProjectAction, Node *node) const final;
+    bool supportsAction(ProjectAction, const Node *node) const final;
     bool addFiles(const QStringList &filePaths, QStringList *notAdded) final;
     bool removeFiles(const QStringList &filePaths, QStringList *notRemoved) final;
     bool renameFile(const QString &filePath, const QString &newFilePath) final;
@@ -199,7 +200,7 @@ SimpleResourceFolderNode::SimpleResourceFolderNode(const QString &afolderName, c
 
 }
 
-bool SimpleResourceFolderNode::supportsAction(ProjectAction action, Node *) const
+bool SimpleResourceFolderNode::supportsAction(ProjectAction action, const Node *) const
 {
     return action == AddNewFile
         || action == AddExistingFile
@@ -270,6 +271,7 @@ ResourceTopLevelNode::ResourceTopLevelNode(const FileName &filePath, bool genera
     setIsGenerated(generated);
     setIcon(FileIconProvider::icon(filePath.toString()));
     setPriority(Node::DefaultFilePriority);
+    setListInProject(true);
     if (!filePath.isEmpty()) {
         QFileInfo fi = filePath.toFileInfo();
         if (fi.isFile() && fi.isReadable()) {
@@ -389,7 +391,7 @@ QString ResourceTopLevelNode::addFileFilter() const
     return QLatin1String("*.png; *.jpg; *.gif; *.svg; *.ico; *.qml; *.qml.ui");
 }
 
-bool ResourceTopLevelNode::supportsAction(ProjectAction action, Node *node) const
+bool ResourceTopLevelNode::supportsAction(ProjectAction action, const Node *node) const
 {
     if (node != this)
         return false;
@@ -492,6 +494,11 @@ bool ResourceTopLevelNode::showInSimpleTree() const
     return true;
 }
 
+bool ResourceTopLevelNode::showWhenEmpty() const
+{
+    return true;
+}
+
 ResourceFolderNode::ResourceFolderNode(const QString &prefix, const QString &lang, ResourceTopLevelNode *parent)
     : FolderNode(FileName(parent->filePath()).appendPath(prefix)),
       // TOOD Why add existing directory doesn't work
@@ -507,7 +514,7 @@ ResourceFolderNode::~ResourceFolderNode()
 
 }
 
-bool ResourceFolderNode::supportsAction(ProjectAction action, Node *node) const
+bool ResourceFolderNode::supportsAction(ProjectAction action, const Node *node) const
 {
     Q_UNUSED(node)
 
@@ -672,7 +679,7 @@ QString ResourceFileNode::qrcPath() const
     return m_qrcPath;
 }
 
-bool ResourceFileNode::supportsAction(ProjectAction action, Node *node) const
+bool ResourceFileNode::supportsAction(ProjectAction action, const Node *node) const
 {
     if (action == HidePathActions)
         return false;

@@ -47,6 +47,8 @@ namespace QmlJS {
 namespace AST { class UiObjectMember; }
 }
 
+namespace TextEditor { class TextMark; }
+
 namespace QmlJSEditor {
 
 class QmlJSEditorDocument;
@@ -103,9 +105,9 @@ protected:
     void scrollContentsBy(int dx, int dy) override;
     void applyFontSettings() override;
     void createToolBar();
-    TextEditor::TextEditorWidget::Link findLinkAt(const QTextCursor &cursor,
-                                                      bool resolveTarget = true,
-                                                      bool inNextSplit = false) override;
+    Utils::Link findLinkAt(const QTextCursor &cursor,
+                           bool resolveTarget = true,
+                           bool inNextSplit = false) override;
     QString foldReplacementText(const QTextBlock &block) const override;
     void onRefactorMarkerClicked(const TextEditor::RefactorMarker &marker) override;
 
@@ -122,11 +124,18 @@ private:
     QTimer m_contextPaneTimer;
     QComboBox *m_outlineCombo;
     QModelIndex m_outlineModelIndex;
-    bool m_blockOutLineCursorChanges = false;
     QmlJS::ModelManagerInterface *m_modelManager = nullptr;
 
     QmlJS::IContextPane *m_contextPane = nullptr;
     int m_oldCursorPosition = -1;
+
+    void createTextMarks(const QList<QmlJS::DiagnosticMessage> &diagnostics);
+    void cleanDiagnosticMarks();
+    QVector<TextEditor::TextMark *> m_diagnosticMarks;
+
+    void createTextMarks(const QmlJSTools::SemanticInfo &info);
+    void cleanSemanticMarks();
+    QVector<TextEditor::TextMark *> m_semanticMarks;
 
     FindReferences *m_findReferences;
 };

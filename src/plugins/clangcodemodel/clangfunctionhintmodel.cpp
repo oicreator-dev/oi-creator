@@ -53,10 +53,21 @@ QString ClangFunctionHintModel::text(int index) const
 {
     const ClangBackEnd::CodeCompletionChunks chunks = m_functionSymbols.at(index).chunks();
     const QString signatureWithEmphasizedCurrentParameter
-        = CompletionChunksToTextConverter::convertToFunctionSignatureWithHtml(chunks,
-                                                                              m_currentArgument + 1);
+            = CompletionChunksToTextConverter::convertToFunctionSignatureWithHtml(
+                chunks,
+                m_functionSymbols.at(index).completionKind(),
+                m_currentArgument + 1);
 
     return signatureWithEmphasizedCurrentParameter;
+}
+
+QString ClangFunctionHintModel::id(int index) const
+{
+    QString chunks;
+    for (const ClangBackEnd::CodeCompletionChunk &chunk : m_functionSymbols.at(index).chunks())
+        chunks += chunk.text();
+
+    return chunks;
 }
 
 int ClangFunctionHintModel::activeArgument(const QString &prefix) const

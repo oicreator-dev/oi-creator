@@ -55,7 +55,7 @@ namespace QmakeProjectManager {
 
 Node *QmakeManager::contextNode()
 {
-    return ProjectTree::currentNode();
+    return ProjectTree::findCurrentNode();
 }
 
 Project *QmakeManager::contextProject()
@@ -95,13 +95,22 @@ void QmakeManager::addLibrary()
 
 void QmakeManager::addLibraryContextMenu()
 {
+    QString projectPath;
+
     Node *node = contextNode();
-    if (dynamic_cast<QmakeProFileNode *>(node))
-        addLibraryImpl(node->filePath().toString(), nullptr);
+    if (ContainerNode *cn = node->asContainerNode())
+        projectPath = cn->project()->projectFilePath().toString();
+    else if (dynamic_cast<QmakeProFileNode *>(node))
+        projectPath = node->filePath().toString();
+
+    addLibraryImpl(projectPath, nullptr);
 }
 
 void QmakeManager::addLibraryImpl(const QString &fileName, BaseTextEditor *editor)
 {
+    if (fileName.isEmpty())
+        return;
+
     Internal::AddLibraryWizard wizard(fileName, Core::ICore::dialogParent());
     if (wizard.exec() != QDialog::Accepted)
         return;
@@ -185,8 +194,8 @@ void QmakeManager::buildFile()
 {
     if (Core::IDocument *currentDocument= Core::EditorManager::currentDocument()) {
         const Utils::FileName file = currentDocument->filePath();
-        Node *n = SessionManager::nodeForFile(file);
-        FileNode *node  = n ? n->asFileNode() : 0;
+        Node *n = ProjectTree::nodeForFile(file);
+        FileNode *node  = n ? n->asFileNode() : nullptr;
         Project *project = SessionManager::projectForFile(file);
 
         if (project && node)
@@ -229,11 +238,9 @@ void QmakeManager::handleSubDirContextMenu(QmakeManager::Action action, bool isF
         const Core::Id buildStep = ProjectExplorer::Constants::BUILDSTEPS_BUILD;
         const Core::Id cleanStep = ProjectExplorer::Constants::BUILDSTEPS_CLEAN;
         if (action == BUILD) {
-            const QString name = ProjectExplorerPlugin::displayNameForStepId(buildStep);
-            BuildManager::buildList(bc->stepList(buildStep), name);
+            BuildManager::buildList(bc->stepList(buildStep));
         } else if (action == CLEAN) {
-            const QString name = ProjectExplorerPlugin::displayNameForStepId(cleanStep);
-            BuildManager::buildList(bc->stepList(cleanStep), name);
+            BuildManager::buildList(bc->stepList(cleanStep));
         } else if (action == REBUILD) {
             QStringList names;
             names << ProjectExplorerPlugin::displayNameForStepId(cleanStep)

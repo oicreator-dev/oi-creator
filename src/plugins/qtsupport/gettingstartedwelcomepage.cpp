@@ -124,7 +124,7 @@ QString ExamplesWelcomePage::copyToAlternativeLocation(const QFileInfo& proFileI
     chooser->setHistoryCompleter(QLatin1String("Qt.WritableExamplesDir.History"));
     QSettings *settings = ICore::settings();
     chooser->setPath(settings->value(QString::fromLatin1(C_FALLBACK_ROOT),
-                                     DocumentManager::projectsDirectory()).toString());
+                                     DocumentManager::projectsDirectory().toString()).toString());
     lay->addWidget(txt, 1, 0);
     lay->addWidget(chooser, 1, 1);
     enum { Copy = QDialog::Accepted + 1, Keep = QDialog::Accepted + 2 };
@@ -257,18 +257,19 @@ public:
         QPalette pal;
         pal.setColor(QPalette::Base, themeColor(Theme::Welcome_BackgroundColor));
 
-        m_lineEdit = new QLineEdit;
+        m_lineEdit = new FancyLineEdit;
+        m_lineEdit->setFiltering(true);
         m_lineEdit->setFrame(false);
         m_lineEdit->setFont(sizedFont(14, this));
         m_lineEdit->setAttribute(Qt::WA_MacShowFocusRect, false);
         m_lineEdit->setPalette(pal);
 
         auto box = new QHBoxLayout(this);
-        box->setContentsMargins(15, 3, 15, 3);
+        box->setContentsMargins(10, 3, 3, 3);
         box->addWidget(m_lineEdit);
     }
 
-    QLineEdit *m_lineEdit;
+    FancyLineEdit *m_lineEdit;
 };
 
 class GridView : public QTableView
@@ -598,7 +599,7 @@ public:
 
         auto hbox = new QHBoxLayout;
         if (m_isExamples) {
-            m_searcher->setPlaceholderText(tr("Search in Examples..."));
+            m_searcher->setPlaceholderText(ExamplesWelcomePage::tr("Search in Examples..."));
 
             auto exampleSetSelector = new QComboBox(this);
             exampleSetSelector->setMinimumWidth(itemWidth);
@@ -614,7 +615,7 @@ public:
             hbox->setSpacing(17);
             hbox->addWidget(exampleSetSelector);
         } else {
-            m_searcher->setPlaceholderText(tr("Search in Tutorials..."));
+            m_searcher->setPlaceholderText(ExamplesWelcomePage::tr("Search in Tutorials..."));
         }
         hbox->addWidget(searchBox);
         hbox->addSpacing(sideMargin);

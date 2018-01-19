@@ -302,7 +302,7 @@ void GerritPlugin::updateActions(const VcsBase::VcsBasePluginState &state)
     const bool hasTopLevel = state.hasTopLevel();
     m_gerritCommand->action()->setEnabled(hasTopLevel);
     m_pushToGerritCommand->action()->setEnabled(hasTopLevel);
-    if (m_dialog)
+    if (m_dialog && m_dialog->isVisible())
         m_dialog->setCurrentPath(state.topLevel());
 }
 
@@ -315,11 +315,11 @@ void GerritPlugin::addToLocator(CommandLocator *locator)
 void GerritPlugin::push(const QString &topLevel)
 {
     // QScopedPointer is required to delete the dialog when leaving the function
-    GerritPushDialog dialog(topLevel, m_reviewers, ICore::mainWindow());
+    GerritPushDialog dialog(topLevel, m_reviewers, m_parameters, ICore::mainWindow());
 
-    if (!dialog.isValid()) {
-        QMessageBox::warning(ICore::mainWindow(), tr("Initialization Failed"),
-                              tr("Failed to initialize dialog. Aborting."));
+    const QString initErrorMessage = dialog.initErrorMessage();
+    if (!initErrorMessage.isEmpty()) {
+        QMessageBox::warning(ICore::mainWindow(), tr("Initialization Failed"), initErrorMessage);
         return;
     }
 
@@ -328,25 +328,12 @@ void GerritPlugin::push(const QString &topLevel)
 
     dialog.storeTopic();
     m_reviewers = dialog.reviewers();
+    GitPlugin::client()->push(topLevel, {dialog.selectedRemoteName(), dialog.pushTarget()});
+}
 
-    QString target = dialog.selectedCommit();
-    if (target.isEmpty())
-        target = "HEAD";
-    target += ":refs/" + dialog.selectedPushType() +
-            '/' + dialog.selectedRemoteBranchName();
-    const QString topic = dialog.selectedTopic();
-    if (!topic.isEmpty())
-        target += '/' + topic;
-
-    QStringList options;
-    const QStringList reviewers = m_reviewers.split(',', QString::SkipEmptyParts);
-    for (const QString &reviewer : reviewers)
-        options << "r=" + reviewer;
-
-    if (!options.isEmpty())
-        target += '%' + options.join(',');
-
-    GitPlugin::client()->push(topLevel, {dialog.selectedRemoteName(), target});
+static QString currentRepository()
+{
+    return GitPlugin::instance()->currentState().topLevel();
 }
 
 // Open or raise the Gerrit dialog window.
@@ -359,8 +346,7 @@ void GerritPlugin::openView()
             if (!ICore::showOptionsDialog("Gerrit"))
                 return;
         }
-        const QString repository = GitPlugin::instance()->currentState().topLevel();
-        GerritDialog *gd = new GerritDialog(m_parameters, m_server, repository, ICore::mainWindow());
+        GerritDialog *gd = new GerritDialog(m_parameters, m_server, currentRepository(), ICore::mainWindow());
         gd->setModal(false);
         connect(gd, &GerritDialog::fetchDisplay, this,
                 [this](const QSharedPointer<GerritChange> &change) { fetch(change, FetchDisplay); });
@@ -371,18 +357,20 @@ void GerritPlugin::openView()
         connect(this, &GerritPlugin::fetchStarted, gd, &GerritDialog::fetchStarted);
         connect(this, &GerritPlugin::fetchFinished, gd, &GerritDialog::fetchFinished);
         m_dialog = gd;
+    } else {
+        m_dialog->setCurrentPath(currentRepository());
+        m_dialog->refresh();
     }
     const Qt::WindowStates state = m_dialog->windowState();
     if (state & Qt::WindowMinimized)
         m_dialog->setWindowState(state & ~Qt::WindowMinimized);
     m_dialog->show();
     m_dialog->raise();
-    m_dialog->refresh();
 }
 
 void GerritPlugin::push()
 {
-    push(GitPlugin::instance()->currentState().topLevel());
+    push(currentRepository());
 }
 
 Utils::FileName GerritPlugin::gitBinDirectory()
@@ -519,7 +507,7 @@ QString GerritPlugin::findLocalRepository(QString project, const QString &branch
     } // for repositories
     // No match, do we have  a projects folder?
     if (DocumentManager::useProjectsDirectory())
-        return DocumentManager::projectsDirectory();
+        return DocumentManager::projectsDirectory().toString();
 
     return QDir::currentPath();
 }

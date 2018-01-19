@@ -97,6 +97,13 @@ bool AbstractMsvcToolChain::isValid() const
     return fi.isFile() && fi.isExecutable();
 }
 
+QString AbstractMsvcToolChain::originalTargetTriple() const
+{
+    return m_abi.wordWidth() == 64
+            ? QLatin1String("x86_64-pc-windows-msvc")
+            : QLatin1String("i686-pc-windows-msvc");
+}
+
 ToolChain::PredefinedMacrosRunner AbstractMsvcToolChain::createPredefinedMacrosRunner() const
 {
     Utils::Environment env(m_lastEnvironment);
@@ -111,7 +118,7 @@ ToolChain::PredefinedMacrosRunner AbstractMsvcToolChain::createPredefinedMacrosR
     };
 }
 
-QByteArray AbstractMsvcToolChain::predefinedMacros(const QStringList &cxxflags) const
+ProjectExplorer::Macros AbstractMsvcToolChain::predefinedMacros(const QStringList &cxxflags) const
 {
     return createPredefinedMacrosRunner()(cxxflags);
 }
@@ -131,8 +138,13 @@ ToolChain::CompilerFlags AbstractMsvcToolChain::compilerFlags(const QStringList 
     case Abi::WindowsMsvc2012Flavor: flags |= StandardCxx11;
         break;
     case Abi::WindowsMsvc2013Flavor:
-    case Abi::WindowsMsvc2015Flavor:
-    case Abi::WindowsMsvc2017Flavor: flags |= StandardCxx14;
+    case Abi::WindowsMsvc2015Flavor: flags |= StandardCxx14;
+        break;
+    case Abi::WindowsMsvc2017Flavor:
+        if (cxxflags.contains("/std:c++17") || cxxflags.contains("/std:c++latest"))
+            flags |= StandardCxx17;
+        else
+            flags |= StandardCxx14;
         break;
     default:
         break;
@@ -231,7 +243,7 @@ QString AbstractMsvcToolChain::makeCommand(const Utils::Environment &environment
     Utils::FileName tmp;
 
     if (useJom) {
-        tmp = environment.searchInPath(jom, QStringList(QCoreApplication::applicationDirPath()));
+        tmp = environment.searchInPath(jom, {Utils::FileName::fromString(QCoreApplication::applicationDirPath())});
         if (!tmp.isEmpty())
             return tmp.toString();
     }
@@ -248,10 +260,11 @@ Utils::FileName AbstractMsvcToolChain::compilerCommand() const
     Utils::Environment env = Utils::Environment::systemEnvironment();
     addToEnvironment(env);
 
-    Utils::FileName clexe = env.searchInPath(QLatin1String("cl.exe"), QStringList(), [](const QString &name) {
-        QDir dir(QDir::cleanPath(QFileInfo(name).absolutePath() + QStringLiteral("/..")));
+    Utils::FileName clexe = env.searchInPath(QLatin1String("cl.exe"), {}, [](const Utils::FileName &name) {
+        QDir dir(QDir::cleanPath(name.toFileInfo().absolutePath() + QStringLiteral("/..")));
         do {
-            if (QFile::exists(dir.absoluteFilePath(QStringLiteral("vcvarsall.bat"))))
+            if (QFile::exists(dir.absoluteFilePath(QStringLiteral("vcvarsall.bat")))
+                    || QFile::exists(dir.absolutePath() + "/Auxiliary/Build/vcvarsall.bat"))
                 return true;
         } while (dir.cdUp() && !dir.isRoot());
         return false;
@@ -267,13 +280,6 @@ IOutputParser *AbstractMsvcToolChain::outputParser() const
 bool AbstractMsvcToolChain::canClone() const
 {
     return true;
-}
-
-// Function must be thread-safe!
-QByteArray AbstractMsvcToolChain::msvcPredefinedMacros(const QStringList,
-                                                       const Utils::Environment&) const
-{
-    return QByteArray();
 }
 
 bool AbstractMsvcToolChain::generateEnvironmentSettings(const Utils::Environment &env,

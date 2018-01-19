@@ -33,6 +33,8 @@
 #include <QObject>
 #include <QScopedPointer>
 
+#include <memory>
+
 QT_BEGIN_NAMESPACE
 class QMenu;
 class QWidget;
@@ -40,6 +42,10 @@ QT_END_NAMESPACE
 
 namespace Core { class IDocument; }
 namespace TextEditor { class TextEditorWidget; }
+namespace CppTools {
+class FollowSymbolInterface;
+class RefactoringEngineInterface;
+} // namespace CppTools
 
 namespace ClangCodeModel {
 namespace Internal {
@@ -55,10 +61,13 @@ public:
     ~ModelManagerSupportClang();
 
     CppTools::CppCompletionAssistProvider *completionAssistProvider() override;
-    CppTools::BaseEditorDocumentProcessor *editorDocumentProcessor(
+    TextEditor::BaseHoverHandler *createHoverHandler() override;
+    CppTools::BaseEditorDocumentProcessor *createEditorDocumentProcessor(
                 TextEditor::TextDocument *baseTextDocument) override;
+    CppTools::FollowSymbolInterface &followSymbolInterface() override;
+    CppTools::RefactoringEngineInterface &refactoringEngineInterface() override;
 
-    IpcCommunicator &ipcCommunicator();
+    BackendCommunicator &communicator();
     QString dummyUiHeaderOnDiskDirPath() const;
     QString dummyUiHeaderOnDiskPath(const QString &filePath) const;
 
@@ -98,8 +107,10 @@ private:
 
 private:
     UiHeaderOnDiskManager m_uiHeaderOnDiskManager;
-    IpcCommunicator m_ipcCommunicator;
+    BackendCommunicator m_communicator;
     ClangCompletionAssistProvider m_completionAssistProvider;
+    std::unique_ptr<CppTools::FollowSymbolInterface> m_followSymbol;
+    std::unique_ptr<CppTools::RefactoringEngineInterface> m_refactoringEngine;
 };
 
 class ModelManagerSupportProviderClang : public CppTools::ModelManagerSupportProvider

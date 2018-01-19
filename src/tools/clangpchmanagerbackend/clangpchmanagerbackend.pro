@@ -1,9 +1,11 @@
 QTC_LIB_DEPENDS += \
-    clangbackendipc
+    clangsupport
 
 include(../../qtcreatortool.pri)
 include(../../shared/clang/clang_installation.pri)
 include(source/clangpchmanagerbackend-source.pri)
+
+requires(!isEmpty(LIBTOOLING_LIBS))
 
 win32 {
     LLVM_BUILDMODE = $$system($$llvm_config --build-mode, lines)
@@ -31,4 +33,4 @@ unix {
     !disable_external_rpath: QMAKE_LFLAGS += -Wl,-rpath,$$shell_quote($${LLVM_LIBDIR})
 }
 
-DEFINES += CLANG_COMPILER_PATH=\"R\\\"xxx($$LLVM_INSTALL_DIR/bin/clang)xxx\\\"\"
+DEFINES += CLANG_COMPILER_PATH=\"R\\\"xxx($${LLVM_BINDIR}/clang)xxx\\\"\"

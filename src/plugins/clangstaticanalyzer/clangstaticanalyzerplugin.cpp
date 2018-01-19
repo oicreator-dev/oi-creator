@@ -28,7 +28,7 @@
 #include "clangstaticanalyzerconfigwidget.h"
 #include "clangstaticanalyzerconstants.h"
 #include "clangstaticanalyzerprojectsettingswidget.h"
-#include "clangstaticanalyzerruncontrolfactory.h"
+#include "clangstaticanalyzerruncontrol.h"
 #include "clangstaticanalyzertool.h"
 
 #ifdef WITH_TESTS
@@ -36,7 +36,8 @@
 #include "clangstaticanalyzerunittests.h"
 #endif
 
-#include <debugger/analyzer/analyzermanager.h>
+#include <utils/qtcassert.h>
+
 #include <coreplugin/icore.h>
 #include <coreplugin/icontext.h>
 #include <coreplugin/actionmanager/actionmanager.h>
@@ -44,7 +45,10 @@
 #include <coreplugin/actionmanager/actioncontainer.h>
 #include <coreplugin/coreconstants.h>
 #include <coreplugin/dialogs/ioptionspage.h>
+
+#include <projectexplorer/kitinformation.h>
 #include <projectexplorer/projectpanelfactory.h>
+#include <projectexplorer/target.h>
 
 #include <QAction>
 #include <QDebug>
@@ -54,7 +58,6 @@
 
 #include <QtPlugin>
 
-using namespace Debugger;
 using namespace ProjectExplorer;
 
 namespace ClangStaticAnalyzer {
@@ -125,7 +128,6 @@ bool ClangStaticAnalyzerPlugin::initialize(const QStringList &arguments, QString
     ProjectPanelFactory::registerFactory(panelFactory);
 
     addAutoReleasedObject(new ClangStaticAnalyzerTool);
-    addAutoReleasedObject(new ClangStaticAnalyzerRunControlFactory);
     addAutoReleasedObject(new ClangStaticAnalyzerOptionsPage);
 
     return true;

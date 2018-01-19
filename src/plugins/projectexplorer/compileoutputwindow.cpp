@@ -35,6 +35,7 @@
 #include <coreplugin/outputwindow.h>
 #include <coreplugin/find/basetextfind.h>
 #include <coreplugin/icore.h>
+#include <coreplugin/coreconstants.h>
 #include <extensionsystem/pluginmanager.h>
 #include <texteditor/texteditorsettings.h>
 #include <texteditor/fontsettings.h>
@@ -55,7 +56,6 @@ using namespace ProjectExplorer;
 using namespace ProjectExplorer::Internal;
 
 namespace {
-const int MAX_LINECOUNT = 100000;
 const char SETTINGS_KEY[] = "ProjectExplorer/CompileOutput/Zoom";
 const char C_COMPILE_OUTPUT[] = "ProjectExplorer.CompileOutput";
 }
@@ -110,8 +110,8 @@ private:
 protected:
     void mouseMoveEvent(QMouseEvent *ev)
     {
-        int line = cursorForPosition(ev->pos()).block().blockNumber();
-        if (m_taskids.value(line, 0))
+        const int line = cursorForPosition(ev->pos()).block().blockNumber();
+        if (m_taskids.contains(line) && m_mousePressButton == Qt::NoButton)
             viewport()->setCursor(Qt::PointingHandCursor);
         else
             viewport()->setCursor(Qt::IBeamCursor);
@@ -121,23 +121,27 @@ protected:
     void mousePressEvent(QMouseEvent *ev)
     {
         m_mousePressPosition = ev->pos();
+        m_mousePressButton = ev->button();
         QPlainTextEdit::mousePressEvent(ev);
     }
 
     void mouseReleaseEvent(QMouseEvent *ev)
     {
-        if ((m_mousePressPosition - ev->pos()).manhattanLength() < 4) {
+        if ((m_mousePressPosition - ev->pos()).manhattanLength() < 4
+                && m_mousePressButton == Qt::LeftButton) {
             int line = cursorForPosition(ev->pos()).block().blockNumber();
             if (unsigned taskid = m_taskids.value(line, 0))
                 TaskHub::showTaskInEditor(taskid);
         }
 
+        m_mousePressButton = Qt::NoButton;
         QPlainTextEdit::mouseReleaseEvent(ev);
     }
 
 private:
     QHash<int, unsigned int> m_taskids;   //Map blocknumber to taskId
     QPoint m_mousePressPosition;
+    Qt::MouseButton m_mousePressButton = Qt::NoButton;
 };
 
 } // namespace Internal
@@ -155,7 +159,7 @@ CompileOutputWindow::CompileOutputWindow(QAction *cancelBuildAction) :
     m_outputWindow->setWindowIcon(Icons::WINDOW.icon());
     m_outputWindow->setReadOnly(true);
     m_outputWindow->setUndoRedoEnabled(false);
-    m_outputWindow->setMaxLineCount(MAX_LINECOUNT);
+    m_outputWindow->setMaxLineCount(Core::Constants::DEFAULT_MAX_LINE_COUNT);
 
     // Let selected text be colored as if the text edit was editable,
     // otherwise the highlight for searching is too light
@@ -195,8 +199,8 @@ CompileOutputWindow::CompileOutputWindow(QAction *cancelBuildAction) :
     m_handler = new ShowOutputTaskHandler(this);
     ExtensionSystem::PluginManager::addObject(m_handler);
     connect(ProjectExplorerPlugin::instance(), &ProjectExplorerPlugin::settingsChanged,
-            this, &CompileOutputWindow::updateWordWrapMode);
-    updateWordWrapMode();
+            this, &CompileOutputWindow::updateFromSettings);
+    updateFromSettings();
 }
 
 CompileOutputWindow::~CompileOutputWindow()
@@ -219,9 +223,10 @@ void CompileOutputWindow::updateZoomEnabled()
     m_outputWindow->setWheelZoomEnabled(zoomEnabled);
 }
 
-void CompileOutputWindow::updateWordWrapMode()
+void CompileOutputWindow::updateFromSettings()
 {
     m_outputWindow->setWordWrapEnabled(ProjectExplorerPlugin::projectExplorerSettings().wrapAppOutput);
+    m_outputWindow->setMaxLineCount(ProjectExplorerPlugin::projectExplorerSettings().maxBuildOutputLines);
 }
 
 bool CompileOutputWindow::hasFocus() const
@@ -319,7 +324,7 @@ void CompileOutputWindow::registerPositionOf(const Task &task, int linkedOutputL
     if (linkedOutputLines <= 0)
         return;
     int blocknumber = m_outputWindow->document()->blockCount();
-    if (blocknumber > MAX_LINECOUNT)
+    if (blocknumber > m_outputWindow->maxLineCount())
         return;
 
     const int startLine = blocknumber - linkedOutputLines + 1 - skipLines;

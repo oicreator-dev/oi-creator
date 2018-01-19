@@ -53,6 +53,7 @@
 // Needed for the load&save actions in the context menu
 #include <debugger/analyzer/analyzermanager.h>
 #include <coreplugin/findplaceholder.h>
+#include <utils/qtcfallthrough.h>
 #include <utils/styledbar.h>
 #include <utils/algorithm.h>
 
@@ -103,7 +104,7 @@ QmlProfilerTraceView::QmlProfilerTraceView(QWidget *parent, QmlProfilerViewManag
             qint64 end = modelManager->traceTime()->endTime();
             d->m_zoomControl->setTrace(start, end);
             d->m_zoomControl->setRange(start, start + (end - start) / 10);
-            // Fall through
+            Q_FALLTHROUGH();
         }
         case QmlProfilerModelManager::Empty:
             d->m_modelProxy->setModels(d->m_suspendedModels);
@@ -114,13 +115,16 @@ QmlProfilerTraceView::QmlProfilerTraceView(QWidget *parent, QmlProfilerViewManag
             break;
         case QmlProfilerModelManager::ClearingData:
             d->m_zoomControl->clear();
-            if (!d->m_suspendedModels.isEmpty())
-                break; // Models are suspended already. AcquiringData was aborted.
-            // Fall through
+            Q_FALLTHROUGH();
         case QmlProfilerModelManager::AcquiringData:
-            // Temporarily remove the models, while we're changing them
-            d->m_suspendedModels = d->m_modelProxy->models();
-            d->m_modelProxy->setModels(QVariantList());
+            if (d->m_suspendedModels.isEmpty()) {
+                // Temporarily remove the models, while we're changing them
+                d->m_suspendedModels = d->m_modelProxy->models();
+                d->m_modelProxy->setModels(QVariantList());
+            }
+            // Otherwise models are suspended already. This can happen if either acquiring was
+            // aborted or we're doing a "restrict to range" which consists of a partial clearing and
+            // then re-acquiring of data.
             break;
         }
     });
@@ -179,8 +183,8 @@ QmlProfilerTraceView::QmlProfilerTraceView(QWidget *parent, QmlProfilerViewManag
                                                      d->m_zoomControl);
     d->m_mainView->setSource(QUrl(QLatin1String("qrc:/timeline/MainView.qml")));
 
-    QQuickItem *rootObject = d->m_mainView->rootObject();
-    connect(rootObject, SIGNAL(updateCursorPosition()), this, SLOT(updateCursorPosition()));
+    connect(d->m_modelProxy, &Timeline::TimelineModelAggregator::updateCursorPosition,
+            this, &QmlProfilerTraceView::updateCursorPosition);
 }
 
 QmlProfilerTraceView::~QmlProfilerTraceView()
@@ -306,6 +310,11 @@ bool QmlProfilerTraceView::isUsable() const
 #else
     return true;
 #endif
+}
+
+bool QmlProfilerTraceView::isSuspended() const
+{
+    return !d->m_suspendedModels.isEmpty();
 }
 
 void QmlProfilerTraceView::changeEvent(QEvent *e)

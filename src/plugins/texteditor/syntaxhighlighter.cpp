@@ -43,11 +43,10 @@ namespace TextEditor {
 
 class SyntaxHighlighterPrivate
 {
-    SyntaxHighlighter *q_ptr;
+    SyntaxHighlighter *q_ptr = nullptr;
     Q_DECLARE_PUBLIC(SyntaxHighlighter)
 public:
-    inline SyntaxHighlighterPrivate()
-        : q_ptr(0), rehighlightPending(false), inReformatBlocks(false)
+    SyntaxHighlighterPrivate()
     {
         updateFormats(TextEditorSettings::fontSettings());
     }
@@ -70,12 +69,13 @@ public:
 
     QVector<QTextCharFormat> formatChanges;
     QTextBlock currentBlock;
-    bool rehighlightPending;
-    bool inReformatBlocks;
+    bool rehighlightPending = false;
+    bool inReformatBlocks = false;
     TextDocumentLayout::FoldValidator foldValidator;
     QVector<QTextCharFormat> formats;
     QVector<std::pair<int,TextStyle>> formatCategories;
     QTextCharFormat whitespaceFormat;
+    bool noAutomaticHighlighting = false;
 };
 
 static bool adjustRange(QTextLayout::FormatRange &range, int from, int charsRemoved, int charsAdded) {
@@ -315,9 +315,11 @@ void SyntaxHighlighter::setDocument(QTextDocument *doc)
     }
     d->doc = doc;
     if (d->doc) {
-        connect(d->doc, &QTextDocument::contentsChange, this, &SyntaxHighlighter::reformatBlocks);
-        d->rehighlightPending = true;
-        QTimer::singleShot(0, this, &SyntaxHighlighter::delayedRehighlight);
+        if (!d->noAutomaticHighlighting) {
+            connect(d->doc, &QTextDocument::contentsChange, this, &SyntaxHighlighter::reformatBlocks);
+            d->rehighlightPending = true;
+            QTimer::singleShot(0, this, &SyntaxHighlighter::delayedRehighlight);
+        }
         d->foldValidator.setup(qobject_cast<TextDocumentLayout *>(doc->documentLayout()));
     }
 }
@@ -764,6 +766,15 @@ void SyntaxHighlighter::setFontSettings(const FontSettings &fontSettings)
     Q_D(SyntaxHighlighter);
     d->updateFormats(fontSettings);
 }
+/*!
+    The syntax highlighter is not anymore reacting to the text document if \a noAutmatic is
+    \c true.
+*/
+void SyntaxHighlighter::setNoAutomaticHighlighting(bool noAutomatic)
+{
+    Q_D(SyntaxHighlighter);
+    d->noAutomaticHighlighting = noAutomatic;
+}
 
 /*!
     Creates text format categories for the text styles themselves, so the highlighter can
@@ -817,6 +828,11 @@ QTextCharFormat SyntaxHighlighter::formatForCategory(int category) const
     QTC_ASSERT(d->formats.size() > category, return QTextCharFormat());
 
     return d->formats.at(category);
+}
+
+void SyntaxHighlighter::highlightBlock(const QString &text)
+{
+    formatSpaces(text);
 }
 
 void SyntaxHighlighterPrivate::updateFormats(const FontSettings &fontSettings)

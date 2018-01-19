@@ -43,7 +43,8 @@ public:
 
     QList<Core::LocatorFilterEntry> matchesFor(QFutureInterface<Core::LocatorFilterEntry> &future,
                                                const QString &entry) override;
-    void accept(Core::LocatorFilterEntry selection) const override;
+    void accept(Core::LocatorFilterEntry selection,
+                QString *newText, int *selectionStart, int *selectionLength) const override;
     void refresh(QFutureInterface<void> &future) override;
 
 protected:
@@ -51,7 +52,7 @@ protected:
     virtual Core::LocatorFilterEntry filterEntryFromIndexItem(IndexItem::Ptr info);
 
 protected:
-    CppLocatorData *m_data;
+    CppLocatorData *m_data = nullptr;
 };
 
 } // namespace Internal

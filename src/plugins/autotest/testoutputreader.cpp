@@ -25,6 +25,7 @@
 
 #include "testoutputreader.h"
 #include "testresult.h"
+#include "testresultspane.h"
 
 #include <QDebug>
 #include <QProcess>
@@ -41,12 +42,21 @@ TestOutputReader::TestOutputReader(const QFutureInterface<TestResultPtr> &future
     if (m_testApplication) {
         connect(m_testApplication, &QProcess::readyRead,
                 this, [this] () {
-            while (m_testApplication->canReadLine())
-                processOutput(m_testApplication->readLine());
+            while (m_testApplication->canReadLine()) {
+                QByteArray output = m_testApplication->readLine();
+                output.chop(1); // remove the newline from the output
+                if (output.endsWith('\r'))
+                    output.chop(1);
+
+                emit newOutputAvailable(output);
+                processOutput(output);
+            }
         });
         connect(m_testApplication, &QProcess::readyReadStandardError,
                 this, [this] () {
-            processStdError(m_testApplication->readAllStandardError());
+            const QByteArray output = m_testApplication->readAllStandardError();
+            emit newOutputAvailable(output);
+            processStdError(output);
         });
     }
 }
@@ -54,6 +64,20 @@ TestOutputReader::TestOutputReader(const QFutureInterface<TestResultPtr> &future
 void TestOutputReader::processStdError(const QByteArray &output)
 {
     qWarning() << "AutoTest.Run: Ignored plain output:" << output;
+}
+
+void TestOutputReader::reportCrash()
+{
+    TestResultPtr result = createDefaultResult();
+    result->setDescription(tr("Test executable crashed."));
+    result->setResult(Result::MessageFatal);
+    m_futureInterface.reportResult(result);
+}
+
+void TestOutputReader::reportResult(const TestResultPtr &result)
+{
+    m_futureInterface.reportResult(result);
+    m_hadValidOutput = true;
 }
 
 } // namespace Internal

@@ -246,23 +246,10 @@ def verifyBreakPoint(bpToVerify):
             textPos = editor.textCursor().position()
             line = str(editor.plainText)[:textPos].count("\n") + 1
             windowTitle = str(waitForObject(":Qt Creator_Core::Internal::MainWindow").windowTitle)
-            test.verify(os.path.basename(fileName) in windowTitle,
+            test.verify(windowTitle.startswith(os.path.basename(fileName) + " "),
                         "Verify that Creator's window title changed according to current file")
             return test.compare(line, bpToVerify.values()[0],
                                 "Compare hit breakpoint to expected line number in %s" % fileName)
     else:
         test.fatal("Expected a dict for bpToVerify - got '%s'" % className(bpToVerify))
     return False
-
-# this function removes the compiled qml-debug library from QtSDK (only necessary for Qt < 4.8)
-def removeQmlDebugFolderIfExists():
-    paths = [os.path.join(sdkPath, "Desktop", "Qt", "474", "gcc", "qtc-qmldbg"),
-             os.path.join(sdkPath, "Desktop", "Qt", "4.7.4", "mingw", "qtc-qmldbg"),
-             os.path.join(sdkPath, "Desktop", "Qt", "4.7.4", "msvc2008", "qtc-qmldbg")
-             ]
-    for path in paths:
-        if os.path.exists(path):
-            try:
-                shutil.rmtree(path)
-            except:
-                test.warning("Error while removing '%s'" % path)

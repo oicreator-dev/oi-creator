@@ -296,10 +296,10 @@ bool GitPlugin::initialize(const QStringList &arguments, QString *errorMessage)
 
     m_gitClient = new GitClient;
 
-    initializeVcs(new GitVersionControl(m_gitClient), context);
+    auto vc = initializeVcs<GitVersionControl>(context, m_gitClient);
 
     // Create the settings Page
-    auto settingsPage = new SettingsPage(versionControl());
+    auto settingsPage = new SettingsPage(vc);
     addAutoReleasedObject(settingsPage);
     connect(settingsPage, &SettingsPage::settingsChanged,
             this, &GitPlugin::updateRepositoryBrowserAction);
@@ -423,6 +423,9 @@ bool GitPlugin::initialize(const QStringList &arguments, QString *errorMessage)
 
     createRepositoryAction(localRepositoryMenu, tr("Reset..."), "Git.Reset",
                            context, true, std::bind(&GitPlugin::resetRepository, this));
+
+    createRepositoryAction(localRepositoryMenu, tr("Recover Deleted Files"), "Git.RecoverDeleted",
+                           context, true, std::bind(&GitPlugin::recoverDeletedFiles, this));
 
     m_interactiveRebaseAction
             = createRepositoryAction(localRepositoryMenu,
@@ -716,9 +719,11 @@ void GitPlugin::blameFile()
             cursor.setPosition(selectionStart);
             const int startBlock = cursor.blockNumber();
             cursor.setPosition(selectionEnd);
-            const int endBlock = cursor.blockNumber();
+            int endBlock = cursor.blockNumber();
             if (startBlock != endBlock) {
                 firstLine = startBlock + 1;
+                if (cursor.atBlockStart())
+                    --endBlock;
                 if (auto widget = qobject_cast<VcsBaseEditorWidget *>(textEditor->widget())) {
                     const int previousFirstLine = widget->firstLineNumber();
                     if (previousFirstLine > 0)
@@ -803,6 +808,15 @@ void GitPlugin::resetRepository()
     dialog.setWindowTitle(tr("Undo Changes to %1").arg(QDir::toNativeSeparators(topLevel)));
     if (dialog.runDialog(topLevel, QString(), LogChangeWidget::IncludeRemotes))
         m_gitClient->reset(topLevel, dialog.resetFlag(), dialog.commit());
+}
+
+void GitPlugin::recoverDeletedFiles()
+{
+    if (!DocumentManager::saveAllModifiedDocuments())
+        return;
+    const VcsBasePluginState state = currentState();
+    QTC_ASSERT(state.hasTopLevel(), return);
+    m_gitClient->recoverDeletedFiles(state.topLevel());
 }
 
 void GitPlugin::startRebase()
@@ -924,6 +938,9 @@ void GitPlugin::gitGui()
 
 void GitPlugin::startCommit(CommitType commitType)
 {
+    if (!promptBeforeCommit())
+        return;
+
     if (raiseSubmitEditor())
         return;
     if (isCommitEditorOpen()) {

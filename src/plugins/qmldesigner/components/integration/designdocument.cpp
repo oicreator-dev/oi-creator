@@ -45,6 +45,7 @@
 #include <qtsupport/qtsupportconstants.h>
 #include <qtsupport/qtversionmanager.h>
 #include <coreplugin/idocument.h>
+#include <coreplugin/editormanager/editormanager.h>
 
 #include <qmljs/qmljsmodelmanagerinterface.h>
 
@@ -287,9 +288,9 @@ void DesignDocument::updateQrcFiles()
     ProjectExplorer::Project *currentProject = ProjectExplorer::SessionManager::projectForFile(fileName());
 
     if (currentProject) {
-        foreach (const QString &fileName, currentProject->files(ProjectExplorer::Project::SourceFiles)) {
+        for (const Utils::FileName &fileName : currentProject->files(ProjectExplorer::Project::SourceFiles)) {
             if (fileName.endsWith(".qrc"))
-                QmlJS::ModelManagerInterface::instance()->updateQrcFile(fileName);
+                QmlJS::ModelManagerInterface::instance()->updateQrcFile(fileName.toString());
         }
     }
 }
@@ -381,60 +382,11 @@ void DesignDocument::deleteSelected()
 
 void DesignDocument::copySelected()
 {
-    QScopedPointer<Model> copyModel(Model::create("QtQuick.Rectangle", 1, 0, currentModel()));
-    copyModel->setFileUrl(currentModel()->fileUrl());
-    copyModel->changeImports(currentModel()->imports(), {});
-
-    Q_ASSERT(copyModel);
-
     DesignDocumentView view;
 
     currentModel()->attachView(&view);
 
-    if (view.selectedModelNodes().isEmpty())
-        return;
-
-    QList<ModelNode> selectedNodes(view.selectedModelNodes());
-
-    foreach (const ModelNode &node, selectedNodes) {
-        foreach (const ModelNode &node2, selectedNodes) {
-            if (node.isAncestorOf(node2))
-                selectedNodes.removeAll(node2);
-        }
-    }
-
-    if (selectedNodes.count() == 1) {
-        ModelNode selectedNode(selectedNodes.first());
-
-        if (!selectedNode.isValid())
-            return;
-
-        currentModel()->detachView(&view);
-
-        copyModel->attachView(&view);
-        view.replaceModel(selectedNode);
-
-        Q_ASSERT(view.rootModelNode().isValid());
-        Q_ASSERT(view.rootModelNode().type() != "empty");
-
-        view.toClipboard();
-    } else { //multi items selected
-        currentModel()->detachView(&view);
-        copyModel->attachView(&view);
-
-        foreach (ModelNode node, view.rootModelNode().directSubModelNodes()) {
-            node.destroy();
-        }
-        view.changeRootNodeType("QtQuick.Rectangle", 1, 0);
-        view.rootModelNode().setIdWithRefactoring(QLatin1String("designer__Selection"));
-
-        foreach (const ModelNode &selectedNode, selectedNodes) {
-            ModelNode newNode(view.insertModel(selectedNode));
-            view.rootModelNode().nodeListProperty("data").reparentHere(newNode);
-        }
-
-        view.toClipboard();
-    }
+    DesignDocumentView::copyModelNodes(view.selectedModelNodes());
 }
 
 void DesignDocument::cutSelected()
@@ -478,28 +430,21 @@ static void scatterItem(const ModelNode &pastedNode, const ModelNode &targetNode
 
 void DesignDocument::paste()
 {
-    QScopedPointer<Model> pasteModel(Model::create("empty", 1, 0, currentModel()));
-    pasteModel->setFileUrl(currentModel()->fileUrl());
-    pasteModel->changeImports(currentModel()->imports(), {});
-
-    Q_ASSERT(pasteModel);
+    QScopedPointer<Model> pasteModel(DesignDocumentView::pasteToModel());
 
     if (!pasteModel)
         return;
 
     DesignDocumentView view;
     pasteModel->attachView(&view);
-
-    view.fromClipboard();
-
     ModelNode rootNode(view.rootModelNode());
+    QList<ModelNode> selectedNodes = rootNode.directSubModelNodes();
+    pasteModel->detachView(&view);
 
     if (rootNode.type() == "empty")
         return;
 
-    if (rootNode.id() == QLatin1String("designer__Selection")) {
-        QList<ModelNode> selectedNodes = rootNode.directSubModelNodes();
-        pasteModel->detachView(&view);
+    if (rootNode.id() == "designer__Selection") {
         currentModel()->attachView(&view);
 
         ModelNode targetNode;
@@ -545,7 +490,6 @@ void DesignDocument::paste()
         try {
             RewriterTransaction transaction(rewriterView(), QByteArrayLiteral("DesignDocument::paste2"));
 
-            pasteModel->detachView(&view);
             currentModel()->attachView(&view);
             ModelNode pastedNode(view.insertModel(rootNode));
             ModelNode targetNode;
@@ -605,6 +549,13 @@ RewriterView *DesignDocument::rewriterView() const
 void DesignDocument::setEditor(Core::IEditor *editor)
 {
     m_textEditor = editor;
+    // if the user closed the file explicit we do not want to do anything with it anymore
+    connect(Core::EditorManager::instance(), &Core::EditorManager::editorAboutToClose,
+            this, [this](Core::IEditor *editor) {
+        if (m_textEditor.data() == editor)
+            m_textEditor.clear();
+    });
+
     connect(editor->document(), &Core::IDocument::filePathChanged,
             this, &DesignDocument::updateFileName);
 

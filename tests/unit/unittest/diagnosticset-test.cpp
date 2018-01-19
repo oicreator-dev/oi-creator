@@ -25,8 +25,9 @@
 
 #include "googletest.h"
 #include "diagnosticcontainer-matcher.h"
+#include "testenvironment.h"
 
-#include <clangbackendipc_global.h>
+#include <clangsupport_global.h>
 #include <clangdocument.h>
 #include <diagnosticcontainer.h>
 #include <diagnosticset.h>
@@ -63,7 +64,8 @@ const Utf8String headerFilePath = Utf8StringLiteral(TESTDATA_DIR"/diagnostic_dia
 class DiagnosticSet : public ::testing::Test
 {
 protected:
-    ProjectPart projectPart{Utf8StringLiteral("projectPartId"), {Utf8StringLiteral("-pedantic")}};
+    ProjectPart projectPart{Utf8StringLiteral("projectPartId"),
+                TestEnvironment::addPlatformArguments({Utf8StringLiteral("-pedantic")})};
     ClangBackEnd::ProjectParts projects;
     ClangBackEnd::UnsavedFiles unsavedFiles;
     ClangBackEnd::Documents documents{projects, unsavedFiles};

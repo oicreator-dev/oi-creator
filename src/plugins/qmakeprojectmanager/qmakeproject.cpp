@@ -166,7 +166,6 @@ QmakeProject::QmakeProject(const FileName &fileName) :
 {
     s_projects.append(this);
     setId(Constants::QMAKEPROJECT_ID);
-    setProjectContext(Core::Context(QmakeProjectManager::Constants::PROJECT_ID));
     setProjectLanguages(Core::Context(ProjectExplorer::Constants::CXX_LANGUAGE_ID));
     setRequiredKitPredicate(QtSupport::QtKitInformation::qtVersionPredicate());
     setDisplayName(fileName.toFileInfo().completeBaseName());
@@ -202,6 +201,12 @@ QmakeProject::~QmakeProject()
     m_cancelEvaluate = true;
     Q_ASSERT(m_qmakeGlobalsRefCnt == 0);
     delete m_qmakeVfs;
+
+    if (m_asyncUpdateFutureInterface) {
+        m_asyncUpdateFutureInterface->reportCanceled();
+        m_asyncUpdateFutureInterface->reportFinished();
+        delete m_asyncUpdateFutureInterface;
+    }
 }
 
 QmakeProFile *QmakeProject::rootProFile() const
@@ -271,8 +276,10 @@ void QmakeProject::updateCppCodeModel()
     QtSupport::BaseQtVersion *qtVersion = QtSupport::QtKitInformation::qtVersion(k);
     ProjectPart::QtVersion qtVersionForPart = ProjectPart::NoQt;
     if (qtVersion) {
-        if (qtVersion->qtVersion() < QtSupport::QtVersionNumber(5,0,0))
-            qtVersionForPart = ProjectPart::Qt4;
+        if (qtVersion->qtVersion() <= QtSupport::QtVersionNumber(4,8,6))
+            qtVersionForPart = ProjectPart::Qt4_8_6AndOlder;
+        else if (qtVersion->qtVersion() < QtSupport::QtVersionNumber(5,0,0))
+            qtVersionForPart = ProjectPart::Qt4Latest;
         else
             qtVersionForPart = ProjectPart::Qt5;
     }
@@ -288,9 +295,13 @@ void QmakeProject::updateCppCodeModel()
         rpp.setDisplayName(pro->displayName());
         rpp.setProjectFileLocation(pro->filePath().toString());
         rpp.setBuildSystemTarget(pro->targetInformation().target);
-        // TODO: Handle QMAKE_CFLAGS
+        const bool isExecutable = pro->projectType() == ProjectType::ApplicationTemplate;
+        rpp.setBuildTargetType(isExecutable ? CppTools::ProjectPart::Executable
+                                            : CppTools::ProjectPart::Library);
+
         rpp.setFlagsForCxx({cxxToolChain, pro->variableValue(Variable::CppFlags)});
-        rpp.setDefines(pro->cxxDefines());
+        rpp.setFlagsForC({cToolChain, pro->variableValue(Variable::CFlags)});
+        rpp.setMacros(ProjectExplorer::Macro::toMacros(pro->cxxDefines()));
         rpp.setPreCompiledHeaders(pro->variableValue(Variable::PrecompiledHeader));
         rpp.setSelectedForBuilding(pro->includedInExactParse());
 
@@ -408,6 +419,7 @@ void QmakeProject::scheduleAsyncUpdate(QmakeProFile *file, QmakeProFile::AsyncUp
         return;
     }
 
+    emitParsingStarted();
     file->setParseInProgressRecursive(true);
     setAllBuildConfigurationsEnabled(false);
 
@@ -464,6 +476,7 @@ void QmakeProject::scheduleAsyncUpdate(QmakeProFile::AsyncUpdateDelay delay)
         return;
     }
 
+    emitParsingStarted();
     rootProFile()->setParseInProgressRecursive(true);
     setAllBuildConfigurationsEnabled(false);
 
@@ -493,17 +506,23 @@ void QmakeProject::incrementPendingEvaluateFutures()
 {
     ++m_pendingEvaluateFuturesCount;
     m_asyncUpdateFutureInterface->setProgressRange(m_asyncUpdateFutureInterface->progressMinimum(),
-                                                  m_asyncUpdateFutureInterface->progressMaximum() + 1);
+                                                   m_asyncUpdateFutureInterface->progressMaximum() + 1);
 }
 
 void QmakeProject::decrementPendingEvaluateFutures()
 {
     --m_pendingEvaluateFuturesCount;
 
+    if (!rootProFile())
+        return; // We are closing the project!
+
     m_asyncUpdateFutureInterface->setProgressValue(m_asyncUpdateFutureInterface->progressValue() + 1);
     if (m_pendingEvaluateFuturesCount == 0) {
         // We are done!
         setRootProjectNode(QmakeNodeTreeBuilder::buildTree(this));
+
+        if (!m_rootProFile->validParse())
+            m_asyncUpdateFutureInterface->reportCanceled();
 
         m_asyncUpdateFutureInterface->reportFinished();
         delete m_asyncUpdateFutureInterface;
@@ -512,6 +531,7 @@ void QmakeProject::decrementPendingEvaluateFutures()
 
         // TODO clear the profile cache ?
         if (m_asyncUpdateState == AsyncFullUpdatePending || m_asyncUpdateState == AsyncPartialUpdatePending) {
+            // Already parsing!
             rootProFile()->setParseInProgressRecursive(true);
             setAllBuildConfigurationsEnabled(false);
             startAsyncTimer(QmakeProFile::ParseLater);
@@ -525,8 +545,7 @@ void QmakeProject::decrementPendingEvaluateFutures()
             if (activeTarget())
                 activeTarget()->updateDefaultDeployConfigurations();
             updateRunConfigurations();
-            emit proFilesEvaluated();
-            emit parsingFinished();
+            emitParsingFinished(true); // Qmake always returns (some) data, even when it failed:-)
         }
     }
 }
@@ -591,7 +610,7 @@ static FolderNode *folderOf(FolderNode *in, const FileName &fileName)
 
 // Find the QmakeProFileNode that contains a certain file.
 // First recurse down to folder, then find the pro-file.
-static FileNode *fileNodeOf(QmakeProFileNode *in, const FileName &fileName)
+static FileNode *fileNodeOf(FolderNode *in, const FileName &fileName)
 {
     for (FolderNode *folder = folderOf(in, fileName); folder; folder = folder->parentFolderNode()) {
         if (QmakeProFileNode *proFile = dynamic_cast<QmakeProFileNode *>(folder)) {
@@ -628,7 +647,7 @@ void QmakeProject::proFileParseError(const QString &errorMessage)
 QtSupport::ProFileReader *QmakeProject::createProFileReader(const QmakeProFile *qmakeProFile)
 {
     if (!m_qmakeGlobals) {
-        m_qmakeGlobals = new QMakeGlobals;
+        m_qmakeGlobals = std::make_unique<QMakeGlobals>();
         m_qmakeGlobalsRefCnt = 0;
 
         Kit *k = KitManager::defaultKit();
@@ -644,6 +663,11 @@ QtSupport::ProFileReader *QmakeProject::createProFileReader(const QmakeProFile *
                 else
                     qmakeArgs = bc->configCommandLineArguments();
             }
+        } else {
+            // Set up a better default environment without using a build configuration:
+            QmakeBuildConfiguration::setupBuildEnvironment(k, env);
+            if (k)
+                k->addToEnvironment(env);
         }
 
         QtSupport::BaseQtVersion *qtVersion = QtSupport::QtKitInformation::qtVersion(k);
@@ -652,7 +676,7 @@ QtSupport::ProFileReader *QmakeProject::createProFileReader(const QmakeProFile *
 
         if (qtVersion && qtVersion->isValid()) {
             m_qmakeGlobals->qmake_abslocation = QDir::cleanPath(qtVersion->qmakeCommand().toString());
-            qtVersion->applyProperties(m_qmakeGlobals);
+            qtVersion->applyProperties(m_qmakeGlobals.get());
         }
         m_qmakeGlobals->setDirectories(rootProFile()->sourceDir().toString(),
                                        rootProFile()->buildDir().toString());
@@ -681,7 +705,7 @@ QtSupport::ProFileReader *QmakeProject::createProFileReader(const QmakeProFile *
     }
     ++m_qmakeGlobalsRefCnt;
 
-    auto reader = new QtSupport::ProFileReader(m_qmakeGlobals, m_qmakeVfs);
+    auto reader = new QtSupport::ProFileReader(m_qmakeGlobals.get(), m_qmakeVfs);
 
     reader->setOutputDir(qmakeProFile->buildDir().toString());
 
@@ -690,7 +714,7 @@ QtSupport::ProFileReader *QmakeProject::createProFileReader(const QmakeProFile *
 
 QMakeGlobals *QmakeProject::qmakeGlobals()
 {
-    return m_qmakeGlobals;
+    return m_qmakeGlobals.get();
 }
 
 QMakeVfs *QmakeProject::qmakeVfs()
@@ -713,30 +737,13 @@ void QmakeProject::destroyProFileReader(QtSupport::ProFileReader *reader)
         QtSupport::ProFileCacheManager::instance()->discardFiles(dir);
         QtSupport::ProFileCacheManager::instance()->decRefCount();
 
-        delete m_qmakeGlobals;
-        m_qmakeGlobals = nullptr;
+        m_qmakeGlobals.reset();
     }
 }
 
 QmakeProFileNode *QmakeProject::rootProjectNode() const
 {
     return static_cast<QmakeProFileNode *>(Project::rootProjectNode());
-}
-
-bool QmakeProject::validParse(const FileName &proFilePath) const
-{
-    if (!rootProFile())
-        return false;
-    const QmakeProFile *pro = rootProFile()->findProFile(proFilePath);
-    return pro && pro->validParse();
-}
-
-bool QmakeProject::parseInProgress(const FileName &proFilePath) const
-{
-    if (!rootProFile())
-        return false;
-    const QmakeProFile *pro = rootProFile()->findProFile(proFilePath);
-    return pro && pro->parseInProgress();
 }
 
 QList<QmakeProFile *>
@@ -777,9 +784,8 @@ bool QmakeProject::hasApplicationProFile(const FileName &path) const
     return Utils::contains(list, Utils::equal(&QmakeProFile::filePath, path));
 }
 
-QList<Core::Id> QmakeProject::creationIds(Core::Id base,
-                                          IRunConfigurationFactory::CreationMode mode,
-                                          const QList<ProjectType> &projectTypes)
+QList<BuildTargetInfo> QmakeProject::buildTargets(IRunConfigurationFactory::CreationMode mode,
+                                                  const QList<ProjectType> &projectTypes)
 {
     QList<ProjectType> realTypes = projectTypes;
     if (realTypes.isEmpty())
@@ -794,8 +800,11 @@ QList<Core::Id> QmakeProject::creationIds(Core::Id base,
         temp = filtered.isEmpty() ? files : filtered;
     }
 
-    return Utils::transform(temp, [&base](QmakeProFile *f) {
-        return base.withSuffix(f->filePath().toString());
+    return Utils::transform(temp, [](QmakeProFile *f) {
+        BuildTargetInfo bti;
+        bti.targetName = f->filePath().toString();
+        bti.displayName = QFileInfo(bti.targetName).completeBaseName();
+        return bti;
     });
 }
 
@@ -844,7 +853,7 @@ static void notifyChangedHelper(const FileName &fileName, QmakeProFile *file)
 void QmakeProject::notifyChanged(const FileName &name)
 {
     for (QmakeProject *project : s_projects) {
-        if (project->files(QmakeProject::SourceFiles).contains(name.toString()))
+        if (project->files(QmakeProject::SourceFiles).contains(name))
             notifyChangedHelper(name, project->rootProFile());
     }
 }
@@ -1202,6 +1211,7 @@ void QmakeProject::collectLibraryData(const QmakeProFile *file, DeploymentData &
     }
     case Abi::LinuxOS:
     case Abi::BsdOS:
+    case Abi::QnxOS:
     case Abi::UnixOS:
         if (!(isPlugin && config.contains(QLatin1String("no_plugin_name_prefix"))))
             targetFileName.prepend(QLatin1String("lib"));

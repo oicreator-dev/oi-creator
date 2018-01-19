@@ -31,6 +31,7 @@
 #include <texteditor/codeassist/genericproposalmodel.h>
 #include <texteditor/completionsettings.h>
 #include <texteditor/texteditorsettings.h>
+#include <texteditor/texteditorconstants.h>
 #include <texteditor/texteditor.h>
 
 #include <utils/algorithm.h>
@@ -204,6 +205,8 @@ IAssistProposal *KeywordsCompletionAssistProcessor::perform(const AssistInterfac
 
     if (m_keywords.isFunction(word) && interface->characterAt(pos) == '(') {
         QStringList functionSymbols = m_keywords.argsForFunction(word);
+        if (functionSymbols.size() == 0)
+            return nullptr;
         IFunctionHintProposalModel *model = new KeywordsFunctionHintModel(functionSymbols);
         return new FunctionHintProposal(startPosition, model);
     } else {
@@ -241,6 +244,24 @@ KeywordsCompletionAssistProcessor::generateProposalList(const QStringList &words
         item->setIcon(icon);
         return item;
     });
+}
+
+KeywordsCompletionAssistProvider::KeywordsCompletionAssistProvider(const Keywords &keyWords,
+                                                                   const QString &snippetGroup)
+    : m_keyWords(keyWords)
+    , m_snippetGroup(snippetGroup)
+{ }
+
+IAssistProvider::RunType KeywordsCompletionAssistProvider::runType() const
+{
+    return Synchronous;
+}
+
+IAssistProcessor *KeywordsCompletionAssistProvider::createProcessor() const
+{
+    auto processor = new KeywordsCompletionAssistProcessor(m_keyWords);
+    processor->setSnippetGroup(m_snippetGroup);
+    return processor;
 }
 
 } // namespace TextEditor

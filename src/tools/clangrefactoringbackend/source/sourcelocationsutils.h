@@ -25,27 +25,14 @@
 
 #pragma once
 
+#include <filepathcachinginterface.h>
 #include <sourcelocationscontainer.h>
 #include <sourcerangescontainer.h>
-
-#if defined(__GNUC__)
-#    pragma GCC diagnostic push
-#    pragma GCC diagnostic ignored "-Wunused-parameter"
-#elif defined(_MSC_VER)
-#    pragma warning(push)
-#    pragma warning( disable : 4100 )
-#endif
 
 #include <clang/Basic/SourceManager.h>
 #include <clang/Lex/Lexer.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/FileUtilities.h>
-
-#if defined(__GNUC__)
-#    pragma GCC diagnostic pop
-#elif defined(_MSC_VER)
-#    pragma warning(pop)
-#endif
 
 #include <iterator>
 #include <cctype>
@@ -53,20 +40,22 @@
 namespace ClangBackEnd {
 
 inline
-llvm::SmallString<256> absolutePath(const llvm::StringRef &path)
+llvm::SmallString<256> absolutePath(clang::StringRef path)
 {
-    llvm::SmallString<256> absolutePath(path);
+    llvm::SmallString<256> absolutePath;
 
-    if (!llvm::sys::path::is_absolute(absolutePath))
+    std::error_code errorCode = llvm::sys::fs::real_path(path, absolutePath, true);
+
+    if (!errorCode && !llvm::sys::path::is_absolute(absolutePath))
         llvm::sys::fs::make_absolute(absolutePath);
 
     return absolutePath;
 }
 
-template <typename Container>
-Utils::SmallString fromNativePath(Container container)
+inline
+Utils::PathString fromNativePath(const llvm::SmallString<256> &string)
 {
-    Utils::SmallString path(container.data(), container.size());
+    Utils::PathString path(string.data(), string.size());
 
 #ifdef _WIN32
     std::replace(path.begin(), path.end(), '\\', '/');
@@ -79,7 +68,8 @@ inline
 void appendSourceLocationsToSourceLocationsContainer(
         ClangBackEnd::SourceLocationsContainer &sourceLocationsContainer,
         const std::vector<clang::SourceLocation> &sourceLocations,
-        const clang::SourceManager &sourceManager)
+        const clang::SourceManager &sourceManager,
+        FilePathCachingInterface &filePathCache)
 {
     sourceLocationsContainer.reserve(sourceLocations.size());
 
@@ -89,14 +79,9 @@ void appendSourceLocationsToSourceLocationsContainer(
         const auto fileId = decomposedLoction.first;
         const auto offset = decomposedLoction.second;
         const auto fileEntry = sourceManager.getFileEntryForID(fileId);
-        auto filePath = absolutePath(fileEntry->getName());
-        const auto fileName = llvm::sys::path::filename(filePath);
-        llvm::sys::path::remove_filename(filePath);
+        auto filePath = FilePath::fromNativeFilePath(absolutePath(fileEntry->getName()));
 
-        sourceLocationsContainer.insertFilePath(fileId.getHashValue(),
-                                                fromNativePath(filePath),
-                                                fromNativePath(fileName));
-        sourceLocationsContainer.insertSourceLocation(fileId.getHashValue(),
+        sourceLocationsContainer.insertSourceLocation(filePathCache.filePathId(filePath),
                                                       fullSourceLocation.getSpellingLineNumber(),
                                                       fullSourceLocation.getSpellingColumnNumber(),
                                                       offset);

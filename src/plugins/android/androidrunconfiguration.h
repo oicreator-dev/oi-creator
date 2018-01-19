@@ -29,24 +29,33 @@
 
 #include <projectexplorer/runconfiguration.h>
 
-QT_BEGIN_NAMESPACE
-class QToolButton;
-QT_END_NAMESPACE
-
 namespace Android {
 
 class ANDROID_EXPORT AndroidRunConfiguration : public ProjectExplorer::RunConfiguration
 {
     Q_OBJECT
 public:
-    AndroidRunConfiguration(ProjectExplorer::Target *parent, Core::Id id);
+    explicit AndroidRunConfiguration(ProjectExplorer::Target *target, Core::Id id);
 
     QWidget *createConfigurationWidget() override;
     Utils::OutputFormatter *createOutputFormatter() const override;
-    const QString remoteChannel() const;
 
-protected:
-    AndroidRunConfiguration(ProjectExplorer::Target *parent, AndroidRunConfiguration *source);
+    bool fromMap(const QVariantMap &map) override;
+    QVariantMap toMap() const override;
+
+    const QStringList &amStartExtraArgs() const;
+    const QStringList &preStartShellCommands() const;
+    const QStringList &postFinishShellCommands() const;
+
+private:
+    // FIXME: This appears to miss a copyFrom() implementation.
+    void setPreStartShellCommands(const QStringList &cmdList);
+    void setPostFinishShellCommands(const QStringList &cmdList);
+    void setAmStartExtraArgs(const QStringList &args);
+
+    QStringList m_amStartExtraArgs;
+    QStringList m_preStartShellCommands;
+    QStringList m_postFinishShellCommands;
 };
 
 } // namespace Android

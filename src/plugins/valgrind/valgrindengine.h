@@ -49,16 +49,13 @@ public:
 
     QString executable() const;
 
-signals:
-    void starting();
-
 protected:
     virtual QString progressTitle() const = 0;
     virtual QStringList toolArguments() const = 0;
-    virtual Valgrind::ValgrindRunner *runner() = 0;
 
     ValgrindBaseSettings *m_settings = 0;
     QFutureInterface<void> m_progress;
+    ValgrindRunner m_runner;
 
 private:
     void handleProgressCanceled();

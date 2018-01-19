@@ -36,6 +36,9 @@ const char MODE_SESSION[]         = "Project";
 // Actions
 const char BUILD[]                = "ProjectExplorer.Build";
 const char STOP[]                 = "ProjectExplorer.Stop";
+const char ADDNEWFILE[]           = "ProjectExplorer.AddNewFile";
+const char RENAMEFILE[]           = "ProjectExplorer.RenameFile";
+const char REMOVEFILE[]           = "ProjectExplorer.RemoveFile";
 
 // Context
 const char C_PROJECT_TREE[]       = "ProjectExplorer.ProjectTreeContext";
@@ -50,6 +53,8 @@ const char G_BUILD_BUILD[]        = "ProjectExplorer.Group.Build";
 const char G_BUILD_DEPLOY[]       = "ProjectExplorer.Group.Deploy";
 const char G_BUILD_REBUILD[]      = "ProjectExplorer.Group.Rebuild";
 const char G_BUILD_CLEAN[]        = "ProjectExplorer.Group.Clean";
+const char G_BUILD_RUN[]          = "ProjectExplorer.Group.Run";
+const char G_BUILD_CANCEL[]       = "ProjectExplorer.Group.BuildCancel";
 
 // Context menus
 const char M_SESSIONCONTEXT[]     = "Project.Menu.Session";
@@ -73,6 +78,7 @@ const char G_PROJECT_FILES[]      = "Project.Group.Files";
 const char G_PROJECT_TREE[]       = "Project.Group.Tree";
 const char G_PROJECT_LAST[]       = "Project.Group.Last";
 
+const char G_FOLDER_LOCATIONS[]   = "ProjectFolder.Group.Locations";
 const char G_FOLDER_FILES[]       = "ProjectFolder.Group.Files";
 const char G_FOLDER_OTHER[]       = "ProjectFolder.Group.Other";
 const char G_FOLDER_CONFIG[]      = "ProjectFolder.Group.Config";
@@ -89,6 +95,7 @@ const char CPP_HEADER_MIMETYPE[]  = "text/x-c++hdr";
 const char LINGUIST_MIMETYPE[]    = "text/vnd.trolltech.linguist";
 const char FORM_MIMETYPE[]        = "application/x-designer";
 const char QML_MIMETYPE[]         = "text/x-qml"; // separate def also in qmljstoolsconstants.h
+const char QMLUI_MIMETYPE[]       = "application/x-qt.ui+qml";
 const char RESOURCE_MIMETYPE[]    = "application/vnd.qt.xml.resource";
 const char SCXML_MIMETYPE[]       = "application/scxml+xml";
 
@@ -126,6 +133,8 @@ const char IMPORT_WIZARD_CATEGORY_DISPLAY[] = QT_TRANSLATE_NOOP("ProjectExplorer
 
 // Wizard extra values
 const char PREFERRED_PROJECT_NODE[] = "ProjectExplorer.PreferredProjectNode";
+const char PREFERRED_PROJECT_NODE_PATH[] = "ProjectExplorer.PreferredProjectPath";
+const char PROJECT_POINTER[] = "ProjectExplorer.Project";
 const char PROJECT_KIT_IDS[] = "ProjectExplorer.Profile.Ids";
 
 // Build step lists ids:
@@ -147,7 +156,6 @@ const char LINUXICC_TOOLCHAIN_TYPEID[] = "ProjectExplorer.ToolChain.LinuxIcc";
 const char MINGW_TOOLCHAIN_TYPEID[] = "ProjectExplorer.ToolChain.Mingw";
 const char MSVC_TOOLCHAIN_TYPEID[] = "ProjectExplorer.ToolChain.Msvc";
 const char CLANG_CL_TOOLCHAIN_TYPEID[] = "ProjectExplorer.ToolChain.ClangCl";
-const char WINCE_TOOLCHAIN_TYPEID[] = "ProjectExplorer.ToolChain.WinCE";
 const char CUSTOM_TOOLCHAIN_TYPEID[] = "ProjectExplorer.ToolChain.Custom";
 
 // Default directory to run custom (build) commands in.
@@ -181,7 +189,7 @@ const char NORMAL_RUN_MODE[]="RunConfiguration.NormalRunMode";
 const char QML_PROFILER_RUN_MODE[]="RunConfiguration.QmlProfilerRunMode";
 const char PERFPROFILER_RUN_MODE[]="PerfProfiler.RunMode";
 const char DEBUG_RUN_MODE[]="RunConfiguration.DebugRunMode";
-const char DEBUG_RUN_MODE_WITH_BREAK_ON_MAIN[]="RunConfiguration.DebugRunModeWithBreakOnMain";
+const char QML_PREVIEW_RUN_MODE[]="RunConfiguration.QmlPreviewRunMode";
 
 // Navigation Widget
 const char PROJECTTREE_ID[] = "Projects";

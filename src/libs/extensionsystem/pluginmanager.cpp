@@ -47,6 +47,7 @@
 #include <QSysInfo>
 
 #include <utils/algorithm.h>
+#include <utils/benchmarker.h>
 #include <utils/executeondestruction.h>
 #include <utils/hostosinfo.h>
 #include <utils/mimetypes/mimedatabase.h>
@@ -273,9 +274,10 @@ enum { debugLeaks = 0 };
 
 
 using namespace Utils;
-using namespace ExtensionSystem::Internal;
 
 namespace ExtensionSystem {
+
+using namespace Internal;
 
 static Internal::PluginManagerPrivate *d = 0;
 static PluginManager *m_instance = 0;
@@ -441,7 +443,7 @@ QString PluginManager::systemInformation() const
     if (response.result == SynchronousProcessResponse::Finished)
         result += response.allOutput() + "\n";
     result += "Plugin information:\n\n";
-    auto longestSpec = std::max_element(plugins().cbegin(), plugins().cend(),
+    auto longestSpec = std::max_element(d->pluginSpecs.cbegin(), d->pluginSpecs.cend(),
                                         [](const PluginSpec *left, const PluginSpec *right) {
                                             return left->name().size() < right->name().size();
                                         });
@@ -1322,11 +1324,11 @@ bool PluginManagerPrivate::loadQueue(PluginSpec *spec, QList<PluginSpec *> &queu
         spec->d->errorString += QLatin1Char('\n');
         int index = circularityCheckQueue.indexOf(spec);
         for (int i = index; i < circularityCheckQueue.size(); ++i) {
-            spec->d->errorString.append(PluginManager::tr("%1(%2) depends on")
+            spec->d->errorString.append(PluginManager::tr("%1 (%2) depends on")
                 .arg(circularityCheckQueue.at(i)->name()).arg(circularityCheckQueue.at(i)->version()));
             spec->d->errorString += QLatin1Char('\n');
         }
-        spec->d->errorString.append(PluginManager::tr("%1(%2)").arg(spec->name()).arg(spec->version()));
+        spec->d->errorString.append(PluginManager::tr("%1 (%2)").arg(spec->name()).arg(spec->version()));
         return false;
     }
     circularityCheckQueue.append(spec);
@@ -1348,7 +1350,7 @@ bool PluginManagerPrivate::loadQueue(PluginSpec *spec, QList<PluginSpec *> &queu
         if (!loadQueue(depSpec, queue, circularityCheckQueue)) {
             spec->d->hasError = true;
             spec->d->errorString =
-                PluginManager::tr("Cannot load plugin because dependency failed to load: %1(%2)\nReason: %3")
+                PluginManager::tr("Cannot load plugin because dependency failed to load: %1 (%2)\nReason: %3")
                     .arg(depSpec->name()).arg(depSpec->version()).arg(depSpec->errorString());
             return false;
         }
@@ -1488,6 +1490,7 @@ void PluginManagerPrivate::readPluginPaths()
         pluginSpecs.append(spec);
     }
     resolveDependencies();
+    enableDependenciesIndirectly();
     // ensure deterministic plugin load order by sorting
     Utils::sort(pluginSpecs, &PluginSpec::name);
     emit q->pluginsChanged();
@@ -1495,42 +1498,19 @@ void PluginManagerPrivate::readPluginPaths()
 
 void PluginManagerPrivate::resolveDependencies()
 {
-    foreach (PluginSpec *spec, pluginSpecs) {
-        spec->d->enabledIndirectly = false; // reset, is recalculated below
+    foreach (PluginSpec *spec, pluginSpecs)
         spec->d->resolveDependencies(pluginSpecs);
-    }
-
-    Utils::reverseForeach(loadQueue(), [](PluginSpec *spec) {
-        spec->d->enableDependenciesIndirectly();
-    });
 }
 
-void PluginManagerPrivate::enableOnlyTestedSpecs()
+void PluginManagerPrivate::enableDependenciesIndirectly()
 {
-    if (testSpecs.isEmpty())
-        return;
-
-    QList<PluginSpec *> specsForTests;
-    foreach (const TestSpec &testSpec, testSpecs) {
-        QList<PluginSpec *> circularityCheckQueue;
-        loadQueue(testSpec.pluginSpec, specsForTests, circularityCheckQueue);
-        // add plugins that must be force loaded when running tests for the plugin
-        // (aka "test dependencies")
-        QHashIterator<PluginDependency, PluginSpec *> it(testSpec.pluginSpec->dependencySpecs());
-        while (it.hasNext()) {
-            it.next();
-            if (it.key().type != PluginDependency::Test)
-                continue;
-            PluginSpec *depSpec = it.value();
-            circularityCheckQueue.clear();
-            loadQueue(depSpec, specsForTests, circularityCheckQueue);
-        }
-    }
     foreach (PluginSpec *spec, pluginSpecs)
-        spec->d->setForceDisabled(true);
-    foreach (PluginSpec *spec, specsForTests) {
-        spec->d->setForceDisabled(false);
-        spec->d->setForceEnabled(true);
+        spec->d->enabledIndirectly = false;
+    // cannot use reverse loadQueue here, because test dependencies can introduce circles
+    QList<PluginSpec *> queue = Utils::filtered(pluginSpecs, &PluginSpec::isEffectivelyEnabled);
+    while (!queue.isEmpty()) {
+        PluginSpec *spec = queue.takeFirst();
+        queue += spec->d->enableDependenciesIndirectly(containsTestSpec(spec));
     }
 }
 
@@ -1581,6 +1561,13 @@ void PluginManagerPrivate::profilingReport(const char *what, const PluginSpec *s
             qDebug("%-22s %-22s %8dms (%8dms)", what, qPrintable(spec->name()), absoluteElapsedMS, elapsedMS);
         else
             qDebug("%-45s %8dms (%8dms)", what, absoluteElapsedMS, elapsedMS);
+        if (what && *what == '<') {
+            QString tc;
+            if (spec)
+                tc = spec->name() + '_';
+            tc += QString::fromUtf8(QByteArray(what + 1));
+            Utils::Benchmarker::report("loadPlugins", tc, elapsedMS);
+        }
     }
 }
 
@@ -1601,6 +1588,7 @@ void PluginManagerPrivate::profilingSummary() const
             qDebug("%-22s %8dms   ( %5.2f%% )", qPrintable(it.value()->name()),
                 it.key(), 100.0 * it.key() / total);
          qDebug("Total: %8dms", total);
+         Utils::Benchmarker::report("loadPlugins", "Total", total);
     }
 }
 

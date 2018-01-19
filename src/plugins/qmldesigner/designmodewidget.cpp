@@ -229,6 +229,9 @@ static void hideToolButtons(QList<QToolButton*> &buttons)
 
 void DesignModeWidget::setup()
 {
+    viewManager().designerActionManager().createDefaultDesignerActions();
+    viewManager().designerActionManager().polishActions();
+
     QList<Core::INavigationWidgetFactory *> factories =
             ExtensionSystem::PluginManager::getObjects<Core::INavigationWidgetFactory>();
 
@@ -438,10 +441,22 @@ static QWidget *createbottomSideBarWidget(const QList<WidgetInfo> &widgetInfos)
             topWidgetInfos.append(widgetInfo);
     }
 
-    if (topWidgetInfos.count() == 1)
-        return topWidgetInfos.first().widget;
-    else
-        return createWidgetsInTabWidget(topWidgetInfos);
+    QWidget *widget = topWidgetInfos.first().widget;
+    if (topWidgetInfos.count() > 1) {
+        QWidget *background = new QWidget();
+        background->setProperty("designerBackgroundColor", true);
+
+        QString sheet = QString::fromUtf8(Utils::FileReader::fetchQrc(":/qmldesigner/stylesheet.css"));
+        sheet.prepend("QWidget[designerBackgroundColor=\"true\"] {background-color: creatorTheme.QmlDesignerBackgroundColorDarkAlternate;}");
+
+        background->setStyleSheet(Theme::replaceCssColors(sheet));
+        background->setLayout(new QVBoxLayout);
+        background->layout()->setContentsMargins(0, 0, 0, 0);
+
+        background->layout()->addWidget(createWidgetsInTabWidget(topWidgetInfos));
+        widget = background;
+    }
+    return widget;
 }
 
 static Core::MiniSplitter *createCentralSplitter(const QList<WidgetInfo> &widgetInfos)
@@ -496,16 +511,12 @@ QWidget *DesignModeWidget::createCenterWidget()
 
 QWidget *DesignModeWidget::createCrumbleBarFrame()
 {
-    QFrame *frame = new QFrame(this);
-    frame->setStyleSheet("background-color: #4e4e4e;");
-    frame->setFrameShape(QFrame::NoFrame);
+    auto *frame = new Utils::StyledBar(this);
+    frame->setSingleRow(false);
     QHBoxLayout *layout = new QHBoxLayout(frame);
     layout->setMargin(0);
     layout->setSpacing(0);
-    frame->setLayout(layout);
     layout->addWidget(m_crumbleBar->crumblePath());
-    frame->setProperty("panelwidget", true);
-    frame->setProperty("panelwidget_singlerow", false);
 
     return frame;
 }

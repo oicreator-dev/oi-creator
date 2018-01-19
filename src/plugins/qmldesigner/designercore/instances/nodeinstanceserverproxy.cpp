@@ -107,15 +107,7 @@ NodeInstanceServerProxy::NodeInstanceServerProxy(NodeInstanceView *nodeInstanceV
     : NodeInstanceServerInterface(nodeInstanceView),
       m_localServer(new QLocalServer(this)),
       m_nodeInstanceView(nodeInstanceView),
-      m_firstBlockSize(0),
-      m_secondBlockSize(0),
-      m_thirdBlockSize(0),
-      m_writeCommandCounter(0),
-      m_firstLastReadCommandCounter(0),
-      m_secondLastReadCommandCounter(0),
-      m_thirdLastReadCommandCounter(0),
-      m_runModus(runModus),
-      m_synchronizeId(-1)
+      m_runModus(runModus)
 {
     if (instanceViewBenchmark().isInfoEnabled())
         m_benchmarkTimer.start();
@@ -124,10 +116,10 @@ NodeInstanceServerProxy::NodeInstanceServerProxy(NodeInstanceView *nodeInstanceV
    m_localServer->listen(socketToken);
    m_localServer->setMaxPendingConnections(3);
 
-   PuppetCreator puppetCreator(kit, project, QString(), nodeInstanceView->model());
+   PuppetCreator puppetCreator(kit, project, nodeInstanceView->model());
    puppetCreator.setQrcMappingString(qrcMappingString());
 
-   puppetCreator.createPuppetExecutableIfMissing();
+   puppetCreator.createQml2PuppetExecutableIfMissing();
 
    m_qmlPuppetEditorProcess = puppetCreator.createPuppetProcess("editormode",
                                                               socketToken,
@@ -344,7 +336,7 @@ QString NodeInstanceServerProxy::qrcMappingString() const
 
             foreach (const StringPair &pair, rewriterView->qrcMapping()) {
                 if (!mappingString.isEmpty())
-                    mappingString.append(QLatin1String(","));
+                    mappingString.append(QLatin1String(";"));
                 mappingString.append(pair.first);
                 mappingString.append(QLatin1String("="));
                 mappingString.append(pair.second);
