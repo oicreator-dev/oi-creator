@@ -1,0 +1,11 @@
+<RCC>
+    <qresource prefix="/text">
+        <file alias="help_zh_CN.txt">text/help_zh_CN.txt</file>
+    </qresource>
+    <qresource prefix="/config">
+        <file alias="default.lm">config/default.lm</file>
+    </qresource>
+    <qresource prefix="/language">
+        <file alias="lmake_zh_CN.qm">language/lmake_zh_CN.qm</file>
+    </qresource>
+</RCC>
