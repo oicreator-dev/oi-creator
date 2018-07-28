@@ -14,7 +14,8 @@ using namespace LMake;
 
 using namespace Core;
 using namespace ProjectExplorer;
-
+namespace LMake {
+static LMakeAPI* lmakeapi=nullptr;
 bool LMakePlugin::initialize(const QStringList &arguments, QString *errorMessage)
 {
     Q_UNUSED(arguments)
@@ -22,7 +23,7 @@ bool LMakePlugin::initialize(const QStringList &arguments, QString *errorMessage
 
     const Context projectContext("Qt4ProjectManager.Qt4Project");
 
-    m_lmakeapi = new LMakeAPI;
+    lmakeapi = new LMakeAPI;
 
     return true;
 }
@@ -35,4 +36,10 @@ void LMakePlugin::extensionsInitialized()
 LMakePlugin::LMakePlugin()
 {
 
+}
+
+LMakeAPI *LMakePlugin::getLMakeAPI()
+{
+    return lmakeapi;
+}
 }

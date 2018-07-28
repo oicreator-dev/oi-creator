@@ -14,8 +14,7 @@ public:
     void extensionsInitialized() override;
 public:
     LMakePlugin();
-private:
-    LMakeAPI *m_lmakeapi=nullptr;
+    static LMakeAPI* getLMakeAPI();
 };
 }
 

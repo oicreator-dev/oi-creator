@@ -1,7 +1,7 @@
-#ifndef LMAKEPROJECTMANAGER_H
-#define LMAKEPROJECTMANAGER_H
+#pragma once
 
 #include <QObject>
+#include "lmakeapi.h"
 
 namespace LmakeProjectManager
 {
@@ -12,11 +12,10 @@ public:
     explicit LmakeManager(QObject *parent = 0);
 
     void runLMake();
-
 signals:
 
 public slots:
+private:
+    LMake::LMakeAPI* m_lmakeapi=nullptr;
 };
 }
-
-#endif // LMAKEPROJECTMANAGER_H

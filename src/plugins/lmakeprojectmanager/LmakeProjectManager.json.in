@@ -4,6 +4,6 @@
     \"CompatVersion\" : \"$$QTCREATOR_COMPAT_VERSION\",
     \"Vendor\" : \"WAAutoMaton\",
     \"Category\" : \"Build Systems\",
-    \"Description\" : \"Provides project type for Qt/QMake .pro files and tools.\",
+    \"Description\" : \"Light-make project manager.\",
     $$dependencyList
 }
