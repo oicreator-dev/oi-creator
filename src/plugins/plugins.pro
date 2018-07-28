@@ -7,19 +7,16 @@ SUBDIRS   = \
     coreplugin \
     texteditor \
     cppeditor \
-    bineditor \
     diffeditor \
     bookmarks \
     projectexplorer \
     cpptools \
     qtsupport \
-    qmakeprojectmanager \
     debugger \
     cpaster \
     autotoolsprojectmanager \
     fakevim \
     emacskeys \
-    resourceeditor \
     genericprojectmanager \
     pythoneditor \
     classview \
@@ -28,11 +25,10 @@ SUBDIRS   = \
     remotelinux \
     valgrind \
     todo \
-    baremetal \
     beautifier \
-    updateinfo \
     silversearcher \
-    lmakeprojectmanager
+    lmakeprojectmanager \
+    lmake
 
 !isEmpty(NoRemoveQmakeProjectManager) {
     SUBDIRS+=qmakeprojectmanager
