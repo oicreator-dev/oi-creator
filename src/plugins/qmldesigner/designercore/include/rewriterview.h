@@ -75,7 +75,7 @@ public:
 
 public:
     RewriterView(DifferenceHandling differenceHandling, QObject *parent);
-    ~RewriterView();
+    ~RewriterView() override;
 
     void modelAttached(Model *model) override;
     void modelAboutToBeDetached(Model *model) override;
@@ -162,6 +162,12 @@ public:
 
     void qmlTextChanged();
     void delayedSetup();
+
+    void writeAuxiliaryData();
+    void restoreAuxiliaryData();
+
+    QString getRawAuxiliaryData() const;
+    QString auxiliaryDataAsQML() const;
 
 protected: // functions
     void importAdded(const Import &import);

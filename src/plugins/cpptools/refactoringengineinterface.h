@@ -31,7 +31,6 @@
 
 #include <utils/link.h>
 #include <utils/fileutils.h>
-#include <utils/smallstring.h>
 
 #include <clangsupport/sourcelocationscontainer.h>
 #include <clangsupport/refactoringclientinterface.h>
@@ -70,7 +69,8 @@ public:
                               const QString &replacement) = 0;
     virtual void findUsages(const CppTools::CursorInEditor &data,
                             UsagesCallback &&showUsagesCallback) const = 0;
-    virtual Link globalFollowSymbol(const CursorInEditor &data,
+    virtual void globalFollowSymbol(const CursorInEditor &data,
+                                    Utils::ProcessLinkCallback &&processLinkCallback,
                                     const CPlusPlus::Snapshot &snapshot,
                                     const CPlusPlus::Document::Ptr &documentFromSemanticInfo,
                                     SymbolFinder *symbolFinder,

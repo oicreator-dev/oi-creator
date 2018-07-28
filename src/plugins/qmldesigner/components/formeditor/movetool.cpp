@@ -106,10 +106,11 @@ void MoveTool::mouseMoveEvent(const QList<QGraphicsItem*> &itemList,
 
         FormEditorItem *containerItem = containerFormEditorItem(itemList, m_movingItems);
         if (containerItem && view()->currentState().isBaseState()) {
-            if (containerItem != m_movingItems.first()->parentItem()
+            if (containerItem != m_movingItems.constFirst()->parentItem()
+                    && event->modifiers().testFlag(Qt::ControlModifier)
                     && event->modifiers().testFlag(Qt::ShiftModifier)) {
 
-                FormEditorItem *movingItem = m_movingItems.first();
+                const FormEditorItem *movingItem = m_movingItems.constFirst();
 
                 if (m_movingItems.count() > 1
                         || (movingItem->qmlItemNode().canBereparentedTo(containerItem->qmlItemNode())))
@@ -129,7 +130,7 @@ void MoveTool::hoverMoveEvent(const QList<QGraphicsItem*> &itemList,
         return;
     }
 
-    ResizeHandleItem* resizeHandle = ResizeHandleItem::fromGraphicsItem(itemList.first());
+    ResizeHandleItem* resizeHandle = ResizeHandleItem::fromGraphicsItem(itemList.constFirst());
     if (resizeHandle) {
         view()->changeToResizeTool();
         return;
@@ -289,7 +290,7 @@ bool MoveTool::haveSameParent(const QList<FormEditorItem*> &itemList)
     if (itemList.isEmpty())
         return false;
 
-    QGraphicsItem *firstParent = itemList.first()->parentItem();
+    QGraphicsItem *firstParent = itemList.constFirst()->parentItem();
     foreach (FormEditorItem* item, itemList)
     {
         if (firstParent != item->parentItem())

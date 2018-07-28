@@ -74,13 +74,11 @@ def main():
         invokeMenuItem("File", "Exit")
         return
     # select "Examples" topic
-    wsButtonFrame, wsButtonLabel = getWelcomeScreenSideBarButton('Examples')
-    if all((wsButtonFrame, wsButtonLabel)):
-        mouseClick(wsButtonLabel)
+    switchToSubMode('Examples')
     expect = (("QTableView", "unnamed='1' visible='1' window=':Qt Creator_Core::Internal::MainWindow'",
                "examples list"),
               ("QLineEdit", "placeholderText='Search in Examples...'", "examples search line edit"),
-              ("QComboBox", "text~='.*Qt.*' visible='1'", "Qt version combo box"))
+              ("QComboBox", "currentText~='.*Qt.*' visible='1'", "Qt version combo box"))
     search = "{type='%s' %s}"
     test.verify(all(map(checkIfObjectExists, (search % (exp[0], exp[1]) for exp in expect))),
                 "Verifying: 'Examples' topic is opened and the examples are shown.")
@@ -108,7 +106,7 @@ def main():
                     "Verifying: The project is shown in 'Edit' mode.")
         invokeContextMenuOnProject('2dpainting', 'Close Project "2dpainting"')
         navTree = waitForObject(":Qt Creator_Utils::NavigationTreeView")
-        res = waitFor("navTree.model().rowCount(navTree.rootIndex()) == 0", 2000)
+        waitFor("navTree.model().rowCount(navTree.rootIndex()) == 0", 2000)
         test.verify(not checkIfObjectItemExists(":Qt Creator_Utils::NavigationTreeView", "2dpainting"),
                     "Verifying: The first example is closed.")
     # clean up created packaging directories
@@ -123,7 +121,7 @@ def main():
     for p in proFiles:
         removePackagingDirectory(os.path.dirname(p))
     examplesLineEdit = waitForObject(search %(expect[1][0], expect[1][1]))
-    example = openExample(examplesLineEdit, "address book", "Address Book.*",
+    example = openExample(examplesLineEdit, "address book", "(0000 )?Address Book.*",
                           "Address Book Example")
     if example is not None:
         # close second example application
@@ -134,7 +132,7 @@ def main():
                     "Verifying: The project is shown in 'Edit' mode while old project isn't.")
         invokeContextMenuOnProject('addressbook', 'Close Project "addressbook"')
         navTree = waitForObject(":Qt Creator_Utils::NavigationTreeView")
-        res = waitFor("navTree.model().rowCount(navTree.rootIndex()) == 0", 2000)
+        waitFor("navTree.model().rowCount(navTree.rootIndex()) == 0", 2000)
         test.verify(not checkIfObjectItemExists(":Qt Creator_Utils::NavigationTreeView", "addressbook"),
                     "Verifying: The second example is closed.")
     # clean up created packaging directories

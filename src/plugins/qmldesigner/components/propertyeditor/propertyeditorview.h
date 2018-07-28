@@ -44,14 +44,15 @@ class CollapseButton;
 class PropertyEditorWidget;
 class PropertyEditorView;
 class PropertyEditorQmlBackend;
+class ModelNode;
 
 class PropertyEditorView: public AbstractView
 {
     Q_OBJECT
 
 public:
-    PropertyEditorView(QWidget *parent = 0);
-    ~PropertyEditorView();
+    PropertyEditorView(QWidget *parent = nullptr);
+    ~PropertyEditorView() override;
 
     bool hasWidget() const override;
     WidgetInfo widgetInfo() override;
@@ -65,8 +66,6 @@ public:
     void modelAttached(Model *model) override;
 
     void modelAboutToBeDetached(Model *model) override;
-
-    ModelState modelState() const;
 
     void variantPropertiesChanged(const QList<VariantProperty>& propertyList, PropertyChangeFlags propertyChange) override;
     void bindingPropertiesChanged(const QList<BindingProperty>& propertyList, PropertyChangeFlags propertyChange) override;
@@ -93,6 +92,8 @@ public:
     void removeAliasExport(const QString &name);
 
     bool locked() const;
+
+    void nodeCreated(const ModelNode &createdNode) override;
 
 protected:
     void timerEvent(QTimerEvent *event) override;

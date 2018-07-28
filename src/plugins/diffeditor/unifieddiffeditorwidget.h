@@ -49,7 +49,7 @@ class UnifiedDiffEditorWidget : public SelectableTextEditorWidget
     Q_OBJECT
 public:
     UnifiedDiffEditorWidget(QWidget *parent = nullptr);
-    ~UnifiedDiffEditorWidget();
+    ~UnifiedDiffEditorWidget() override;
 
     void setDocument(DiffEditorDocument *document);
     DiffEditorDocument *diffDocument() const;
@@ -96,7 +96,7 @@ private:
     int chunkIndexForBlockNumber(int blockNumber) const;
     void jumpToOriginalFile(const QTextCursor &cursor);
     void addContextMenuActions(QMenu *menu,
-                               int diffFileIndex,
+                               int fileIndex,
                                int chunkIndex);
 
     // block number, visual line number.

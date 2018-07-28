@@ -102,17 +102,16 @@ static QFuture<CppTools::ToolTipInfo> editorDocumentHandlesToolTipInfo(
 
 ClangHoverHandler::ClangHoverHandler()
 {
-    setIsAsyncHandler(true);
 }
 
 ClangHoverHandler::~ClangHoverHandler()
 {
-    cancelAsyncCheck();
+    abort();
 }
 
-void ClangHoverHandler::identifyMatchAsync(TextEditorWidget *editorWidget,
-                                           int pos,
-                                           BaseHoverHandler::ReportPriority report)
+void ClangHoverHandler::identifyMatch(TextEditorWidget *editorWidget,
+                                      int pos,
+                                      BaseHoverHandler::ReportPriority report)
 {
     // Reset
     m_futureWatcher.reset();
@@ -134,7 +133,10 @@ void ClangHoverHandler::identifyMatchAsync(TextEditorWidget *editorWidget,
         m_reportPriority = report;
         m_futureWatcher.reset(new QFutureWatcher<CppTools::ToolTipInfo>());
         QObject::connect(m_futureWatcher.data(), &QFutureWatcherBase::finished, [this]() {
-            processToolTipInfo(m_futureWatcher->result());
+            if (m_futureWatcher->isCanceled())
+                m_reportPriority(Priority_None);
+            else
+                processToolTipInfo(m_futureWatcher->result());
         });
         m_futureWatcher->setFuture(future);
         return;
@@ -143,10 +145,12 @@ void ClangHoverHandler::identifyMatchAsync(TextEditorWidget *editorWidget,
     report(Priority_None); // Ops, something went wrong.
 }
 
-void ClangHoverHandler::cancelAsyncCheck()
+void ClangHoverHandler::abort()
 {
-    if (m_futureWatcher)
+    if (m_futureWatcher) {
         m_futureWatcher->cancel();
+        m_futureWatcher.reset();
+    }
 }
 
 #define RETURN_TEXT_FOR_CASE(enumValue) case TextEditor::HelpItem::enumValue: return #enumValue
@@ -192,7 +196,7 @@ void ClangHoverHandler::processToolTipInfo(const CppTools::ToolTipInfo &info)
     }
 
     if (!info.sizeInBytes.isEmpty())
-        text.append(tr("\n\n%1 bytes").arg(info.sizeInBytes));
+        text.append("\n\n" + tr("%1 bytes").arg(info.sizeInBytes));
 
     setToolTip(text);
     m_reportPriority(priority());

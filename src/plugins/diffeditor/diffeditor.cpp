@@ -76,27 +76,16 @@ class DescriptionEditorWidget : public TextEditorWidget
 {
     Q_OBJECT
 public:
-    DescriptionEditorWidget(QWidget *parent = 0);
-    ~DescriptionEditorWidget();
+    DescriptionEditorWidget(QWidget *parent = nullptr);
+    ~DescriptionEditorWidget() override;
 
-    virtual QSize sizeHint() const override;
-
-signals:
-    void requestBranchList();
+    QSize sizeHint() const override;
 
 protected:
-    void mouseMoveEvent(QMouseEvent *e) override;
-    void mouseReleaseEvent(QMouseEvent *e) override;
-
     void setDisplaySettings(const DisplaySettings &ds) override;
     void setMarginSettings(const MarginSettings &ms) override;
 
-    bool findContentsUnderCursor(const QTextCursor &cursor);
-    void highlightCurrentContents();
-    void handleCurrentContents();
-
 private:
-    QTextCursor m_currentCursor;
     Core::IContext *m_context;
 };
 
@@ -151,68 +140,6 @@ void DescriptionEditorWidget::setMarginSettings(const MarginSettings &ms)
 {
     Q_UNUSED(ms);
     TextEditorWidget::setMarginSettings(MarginSettings());
-}
-
-void DescriptionEditorWidget::mouseMoveEvent(QMouseEvent *e)
-{
-    if (e->buttons()) {
-        TextEditorWidget::mouseMoveEvent(e);
-        return;
-    }
-
-    Qt::CursorShape cursorShape;
-
-    const QTextCursor cursor = cursorForPosition(e->pos());
-    if (findContentsUnderCursor(cursor)) {
-        highlightCurrentContents();
-        cursorShape = Qt::PointingHandCursor;
-    } else {
-        setExtraSelections(OtherSelection, QList<QTextEdit::ExtraSelection>());
-        cursorShape = Qt::IBeamCursor;
-    }
-
-    TextEditorWidget::mouseMoveEvent(e);
-    viewport()->setCursor(cursorShape);
-}
-
-void DescriptionEditorWidget::mouseReleaseEvent(QMouseEvent *e)
-{
-    if (e->button() == Qt::LeftButton && !(e->modifiers() & Qt::ShiftModifier)) {
-        const QTextCursor cursor = cursorForPosition(e->pos());
-        if (findContentsUnderCursor(cursor)) {
-            handleCurrentContents();
-            e->accept();
-            return;
-        }
-    }
-
-    TextEditorWidget::mouseReleaseEvent(e);
-}
-
-bool DescriptionEditorWidget::findContentsUnderCursor(const QTextCursor &cursor)
-{
-    m_currentCursor = cursor;
-    return cursor.block().text() == Constants::EXPAND_BRANCHES;
-}
-
-void DescriptionEditorWidget::highlightCurrentContents()
-{
-    QTextEdit::ExtraSelection sel;
-    sel.cursor = m_currentCursor;
-    sel.cursor.select(QTextCursor::LineUnderCursor);
-    sel.format.setUnderlineStyle(QTextCharFormat::SingleUnderline);
-    const QColor textColor = TextEditorSettings::fontSettings().formatFor(C_TEXT).foreground();
-    sel.format.setUnderlineColor(textColor.isValid() ? textColor : palette().color(QPalette::Foreground));
-    setExtraSelections(TextEditorWidget::OtherSelection,
-                       QList<QTextEdit::ExtraSelection>() << sel);
-}
-
-void DescriptionEditorWidget::handleCurrentContents()
-{
-    m_currentCursor.select(QTextCursor::LineUnderCursor);
-    m_currentCursor.removeSelectedText();
-    m_currentCursor.insertText("Branches: Expanding...");
-    emit requestBranchList();
 }
 
 ///////////////////////////////// DiffEditor //////////////////////////////////
@@ -276,7 +203,7 @@ DiffEditor::DiffEditor()
     m_reloadAction = m_toolBar->addAction(Utils::Icons::RELOAD.icon(), tr("Reload Diff"));
     m_reloadAction->setToolTip(tr("Reload Diff"));
 
-    m_toggleSyncAction = m_toolBar->addAction(Utils::Icons::LINK.icon(), QString());
+    m_toggleSyncAction = m_toolBar->addAction(Utils::Icons::LINK_TOOLBAR.icon(), QString());
     m_toggleSyncAction->setCheckable(true);
 
     m_viewSwitcherAction = m_toolBar->addAction(QIcon(), QString());
@@ -289,15 +216,13 @@ DiffEditor::DiffEditor()
     connect(m_viewSwitcherAction, &QAction::triggered, this, [this]() { showDiffView(nextView()); });
 }
 
-void DiffEditor::setDocument(QSharedPointer<DiffEditorDocument>(doc))
+void DiffEditor::setDocument(QSharedPointer<DiffEditorDocument> doc)
 {
     QTC_ASSERT(m_document.isNull(), return);
     QTC_ASSERT(doc, return);
 
-    m_document = QSharedPointer<DiffEditorDocument>(doc);
+    m_document = doc;
 
-    connect(m_descriptionWidget, &DescriptionEditorWidget::requestBranchList,
-            m_document.data(), &DiffEditorDocument::requestMoreInformation);
     connect(m_document.data(), &DiffEditorDocument::documentChanged,
             this, &DiffEditor::documentHasChanged);
     connect(m_document.data(), &DiffEditorDocument::descriptionChanged,
@@ -356,7 +281,7 @@ Core::IDocument *DiffEditor::document()
 
 QWidget *DiffEditor::toolBar()
 {
-    QTC_ASSERT(m_toolBar, return 0);
+    QTC_ASSERT(m_toolBar, return nullptr);
     return m_toolBar;
 }
 
@@ -597,7 +522,7 @@ void DiffEditor::toggleSync()
 
 IDiffView *DiffEditor::loadSettings()
 {
-    QTC_ASSERT(currentView(), return 0);
+    QTC_ASSERT(currentView(), return nullptr);
     QSettings *s = Core::ICore::settings();
 
     // Read current settings:
@@ -638,7 +563,7 @@ void DiffEditor::addView(IDiffView *view)
 IDiffView *DiffEditor::currentView() const
 {
     if (m_currentViewIndex < 0)
-        return 0;
+        return nullptr;
     return m_views.at(m_currentViewIndex);
 }
 
@@ -690,7 +615,7 @@ void DiffEditor::showDiffView(IDiffView *view)
         return;
 
     if (currentView()) // during initialization
-        currentView()->setDocument(0);
+        currentView()->setDocument(nullptr);
 
     QTC_ASSERT(view, return);
     setupView(view);

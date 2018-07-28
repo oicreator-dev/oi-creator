@@ -29,10 +29,13 @@
 #include "clangfilepath.h"
 #include "clangstring.h"
 
-#include <utf8string.h>
+#include <clangsupport/sourcelocationcontainer.h>
+
+#include <sqlite/utf8string.h>
+
+#include <utils/textutils.h>
 
 #include <ostream>
-#include <sourcelocationcontainer.h>
 
 namespace ClangBackEnd {
 
@@ -72,8 +75,10 @@ SourceLocationContainer SourceLocation::toSourceLocationContainer() const
     return SourceLocationContainer(filePath(), line_, column_);
 }
 
-SourceLocation::SourceLocation(CXSourceLocation cxSourceLocation)
+SourceLocation::SourceLocation(CXTranslationUnit cxTranslationUnit,
+                               CXSourceLocation cxSourceLocation)
     : cxSourceLocation(cxSourceLocation)
+    , cxTranslationUnit(cxTranslationUnit)
 {
     CXFile cxFile;
 
@@ -83,8 +88,22 @@ SourceLocation::SourceLocation(CXSourceLocation cxSourceLocation)
                           &column_,
                           &offset_);
 
-    filePath_ = ClangString(clang_getFileName(cxFile));
     isFilePathNormalized_ = false;
+    if (!cxFile)
+        return;
+
+    filePath_ = ClangString(clang_getFileName(cxFile));
+    if (column_ > 1) {
+        const uint lineStart = offset_ + 1 - column_;
+        const char *contents = clang_getFileContents(cxTranslationUnit, cxFile, nullptr);
+        if (!contents)
+            return;
+        // (1) column in SourceLocation is the actual column shown by CppEditor.
+        // (2) column in Clang is the utf8 byte offset from the beginning of the line.
+        // Here we convert column from (2) to (1).
+        column_ = static_cast<uint>(QString::fromUtf8(&contents[lineStart],
+                                                      static_cast<int>(column_)).size());
+    }
 }
 
 SourceLocation::SourceLocation(CXTranslationUnit cxTranslationUnit,
@@ -96,17 +115,13 @@ SourceLocation::SourceLocation(CXTranslationUnit cxTranslationUnit,
                                                        filePath.constData()),
                                          line,
                                          column)),
+      cxTranslationUnit(cxTranslationUnit),
       filePath_(filePath),
       line_(line),
       column_(column),
       isFilePathNormalized_(true)
 {
     clang_getFileLocation(cxSourceLocation, 0, 0, 0, &offset_);
-}
-
-bool operator==(const SourceLocation &first, const SourceLocation &second)
-{
-    return clang_equalLocations(first.cxSourceLocation, second.cxSourceLocation);
 }
 
 SourceLocation::operator CXSourceLocation() const

@@ -45,7 +45,7 @@ namespace Internal {
 class TestFilterDialog : public QDialog
 {
 public:
-    explicit TestFilterDialog(QWidget *parent = 0, Qt::WindowFlags f = 0);
+    explicit TestFilterDialog(QWidget *parent = nullptr, Qt::WindowFlags f = 0);
     QString filterPath() const;
     void setDetailsText(const QString &details) { m_details->setText(details); }
     void setDefaultFilterPath(const QString &defaultPath);
@@ -184,7 +184,10 @@ void TestSettingsWidget::populateFrameworksListWidget(const QHash<Core::Id, bool
                                                                                    : Qt::Unchecked);
         item->setToolTip(0, tr("Enable or disable test frameworks to be handled by the AutoTest "
                                "plugin."));
-        item->setToolTip(1, tr("Enable or disable grouping of test cases by folder."));
+        QString toolTip = frameworkManager->groupingToolTip(id);
+        if (toolTip.isEmpty())
+            toolTip = tr("Enable or disable grouping of test cases by folder.");
+        item->setToolTip(1, toolTip);
     }
 }
 
@@ -237,8 +240,8 @@ void TestSettingsWidget::onAddFilterClicked()
 {
     TestFilterDialog dialog;
     dialog.setWindowTitle(tr("Add Filter"));
-    dialog.setDetailsText(tr("<p>Specify a filter expression to be added to the list of filters."
-                             "<br/>Wildcards are not supported.</p>"));
+    dialog.setDetailsText("<p>" + tr("Specify a filter expression to be added to the list of filters."
+                                     "<br/>Wildcards are not supported.") + "</p>");
     if (dialog.exec() == QDialog::Accepted) {
         const QString &filter = dialog.filterPath();
         if (!filter.isEmpty())
@@ -254,8 +257,8 @@ void TestSettingsWidget::onEditFilterClicked()
 
     TestFilterDialog dialog;
     dialog.setWindowTitle(tr("Edit Filter"));
-    dialog.setDetailsText(tr("<p>Specify a filter expression that will replace \"%1\"."
-                             "<br/>Wildcards are not supported.</p>").arg(oldFilter));
+    dialog.setDetailsText("<p>" + tr("Specify a filter expression that will replace \"%1\"."
+                                     "<br/>Wildcards are not supported.").arg(oldFilter) + "</p>");
     dialog.setDefaultFilterPath(oldFilter);
     if (dialog.exec() == QDialog::Accepted) {
         const QString &edited = dialog.filterPath();
@@ -273,13 +276,14 @@ void TestSettingsWidget::onRemoveFilterClicked()
 }
 
 TestSettingsPage::TestSettingsPage(const QSharedPointer<TestSettings> &settings)
-    : m_settings(settings), m_widget(0)
+    : m_settings(settings)
 {
     setId("A.AutoTest.0.General");
     setDisplayName(tr("General"));
     setCategory(Constants::AUTOTEST_SETTINGS_CATEGORY);
     setDisplayCategory(QCoreApplication::translate("AutoTest", Constants::AUTOTEST_SETTINGS_TR));
-    setCategoryIcon(Utils::Icon(":/images/autotest.png"));
+    setCategoryIcon(Utils::Icon({{":/autotest/images/settingscategory_autotest.png",
+                    Utils::Theme::PanelTextColorDark}}, Utils::Icon::Tint));
 }
 
 TestSettingsPage::~TestSettingsPage()

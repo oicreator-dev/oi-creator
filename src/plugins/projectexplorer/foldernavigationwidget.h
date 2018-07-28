@@ -46,6 +46,7 @@ class QAction;
 class QComboBox;
 class QFileSystemModel;
 class QModelIndex;
+class QSortFilterProxyModel;
 QT_END_NAMESPACE
 
 namespace ProjectExplorer {
@@ -99,9 +100,13 @@ public:
 
     bool autoSynchronization() const;
     bool hiddenFilesFilter() const;
+    bool isShowingBreadCrumbs() const;
+    bool isShowingFoldersOnTop() const;
 
     void setAutoSynchronization(bool sync);
     void toggleAutoSynchronization();
+    void setShowBreadCrumbs(bool show);
+    void setShowFoldersOnTop(bool onTop);
 
     void insertRootDirectory(const FolderNavigationWidgetFactory::RootDirectory &directory);
     void removeRootDirectory(const QString &id);
@@ -114,23 +119,31 @@ protected:
     void contextMenuEvent(QContextMenuEvent *ev) override;
 
 private:
+    bool rootAutoSynchronization() const;
+    void setRootAutoSynchronization(bool sync);
     void setHiddenFilesFilter(bool filter);
-    void setCurrentEditor(Core::IEditor *editor);
     void selectBestRootForFile(const Utils::FileName &filePath);
+    void handleCurrentEditorChanged(Core::IEditor *editor);
     void selectFile(const Utils::FileName &filePath);
     void setRootDirectory(const Utils::FileName &directory);
     int bestRootForFile(const Utils::FileName &filePath);
     void openItem(const QModelIndex &index);
     QStringList projectsInDirectory(const QModelIndex &index) const;
     void openProjectsInDirectory(const QModelIndex &index);
+    void createNewFolder(const QModelIndex &parent);
     void setCrumblePath(const QModelIndex &index, const QModelIndex &);
 
     Core::IContext *m_context = nullptr;
     Utils::NavigationTreeView *m_listView = nullptr;
     QFileSystemModel *m_fileSystemModel = nullptr;
+    QSortFilterProxyModel *m_sortProxyModel = nullptr;
     QAction *m_filterHiddenFilesAction = nullptr;
+    QAction *m_showBreadCrumbsAction = nullptr;
+    QAction *m_showFoldersOnTopAction = nullptr;
     bool m_autoSync = false;
+    bool m_rootAutoSync = true;
     QToolButton *m_toggleSync = nullptr;
+    QToolButton *m_toggleRootSync = nullptr;
     QComboBox *m_rootSelector = nullptr;
     DelayedFileCrumbLabel *m_crumbLabel = nullptr;
 

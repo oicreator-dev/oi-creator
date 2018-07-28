@@ -25,6 +25,8 @@
 
 #pragma once
 
+#include "autotest_global.h"
+
 #include "testconfiguration.h"
 #include "testtreeitem.h"
 
@@ -40,7 +42,7 @@ class TestParseResult;
 
 using TestParseResultPtr = QSharedPointer<TestParseResult>;
 
-class TestTreeModel : public Utils::TreeModel<>
+class AUTOTESTSHARED_EXPORT TestTreeModel : public Utils::TreeModel<>
 {
     Q_OBJECT
 public:
@@ -54,7 +56,8 @@ public:
     bool hasTests() const;
     QList<TestConfiguration *> getAllTestCases() const;
     QList<TestConfiguration *> getSelectedTests() const;
-
+    QList<TestConfiguration *> getTestsForFile(const Utils::FileName &fileName) const;
+    QList<TestTreeItem *> testItemsByName(const QString &testName);
     void syncTestFrameworks();
     void rebuild(const QList<Core::Id> &frameworkIds);
 
@@ -87,10 +90,12 @@ private:
     void removeTestRootNodes();
     void removeFiles(const QStringList &files);
     bool sweepChildren(TestTreeItem *item);
-    static void insertItemInParent(TestTreeItem *item, TestTreeItem *root, bool groupingEnabled);
-
-    explicit TestTreeModel(QObject *parent = 0);
+    void insertItemInParent(TestTreeItem *item, TestTreeItem *root, bool groupingEnabled);
+    void revalidateCheckState(TestTreeItem *item);
+    explicit TestTreeModel(QObject *parent = nullptr);
     void setupParsingConnections();
+    void filterAndInsert(TestTreeItem *item, TestTreeItem *root, bool groupingEnabled);
+    QList<TestTreeItem *> testItemsByName(TestTreeItem *root, const QString &testName);
 
     TestCodeParser *m_parser;
 };
@@ -106,7 +111,7 @@ public:
         ShowAll            = ShowInitAndCleanup | ShowTestData
     };
 
-    explicit TestTreeSortFilterModel(TestTreeModel *sourceModel, QObject *parent = 0);
+    explicit TestTreeSortFilterModel(TestTreeModel *sourceModel, QObject *parent = nullptr);
     void setSortMode(TestTreeItem::SortMode sortMode);
     void setFilterMode(FilterMode filterMode);
     void toggleFilter(FilterMode filterMode);

@@ -114,7 +114,6 @@ void TestResultItem::updateResult(bool &changed, Result::Type addedChildType)
     switch (addedChildType) {
     case Result::Fail:
     case Result::MessageFatal:
-    case Result::MessageSystem:
     case Result::UnexpectedPass:
     case Result::MessageTestCaseFail:
         newResult = (old == Result::MessageTestCaseSuccessWarn) ? Result::MessageTestCaseFailWarn
@@ -125,6 +124,7 @@ void TestResultItem::updateResult(bool &changed, Result::Type addedChildType)
         break;
     case Result::ExpectedFail:
     case Result::MessageWarn:
+    case Result::MessageSystem:
     case Result::Skip:
     case Result::BlacklistedFail:
     case Result::BlacklistedPass:
@@ -266,7 +266,7 @@ const TestResult *TestResultModel::testResult(const QModelIndex &idx)
     if (idx.isValid())
         return static_cast<TestResultItem *>(itemForIndex(idx))->testResult();
 
-    return 0;
+    return nullptr;
 }
 
 void TestResultModel::recalculateMaxWidthOfFileName(const QFont &font)
@@ -311,13 +311,13 @@ TestResultItem *TestResultModel::findParentItemFor(const TestResultItem *item,
     TestResultItem *root = startItem ? const_cast<TestResultItem *>(startItem) : nullptr;
     const TestResult *result = item->testResult();
     const QString &name = result->name();
-    const QString &executable = result->executable();
+    const QString &id = result->id();
 
     if (root == nullptr && !name.isEmpty()) {
         for (int row = rootItem()->childCount() - 1; row >= 0; --row) {
             TestResultItem *tmp = static_cast<TestResultItem *>(rootItem()->childAt(row));
             auto tmpTestResult = tmp->testResult();
-            if (tmpTestResult->executable() == executable && tmpTestResult->name() == name) {
+            if (tmpTestResult->id() == id && tmpTestResult->name() == name) {
                 root = tmp;
                 break;
             }
@@ -377,12 +377,16 @@ void TestResultFilterModel::toggleTestResultType(Result::Type type)
             m_enabled.remove(Result::MessageTestCaseEnd);
         if (type == Result::MessageDebug)
             m_enabled.remove(Result::MessageInfo);
+        if (type == Result::MessageWarn)
+            m_enabled.remove(Result::MessageSystem);
     } else {
         m_enabled.insert(type);
         if (type == Result::MessageInternal)
             m_enabled.insert(Result::MessageTestCaseEnd);
         if (type == Result::MessageDebug)
             m_enabled.insert(Result::MessageInfo);
+        if (type == Result::MessageWarn)
+            m_enabled.insert(Result::MessageSystem);
     }
     invalidateFilter();
 }

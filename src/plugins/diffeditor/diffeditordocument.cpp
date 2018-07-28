@@ -69,13 +69,6 @@ void DiffEditorDocument::setController(DiffEditorController *controller)
     if (m_controller)
         m_controller->deleteLater();
     m_controller = controller;
-
-    if (m_controller) {
-        connect(this, &DiffEditorDocument::chunkActionsRequested,
-                m_controller, &DiffEditorController::requestChunkActions);
-        connect(this, &DiffEditorDocument::requestMoreInformation,
-                m_controller, &DiffEditorController::requestMoreInformation);
-    }
 }
 
 DiffEditorController *DiffEditorDocument::controller() const
@@ -217,7 +210,7 @@ bool DiffEditorDocument::save(QString *errorString, const QString &fileName, boo
     if (!ok)
         return false;
 
-    setController(0);
+    setController(nullptr);
     setDescription(QString());
     Core::EditorManager::clearUniqueId(this);
 

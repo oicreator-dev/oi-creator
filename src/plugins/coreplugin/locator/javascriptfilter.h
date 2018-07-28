@@ -27,8 +27,12 @@
 
 #include <coreplugin/locator/ilocatorfilter.h>
 
+#include <QTimer>
+
+#include <memory>
+
 QT_BEGIN_NAMESPACE
-class QJSEngine;
+class QScriptEngine;
 QT_END_NAMESPACE
 
 namespace Core {
@@ -51,7 +55,9 @@ public:
 private:
     void setupEngine();
 
-    QJSEngine *m_engine = nullptr;
+    mutable std::unique_ptr<QScriptEngine> m_engine;
+    QTimer m_abortTimer;
+    bool m_aborted = false;
 };
 
 } // namespace Internal

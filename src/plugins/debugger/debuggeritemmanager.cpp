@@ -33,9 +33,9 @@
 #include <extensionsystem/pluginmanager.h>
 
 #include <projectexplorer/projectexplorerconstants.h>
+#include <projectexplorer/projectexplorericons.h>
 
 #include <utils/algorithm.h>
-#include <utils/asconst.h>
 #include <utils/detailswidget.h>
 #include <utils/environment.h>
 #include <utils/fileutils.h>
@@ -97,11 +97,11 @@ public:
     QString uniqueDisplayName(const QString &base);
 
     PersistentSettingsWriter m_writer;
-    DebuggerItemModel *m_model;
-    IOptionsPage *m_optionsPage = 0;
+    DebuggerItemModel *m_model = nullptr;
+    IOptionsPage *m_optionsPage = nullptr;
 };
 
-static DebuggerItemManagerPrivate *d = 0;
+static DebuggerItemManagerPrivate *d = nullptr;
 
 // -----------------------------------------------------------------------
 // DebuggerItemConfigWidget
@@ -401,10 +401,11 @@ void DebuggerItemConfigWidget::load(const DebuggerItem *item)
         const bool is64bit = is64BitWindowsSystem();
         const QString versionString = is64bit ? tr("64-bit version") : tr("32-bit version");
         //: Label text for path configuration. %2 is "x-bit version".
-        text = tr("<html><body><p>Specify the path to the "
-                  "<a href=\"%1\">Windows Console Debugger executable</a>"
-                  " (%2) here.</p>""</body></html>").
-                arg(QLatin1String(debuggingToolsWikiLinkC), versionString);
+        text = "<html><body><p>"
+                + tr("Specify the path to the "
+                     "<a href=\"%1\">Windows Console Debugger executable</a>"
+                     " (%2) here.").arg(QLatin1String(debuggingToolsWikiLinkC), versionString)
+                + "</p></body></html>";
         versionCommand = QLatin1String("-version");
     } else {
         versionCommand = QLatin1String("--version");
@@ -599,10 +600,7 @@ DebuggerOptionsPage::DebuggerOptionsPage()
 {
     setId(ProjectExplorer::Constants::DEBUGGER_SETTINGS_PAGE_ID);
     setDisplayName(tr("Debuggers"));
-    setCategory(ProjectExplorer::Constants::PROJECTEXPLORER_SETTINGS_CATEGORY);
-    setDisplayCategory(QCoreApplication::translate("ProjectExplorer",
-        ProjectExplorer::Constants::PROJECTEXPLORER_SETTINGS_TR_CATEGORY));
-    setCategoryIcon(Utils::Icon(ProjectExplorer::Constants::PROJECTEXPLORER_SETTINGS_CATEGORY_ICON));
+    setCategory(ProjectExplorer::Constants::KITS_SETTINGS_CATEGORY);
 }
 
 QWidget *DebuggerOptionsPage::widget()
@@ -687,7 +685,7 @@ void DebuggerItemManagerPrivate::autoDetectCdbDebuggers()
             cdbs.append(FileName::fromString(cdb64.absoluteFilePath()));
     }
 
-    for (const FileName &cdb : Utils::asConst(cdbs)) {
+    for (const FileName &cdb : qAsConst(cdbs)) {
         if (DebuggerItemManager::findByCommand(cdb))
             continue;
         DebuggerItem item;

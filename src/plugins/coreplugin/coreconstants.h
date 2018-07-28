@@ -50,6 +50,7 @@ const char M_TOOLS[]               = "QtCreator.Menu.Tools";
 const char M_TOOLS_EXTERNAL[]      = "QtCreator.Menu.Tools.External";
 const char M_WINDOW[]              = "QtCreator.Menu.Window";
 const char M_WINDOW_PANES[]        = "QtCreator.Menu.Window.Panes";
+const char M_WINDOW_MODESTYLES[]   = "QtCreator.Menu.Window.ModeStyles";
 const char M_WINDOW_VIEWS[]        = "QtCreator.Menu.Window.Views";
 const char M_HELP[]                = "QtCreator.Menu.Help";
 
@@ -77,6 +78,9 @@ const char CUT[]                   = "QtCreator.Cut";
 const char SELECTALL[]             = "QtCreator.SelectAll";
 
 const char GOTO[]                  = "QtCreator.Goto";
+const char ZOOM_IN[]               = "QtCreator.ZoomIn";
+const char ZOOM_OUT[]              = "QtCreator.ZoomOut";
+const char ZOOM_RESET[]            = "QtCreator.ZoomReset";
 
 const char NEW[]                   = "QtCreator.New";
 const char OPEN[]                  = "QtCreator.Open";
@@ -91,7 +95,8 @@ const char EXIT[]                  = "QtCreator.Exit";
 const char OPTIONS[]               = "QtCreator.Options";
 const char TOGGLE_LEFT_SIDEBAR[]   = "QtCreator.ToggleLeftSidebar";
 const char TOGGLE_RIGHT_SIDEBAR[]  = "QtCreator.ToggleRightSidebar";
-const char TOGGLE_MODE_SELECTOR[]  = "QtCreator.ToggleModeSelector";
+const char CYCLE_MODE_SELECTOR_STYLE[] =
+                                     "QtCreator.CycleModeSelectorStyle";
 const char TOGGLE_FULLSCREEN[]     = "QtCreator.ToggleFullScreen";
 const char THEMEOPTIONS[]          = "QtCreator.ThemeOptions";
 
@@ -145,6 +150,7 @@ const char G_FILE_NEW[]            = "QtCreator.Group.File.New";
 const char G_FILE_OPEN[]           = "QtCreator.Group.File.Open";
 const char G_FILE_PROJECT[]        = "QtCreator.Group.File.Project";
 const char G_FILE_SAVE[]           = "QtCreator.Group.File.Save";
+const char G_FILE_EXPORT[]         = "QtCreator.Group.File.Export";
 const char G_FILE_CLOSE[]          = "QtCreator.Group.File.Close";
 const char G_FILE_PRINT[]          = "QtCreator.Group.File.Print";
 const char G_FILE_OTHER[]          = "QtCreator.Group.File.Other";
@@ -189,9 +195,7 @@ const char WIZARD_KIND_UNKNOWN[] = "unknown";
 const char WIZARD_KIND_PROJECT[] = "project";
 const char WIZARD_KIND_FILE[] = "file";
 
-const char SETTINGS_CATEGORY_CORE[] = "A.Core";
-const char SETTINGS_CATEGORY_CORE_ICON[] = ":/core/images/category_core.png";
-const char SETTINGS_TR_CATEGORY_CORE[] = QT_TRANSLATE_NOOP("Core", "Environment");
+const char SETTINGS_CATEGORY_CORE[] = "B.Core";
 const char SETTINGS_ID_INTERFACE[] = "A.Interface";
 const char SETTINGS_ID_SYSTEM[] = "B.Core.System";
 const char SETTINGS_ID_SHORTCUTS[] = "C.Keyboard";
@@ -208,6 +212,7 @@ const char TR_CLEAR_MENU[]         = QT_TRANSLATE_NOOP("Core", "Clear Menu");
 const char DEFAULT_BUILD_DIRECTORY[] = "../%{JS: Util.asciify(\"build-%{CurrentProject:Name}-%{CurrentKit:FileSystemName}-%{CurrentBuild:Name}\")}";
 
 const int MODEBAR_ICON_SIZE = 34;
+const int MODEBAR_ICONSONLY_BUTTON_SIZE = MODEBAR_ICON_SIZE + 4;
 const int DEFAULT_MAX_LINE_COUNT = 100000;
 
 } // namespace Constants

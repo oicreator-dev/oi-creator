@@ -67,8 +67,9 @@ CommonOptionsPage::CommonOptionsPage(const QSharedPointer<GlobalDebuggerOptions>
     setId(DEBUGGER_COMMON_SETTINGS_ID);
     setDisplayName(QCoreApplication::translate("Debugger", "General"));
     setCategory(DEBUGGER_SETTINGS_CATEGORY);
-    setDisplayCategory(QCoreApplication::translate("Debugger", DEBUGGER_SETTINGS_TR_CATEGORY));
-    setCategoryIcon(Icon(DEBUGGER_COMMON_SETTINGS_CATEGORY_ICON));
+    setDisplayCategory(QCoreApplication::translate("Debugger", "Debugger"));
+    setCategoryIcon(Utils::Icon({{":/debugger/images/settingscategory_debugger.png",
+                    Utils::Theme::PanelTextColorDark}}, Utils::Icon::Tint));
 }
 
 void CommonOptionsPage::apply()
@@ -285,8 +286,6 @@ LocalsAndExpressionsOptionsPage::LocalsAndExpressionsOptionsPage()
     //: '&&' will appear as one (one is marking keyboard shortcut)
     setDisplayName(QCoreApplication::translate("Debugger", "Locals && Expressions"));
     setCategory(DEBUGGER_SETTINGS_CATEGORY);
-    setDisplayCategory(QCoreApplication::translate("Debugger", DEBUGGER_SETTINGS_TR_CATEGORY));
-    setCategoryIcon(Icon(DEBUGGER_COMMON_SETTINGS_CATEGORY_ICON));
 }
 
 void LocalsAndExpressionsOptionsPage::apply()
@@ -320,10 +319,11 @@ QWidget *LocalsAndExpressionsOptionsPage::widget()
 
         auto groupBoxCustomDumperCommands = new QGroupBox(debuggingHelperGroupBox);
         groupBoxCustomDumperCommands->setTitle(tr("Debugging Helper Customization"));
-        groupBoxCustomDumperCommands->setToolTip(tr(
-            "<html><head/><body><p>Python commands entered here will be executed after built-in "
-            "debugging helpers have been loaded and fully initialized. You can load additional "
-            "debugging helpers or modify existing ones here.</p></body></html>"));
+        groupBoxCustomDumperCommands->setToolTip("<html><head/><body><p>"
+                        + tr("Python commands entered here will be executed after built-in "
+                             "debugging helpers have been loaded and fully initialized. You can "
+                             "load additional debugging helpers or modify existing ones here.")
+                        + "</p></body></html>");
 
         auto textEditCustomDumperCommands = new QTextEdit(groupBoxCustomDumperCommands);
         textEditCustomDumperCommands->setAcceptRichText(false);

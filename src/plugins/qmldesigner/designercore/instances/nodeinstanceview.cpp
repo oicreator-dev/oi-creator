@@ -34,6 +34,7 @@
 #include <model.h>
 #include <modelnode.h>
 #include <metainfo.h>
+#include <nodehints.h>
 #include <rewriterview.h>
 
 #include "abstractproperty.h"
@@ -44,8 +45,8 @@
 #include "nodeproperty.h"
 #include "qmlchangeset.h"
 #include "qmlstate.h"
-#include "qmltimelinemutator.h"
-#include "qmltimelinekeyframes.h"
+#include "qmltimeline.h"
+#include "qmltimelinekeyframegroup.h"
 
 #include "createscenecommand.h"
 #include "createinstancescommand.h"
@@ -125,7 +126,7 @@ NodeInstanceView::~NodeInstanceView()
 
 //\{
 
-bool isSkippedRootNode(const ModelNode &node)
+bool static isSkippedRootNode(const ModelNode &node)
 {
     static const PropertyNameList skipList({"Qt.ListModel", "QtQuick.ListModel", "Qt.ListModel", "QtQuick.ListModel"});
 
@@ -136,12 +137,28 @@ bool isSkippedRootNode(const ModelNode &node)
 }
 
 
-bool isSkippedNode(const ModelNode &node)
+bool static isSkippedNode(const ModelNode &node)
 {
     static const PropertyNameList skipList({"QtQuick.XmlRole", "Qt.XmlRole", "QtQuick.ListElement", "Qt.ListElement"});
 
     if (skipList.contains(node.type()))
         return true;
+
+    return false;
+}
+
+bool static parentTakesOverRendering(const ModelNode &modelNode)
+{
+    if (!modelNode.isValid())
+        return false;
+
+    ModelNode currentNode = modelNode;
+
+    while (currentNode.hasParentProperty()) {
+        currentNode = currentNode.parentProperty().parentModelNode();
+        if (NodeHints::fromModelNode(currentNode).takesOverRenderingOfChildren())
+            return true;
+    }
 
     return false;
 }
@@ -696,9 +713,9 @@ void NodeInstanceView::updatePosition(const QList<VariantProperty> &propertyList
             }
         } else if (currentTimeline().isValid()
                    && variantProperty.name() == "value"
-                   &&  QmlTimelineFrames::isValidKeyframe(variantProperty.parentModelNode())) {
+                   &&  QmlTimelineKeyframeGroup::isValidKeyframe(variantProperty.parentModelNode())) {
 
-            QmlTimelineFrames frames = QmlTimelineFrames::keyframesForKeyframe(variantProperty.parentModelNode());
+            QmlTimelineKeyframeGroup frames = QmlTimelineKeyframeGroup::keyframeGroupForKeyframe(variantProperty.parentModelNode());
 
             if (frames.isValid() && frames.propertyName() == "x" && frames.target().isValid()) {
 
@@ -817,6 +834,11 @@ CreateSceneCommand NodeInstanceView::createCreateSceneCommand()
         if (instance.modelNode().metaInfo().isSubclassOf("QtQuick.Item"))
             nodeMetaType = InstanceContainer::ItemMetaType;
 
+        InstanceContainer::NodeFlags nodeFlags;
+
+        if (parentTakesOverRendering(instance.modelNode()))
+            nodeFlags |= InstanceContainer::ParentTakesOverRendering;
+
         InstanceContainer container(instance.instanceId(),
                                     instance.modelNode().type(),
                                     instance.modelNode().majorVersion(),
@@ -824,8 +846,8 @@ CreateSceneCommand NodeInstanceView::createCreateSceneCommand()
                                     instance.modelNode().metaInfo().componentFileName(),
                                     instance.modelNode().nodeSource(),
                                     nodeSourceType,
-                                    nodeMetaType
-                                   );
+                                    nodeMetaType,
+                                    nodeFlags);
 
         instanceContainerList.append(container);
     }
@@ -881,8 +903,8 @@ CreateSceneCommand NodeInstanceView::createCreateSceneCommand()
 
         if (versionString.contains(QStringLiteral("."))) {
             const QStringList splittedString = versionString.split(QStringLiteral("."));
-            majorVersion = splittedString.first().toInt();
-            minorVersion = splittedString.last().toInt();
+            majorVersion = splittedString.constFirst().toInt();
+            minorVersion = splittedString.constLast().toInt();
         }
 
         bool isItem = false;
@@ -958,8 +980,20 @@ CreateInstancesCommand NodeInstanceView::createCreateInstancesCommand(const QLis
         if (instance.modelNode().metaInfo().isSubclassOf("QtQuick.Item"))
             nodeMetaType = InstanceContainer::ItemMetaType;
 
-        InstanceContainer container(instance.instanceId(), instance.modelNode().type(), instance.modelNode().majorVersion(), instance.modelNode().minorVersion(),
-                                    instance.modelNode().metaInfo().componentFileName(), instance.modelNode().nodeSource(), nodeSourceType, nodeMetaType);
+        InstanceContainer::NodeFlags nodeFlags;
+
+        if (parentTakesOverRendering(instance.modelNode()))
+            nodeFlags |= InstanceContainer::ParentTakesOverRendering;
+
+        InstanceContainer container(instance.instanceId(),
+                                    instance.modelNode().type(),
+                                    instance.modelNode().majorVersion(),
+                                    instance.modelNode().minorVersion(),
+                                    instance.modelNode().metaInfo().componentFileName(),
+                                    instance.modelNode().nodeSource(),
+                                    nodeSourceType,
+                                    nodeMetaType,
+                                    nodeFlags);
         containerList.append(container);
     }
 

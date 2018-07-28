@@ -51,7 +51,7 @@ using namespace ProjectExplorer::Internal;
 using namespace Utils;
 
 ToolWidget::ToolWidget(QWidget *parent) : FadingPanel(parent),
-    m_targetOpacity(1.0f)
+    m_targetOpacity(.999)
 {
     auto layout = new QHBoxLayout;
     layout->setMargin(4);
@@ -136,9 +136,9 @@ void ToolWidget::setBuildStepEnabled(bool b)
             m_firstWidget->fadeTo(m_targetOpacity);
     } else {
         if (HostOsInfo::isMacHost())
-            m_firstWidget->setOpacity(1.0);
+            m_firstWidget->setOpacity(.999);
         else
-            m_firstWidget->fadeTo(1.0);
+            m_firstWidget->fadeTo(.999);
     }
     m_disableButton->setChecked(!b);
 }

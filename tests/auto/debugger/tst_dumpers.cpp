@@ -37,8 +37,6 @@
 #endif // Q_CC_MSVC
 #endif // Q_OS_WIN
 
-#include <utils/asconst.h>
-
 #include <QtTest>
 #include <math.h>
 
@@ -480,19 +478,26 @@ struct DumperOptions
     QString options;
 };
 
+struct Watcher : DumperOptions
+{
+    Watcher(const QString &iname, const QString &exp)
+        : DumperOptions(QString("\"watchers\":[{\"exp\":\"%2\",\"iname\":\"%1\"}]").arg(iname, toHex(exp)))
+    {}
+};
+
 struct Check
 {
     Check() {}
 
-    Check(const QString &iname, const Value &value, const Type &type)
-        : iname(iname), expectedName(nameFromIName(iname)),
-          expectedValue(value), expectedType(type)
+    Check(const QString &iname, const Name &name, const Value &value, const Type &type)
+        : iname(iname.startsWith("watch") ? iname : "local." + iname),
+          expectedName(name),
+          expectedValue(value),
+          expectedType(type)
     {}
 
-    Check(const QString &iname, const Name &name,
-         const Value &value, const Type &type)
-        : iname(iname), expectedName(name),
-          expectedValue(value), expectedType(type)
+    Check(const QString &iname, const Value &value, const Type &type)
+        : Check(iname, nameFromIName(iname), value, type)
     {}
 
     bool matches(DebuggerEngine engine, int debuggerVersion, const Context &context) const
@@ -1312,13 +1317,7 @@ void tst_Dumpers::dumper()
                 "\n#define BREAK qtcDebugBreakFunction();"
                 "\n\nvoid unused(const void *first,...) { (void) first; }"
             "\n#else"
-                "\n#include <stdint.h>"
-                "\n#ifndef _WIN32"
-                    "\ntypedef char CHAR;"
-                    "\ntypedef char *PCHAR;"
-                    "\ntypedef wchar_t WCHAR;"
-                    "\ntypedef wchar_t *PWCHAR;"
-                "\n#endif\n";
+                "\n#include <stdint.h>";
 
     if (m_debuggerEngine == LldbEngine)
 //#ifdef Q_OS_MAC
@@ -1449,19 +1448,19 @@ void tst_Dumpers::dumper()
 
     QSet<QString> expandedINames;
     expandedINames.insert("local");
-    for (const Check &check : Utils::asConst(data.checks)) {
+    for (const Check &check : qAsConst(data.checks)) {
         QString parent = check.iname;
         while (true) {
             parent = parentIName(parent);
             if (parent.isEmpty())
                 break;
-            expandedINames.insert("local." + parent);
+            expandedINames.insert(parent);
         }
     }
 
     QString expanded;
     QString expandedq;
-    for (const QString &iname : Utils::asConst(expandedINames)) {
+    for (const QString &iname : qAsConst(expandedINames)) {
         if (!expanded.isEmpty()) {
             expanded.append(',');
             expandedq.append(',');
@@ -1640,7 +1639,7 @@ void tst_Dumpers::dumper()
     WatchItem local;
     local.iname = "local";
 
-    for (const GdbMi &child : Utils::asConst(actual.children())) {
+    for (const GdbMi &child : qAsConst(actual.children())) {
         const QString iname = child["iname"].data();
         if (iname == "local.qtversion")
             context.qtVersion = child["value"].toInt();
@@ -1670,7 +1669,7 @@ void tst_Dumpers::dumper()
 
     for (int i = data.checks.size(); --i >= 0; ) {
         Check check = data.checks.at(i);
-        QString iname = "local." + check.iname;
+        const QString iname = check.iname;
         WatchItem *item = static_cast<WatchItem *>(local.findAnyChild([iname](Utils::TreeItem *item) {
             return static_cast<WatchItem *>(item)->internalName() == iname;
         }));
@@ -1718,7 +1717,7 @@ void tst_Dumpers::dumper()
 
     if (!data.checks.isEmpty()) {
         qDebug() << "SOME TESTS NOT EXECUTED: ";
-        for (const Check &check : Utils::asConst(data.checks)) {
+        for (const Check &check : qAsConst(data.checks)) {
             if (check.optionallyPresent) {
                 qDebug() << "  OPTIONAL TEST NOT FOUND FOR INAME: " << check.iname << " IGNORED.";
             } else {
@@ -1937,8 +1936,9 @@ void tst_Dumpers::dumper_data()
                     "FooFlags f1(a);\n"
                     "FooFlags f2(a | b);\n")
                + CoreProfile()
-               + Check("f1", "a (1)", TypeDef("QFlags<enum Foo>", "FooFlags"))
-               + Check("f2", "(a | b) (3)", "FooFlags") % GdbEngine;
+               + Check("f1", "a (1)", TypeDef("QFlags<enum Foo>", "FooFlags")) % CdbEngine
+               + Check("f1", "a (0x0001)", "FooFlags") % NoCdbEngine
+               + Check("f2", "a | b (0x0003)", "FooFlags") % GdbEngine;
 
     QTest::newRow("QDateTime")
             << Data("#include <QDateTime>\n",
@@ -5223,7 +5223,11 @@ void tst_Dumpers::dumper_data()
 
 
     QTest::newRow("CharArrays")
-            << Data("",
+            << Data("#ifndef _WIN32\n"
+                    "#include <wchar.h>\n"
+                    "typedef char CHAR;\n"
+                    "typedef wchar_t WCHAR;\n"
+                    "#endif\n",
                     "char s[] = \"aöa\";\n"
                     "char t[] = \"aöax\";\n"
                     "wchar_t w[] = L\"aöa\";\n"
@@ -6984,6 +6988,14 @@ void tst_Dumpers::dumper_data()
             + Check("b", FloatValue("-2"), TypeDef("double", "long double"))
             + Check("c", FloatValue("0"), TypeDef("double", "long double"))
             + Check("d", FloatValue("0.5"), TypeDef("double", "long double"));
+
+    QTest::newRow("WatchList")
+            << Data("", "")
+            + Watcher("watch.1", "42;43")
+            + Check("watch.1", "42;43", "<2 items>", "")
+            + Check("watch.1.0", "42", "42", "int")
+            + Check("watch.1.1", "43", "43", "int");
+
 
 #ifdef Q_OS_LINUX
     QTest::newRow("StaticMembersInLib")

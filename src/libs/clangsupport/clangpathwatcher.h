@@ -70,6 +70,7 @@ public:
 using WatcherEntries = std::vector<WatcherEntry>;
 
 using IdCache = StringCache<Utils::SmallString,
+                            Utils::SmallStringView,
                             int,
                             NonLockingMutex,
                             decltype(&Utils::compare),
@@ -77,7 +78,7 @@ using IdCache = StringCache<Utils::SmallString,
 
 template <typename FileSystemWatcher,
           typename Timer>
-class CLANGSUPPORT_EXPORT ClangPathWatcher : public ClangPathWatcherInterface
+class CLANGSUPPORT_GCCEXPORT ClangPathWatcher : public ClangPathWatcherInterface
 {
 public:
     ClangPathWatcher(FilePathCachingInterface &pathCache,

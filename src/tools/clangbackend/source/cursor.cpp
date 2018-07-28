@@ -29,6 +29,8 @@
 #include "sourcelocation.h"
 #include "sourcerange.h"
 
+#include "clangbackend_global.h"
+
 #include <ostream>
 
 namespace ClangBackEnd {
@@ -101,6 +103,15 @@ bool Cursor::isCompoundType() const
 bool Cursor::isDeclaration() const
 {
     return clang_isDeclaration(kind());
+}
+
+bool Cursor::isInvalidDeclaration() const
+{
+#ifdef IS_INVALIDDECL_SUPPORTED
+    return clang_isInvalidDeclaration(cxCursor);
+#else
+    return false;
+#endif
 }
 
 bool Cursor::isLocalVariable() const
@@ -283,7 +294,7 @@ CXFile Cursor::includedFile() const
 
 SourceLocation Cursor::sourceLocation() const
 {
-    return clang_getCursorLocation(cxCursor);
+    return {cxTranslationUnit(), clang_getCursorLocation(cxCursor)};
 }
 
 CXSourceLocation Cursor::cxSourceLocation() const
@@ -293,7 +304,7 @@ CXSourceLocation Cursor::cxSourceLocation() const
 
 SourceRange Cursor::sourceRange() const
 {
-    return clang_getCursorExtent(cxCursor);
+    return {cxTranslationUnit(), clang_getCursorExtent(cxCursor)};
 }
 
 CXSourceRange Cursor::cxSourceRange() const
@@ -308,7 +319,7 @@ CXTranslationUnit Cursor::cxTranslationUnit() const
 
 SourceRange Cursor::commentRange() const
 {
-    return clang_Cursor_getCommentRange(cxCursor);
+    return {cxTranslationUnit(), clang_Cursor_getCommentRange(cxCursor)};
 }
 
 bool Cursor::hasSameSourceLocationAs(const Cursor &other) const
@@ -434,6 +445,51 @@ CXCursorKind Cursor::kind() const
 CXCursor Cursor::cx() const
 {
     return cxCursor;
+}
+
+StorageClass Cursor::storageClass() const
+{
+    CXCursor cursor = cxCursor;
+    if (!isDeclaration())
+        cursor = referenced().cxCursor;
+    const CX_StorageClass cxStorageClass = clang_Cursor_getStorageClass(cursor);
+    switch (cxStorageClass) {
+    case CX_SC_Invalid:
+    case CX_SC_OpenCLWorkGroupLocal:
+        break;
+    case CX_SC_None:
+        return StorageClass::None;
+    case CX_SC_Extern:
+        return StorageClass::Extern;
+    case CX_SC_Static:
+        return StorageClass::Static;
+    case CX_SC_PrivateExtern:
+        return StorageClass::PrivateExtern;
+    case CX_SC_Auto:
+        return StorageClass::Auto;
+    case CX_SC_Register:
+        return StorageClass::Register;
+    }
+    return StorageClass::Invalid;
+}
+
+AccessSpecifier Cursor::accessSpecifier() const
+{
+    CXCursor cursor = cxCursor;
+    if (!isDeclaration())
+        cursor = referenced().cxCursor;
+    const CX_CXXAccessSpecifier cxAccessSpecifier = clang_getCXXAccessSpecifier(cursor);
+    switch (cxAccessSpecifier) {
+    case CX_CXXInvalidAccessSpecifier:
+        break;
+    case CX_CXXPublic:
+        return AccessSpecifier::Public;
+    case CX_CXXProtected:
+        return AccessSpecifier::Protected;
+    case CX_CXXPrivate:
+        return AccessSpecifier::Private;
+    }
+    return AccessSpecifier::Invalid;
 }
 
 bool operator==(const Cursor &first, const Cursor &second)

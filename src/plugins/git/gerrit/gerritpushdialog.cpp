@@ -32,7 +32,9 @@
 #include "../gitconstants.h"
 
 #include <utils/icon.h>
+#include <utils/theme/theme.h>
 
+#include <QApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QPushButton>
@@ -43,6 +45,8 @@ using namespace Git::Internal;
 
 namespace Gerrit {
 namespace Internal {
+
+static const int ReasonableDistance = 100;
 
 class PushItemDelegate : public IconItemDelegate
 {
@@ -111,7 +115,7 @@ void GerritPushDialog::initRemoteBranches()
             continue;
         const QString ref = entries.at(0).mid(remotesPrefix.size());
         int refBranchIndex = ref.indexOf('/');
-        int timeT = entries.at(1).leftRef(entries.at(1).indexOf(' ')).toInt();
+        unsigned int timeT = entries.at(1).leftRef(entries.at(1).indexOf(' ')).toUInt();
         BranchDate bd(ref.mid(refBranchIndex + 1), QDateTime::fromTime_t(timeT).date());
         m_remoteBranches.insertMulti(ref.left(refBranchIndex), bd);
     }
@@ -207,8 +211,18 @@ void GerritPushDialog::setChangeRange()
     }
     m_ui->infoLabel->show();
     const QString remote = selectedRemoteName() + '/' + remoteBranchName;
-    m_ui->infoLabel->setText(
-                tr("Number of commits between %1 and %2: %3").arg(branch, remote, range));
+    QString labelText = tr("Number of commits between %1 and %2: %3").arg(branch, remote, range);
+    const int currentRange = range.toInt();
+    QPalette palette = QApplication::palette();
+    if (currentRange > ReasonableDistance) {
+        const QColor errorColor = Utils::creatorTheme()->color(Utils::Theme::TextColorError);
+        palette.setColor(QPalette::Foreground, errorColor);
+        palette.setColor(QPalette::ButtonText, errorColor);
+        labelText.append("\n" + tr("Are you sure you selected the right target branch?"));
+    }
+    m_ui->infoLabel->setPalette(palette);
+    m_ui->targetBranchComboBox->setPalette(palette);
+    m_ui->infoLabel->setText(labelText);
 }
 
 static bool versionSupportsWip(const QString &version)
@@ -226,22 +240,22 @@ void GerritPushDialog::onRemoteChanged(bool force)
     m_currentSupportsWip = supportsWip;
     m_ui->wipCheckBox->setEnabled(supportsWip);
     if (supportsWip) {
-        m_ui->wipCheckBox->setToolTip(tr("Checked - Mark change as WIP\n"
-                                         "Unchecked - Mark change as ready\n"
-                                         "Partially checked - Do not change current state"));
+        m_ui->wipCheckBox->setToolTip(tr("Checked - Mark change as WIP.\n"
+                                         "Unchecked - Mark change as ready for review.\n"
+                                         "Partially checked - Do not change current state."));
         m_ui->draftCheckBox->setTristate(true);
         if (m_ui->draftCheckBox->checkState() != Qt::Checked)
             m_ui->draftCheckBox->setCheckState(Qt::PartiallyChecked);
-        m_ui->draftCheckBox->setToolTip(tr("Checked - Mark change as private\n"
-                                           "Unchecked - Unmark change as private\n"
-                                           "Partially checked - Do not change current state"));
+        m_ui->draftCheckBox->setToolTip(tr("Checked - Mark change as private.\n"
+                                           "Unchecked - Remove mark.\n"
+                                           "Partially checked - Do not change current state."));
     } else {
-        m_ui->wipCheckBox->setToolTip(tr("Supported on Gerrit 2.15 and up"));
+        m_ui->wipCheckBox->setToolTip(tr("Supported on Gerrit 2.15 and later."));
         m_ui->draftCheckBox->setTristate(false);
         if (m_ui->draftCheckBox->checkState() != Qt::Checked)
             m_ui->draftCheckBox->setCheckState(Qt::Unchecked);
-        m_ui->draftCheckBox->setToolTip(tr("Checked - Mark change as draft\n"
-                                           "Unchecked - Unmark change as draft"));
+        m_ui->draftCheckBox->setToolTip(tr("Checked - The change is a draft.\n"
+                                           "Unchecked - The change is not a draft."));
     }
 }
 

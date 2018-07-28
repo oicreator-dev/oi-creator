@@ -1,12 +1,12 @@
 !isEmpty(QTCREATOR_PRI_INCLUDED):error("qtcreator.pri already included")
 QTCREATOR_PRI_INCLUDED = 1
 
-QTCREATOR_VERSION = 4.6.82
-QTCREATOR_COMPAT_VERSION = 4.6.82
+QTCREATOR_VERSION = 4.7.1
+QTCREATOR_COMPAT_VERSION = 4.7.0
 VERSION = $$QTCREATOR_VERSION
-QTCREATOR_DISPLAY_VERSION = 4.7.0-beta1
-QTCREATOR_COPYRIGHT_YEAR = 2017
-BINARY_ARTIFACTS_BRANCH = master
+QTCREATOR_DISPLAY_VERSION = 4.7.1
+QTCREATOR_COPYRIGHT_YEAR = 2018
+BINARY_ARTIFACTS_BRANCH = 4.7
 
 isEmpty(IDE_DISPLAY_NAME):           IDE_DISPLAY_NAME = Qt Creator
 isEmpty(IDE_ID):                     IDE_ID = qtcreator
@@ -106,7 +106,7 @@ osx {
 
     # check if IDE_BUILD_TREE is actually an existing Qt Creator.app,
     # for building against a binary package
-    exists($$IDE_BUILD_TREE/Contents/MacOS/Qt Creator): IDE_APP_BUNDLE = $$IDE_BUILD_TREE
+    exists($$IDE_BUILD_TREE/Contents/MacOS/$$IDE_APP_TARGET): IDE_APP_BUNDLE = $$IDE_BUILD_TREE
     else: IDE_APP_BUNDLE = $$IDE_APP_PATH/$${IDE_APP_TARGET}.app
 
     # set output path if not set manually
@@ -193,6 +193,13 @@ for(dir, QTC_PLUGIN_DIRS) {
     INCLUDEPATH += $$dir
 }
 
+QTC_LIB_DIRS_FROM_ENVIRONMENT = $$(QTC_LIB_DIRS)
+QTC_LIB_DIRS += $$split(QTC_LIB_DIRS_FROM_ENVIRONMENT, $$QMAKE_DIRLIST_SEP)
+QTC_LIB_DIRS += $$IDE_SOURCE_TREE/src/libs
+for(dir, QTC_LIB_DIRS) {
+    INCLUDEPATH += $$dir
+}
+
 CONFIG += \
     depend_includepath \
     no_include_pwd
@@ -276,7 +283,16 @@ for(ever) {
         break()
     done_libs += $$QTC_LIB_DEPENDS
     for(dep, QTC_LIB_DEPENDS) {
-        include($$PWD/src/libs/$$dep/$${dep}_dependencies.pri)
+        dependencies_file =
+        for(dir, QTC_LIB_DIRS) {
+            exists($$dir/$$dep/$${dep}_dependencies.pri) {
+                dependencies_file = $$dir/$$dep/$${dep}_dependencies.pri
+                break()
+            }
+        }
+        isEmpty(dependencies_file): \
+            error("Library dependency $$dep not found")
+        include($$dependencies_file)
         LIBS += -l$$qtLibraryName($$QTC_LIB_NAME)
     }
     QTC_LIB_DEPENDS = $$unique(QTC_LIB_DEPENDS)

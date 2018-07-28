@@ -56,6 +56,11 @@ void ProcessCreator::setArguments(const QStringList &arguments)
     m_arguments = arguments;
 }
 
+void ProcessCreator::setEnvironment(const Utils::Environment &environment)
+{
+    m_environment = environment;
+}
+
 std::future<QProcessUniquePointer> ProcessCreator::createProcess() const
 {
     return std::async(std::launch::async, [&] {
@@ -85,7 +90,7 @@ void ProcessCreator::checkIfProcessPathExists() const
 {
     if (!QFileInfo::exists(m_processPath)) {
         const QString messageTemplate = QCoreApplication::translate("ProcessCreator",
-                                                                    "Executable does not exists: %1");
+                                                                    "Executable does not exist: %1");
         throwProcessException(messageTemplate.arg(m_processPath));
     }
 }
@@ -101,7 +106,7 @@ void ProcessCreator::dispatchProcessError(QProcess *process) const
     switch (process->error()) {
         case QProcess::UnknownError: {
             const QString message = QCoreApplication::translate("ProcessCreator",
-                                                                "Unknown error happend.");
+                                                                "Unknown error occurred.");
             throwProcessException(message);
         };
         case QProcess::Crashed: {
@@ -116,7 +121,7 @@ void ProcessCreator::dispatchProcessError(QProcess *process) const
         };
         case QProcess::Timedout: {
             const QString message = QCoreApplication::translate("ProcessCreator",
-                                                                "Process timeouted.");
+                                                                "Process timed out.");
             throwProcessException(message);
         };
         case QProcess::WriteError: {
@@ -166,6 +171,10 @@ QProcessEnvironment ProcessCreator::processEnvironment() const
         processEnvironment.insert("TMP", temporaryDirectoryPath);
         processEnvironment.insert("TEMP", temporaryDirectoryPath);
     }
+
+    const Utils::Environment &env = m_environment;
+    for (auto it = env.constBegin(); it != env.constEnd(); ++it)
+        processEnvironment.insert(it.key(), it.value());
 
     return processEnvironment;
 }

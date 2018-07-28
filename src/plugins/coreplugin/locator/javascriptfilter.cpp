@@ -27,10 +27,16 @@
 
 #include <QClipboard>
 #include <QGuiApplication>
-#include <QJSEngine>
+#include <QScriptEngine>
 
 namespace Core {
 namespace Internal {
+
+enum JavaScriptAction
+{
+    ResetEngine = QVariant::UserType + 1,
+    AbortEngine
+};
 
 JavaScriptFilter::JavaScriptFilter()
 {
@@ -38,6 +44,13 @@ JavaScriptFilter::JavaScriptFilter()
     setDisplayName(tr("Evaluate JavaScript"));
     setIncludedByDefault(false);
     setShortcutString("=");
+    m_abortTimer.setSingleShot(true);
+    m_abortTimer.setInterval(1000);
+    connect(&m_abortTimer, &QTimer::timeout, this, [this] {
+        m_aborted = true;
+        if (m_engine && m_engine->isEvaluating())
+            m_engine->abortEvaluation();
+    });
 }
 
 JavaScriptFilter::~JavaScriptFilter()
@@ -48,7 +61,10 @@ void JavaScriptFilter::prepareSearch(const QString &entry)
 {
     Q_UNUSED(entry);
 
-    setupEngine();
+    if (!m_engine)
+        setupEngine();
+    m_aborted = false;
+    m_abortTimer.start();
 }
 
 QList<LocatorFilterEntry> JavaScriptFilter::matchesFor(
@@ -56,13 +72,21 @@ QList<LocatorFilterEntry> JavaScriptFilter::matchesFor(
 {
     Q_UNUSED(future);
 
-    const QString result = m_engine->evaluate(entry).toString();
-    const QString expression = entry + " = " + result;
-
     QList<LocatorFilterEntry> entries;
-    entries.append({this, expression, QVariant()});
-    entries.append({this, tr("Copy to clipboard: %1").arg(result), result});
-    entries.append({this, tr("Copy to clipboard: %1").arg(expression), expression});
+    if (entry.trimmed().isEmpty()) {
+        entries.append({this, tr("Reset Engine"), QVariant(ResetEngine, nullptr)});
+    } else {
+        const QString result = m_engine->evaluate(entry).toString();
+        if (m_aborted) {
+            const QString message = entry + " = " + tr("Engine aborted after timeout.");
+            entries.append({this, message, QVariant(AbortEngine, nullptr)});
+        } else {
+            const QString expression = entry + " = " + result;
+            entries.append({this, expression, QVariant()});
+            entries.append({this, tr("Copy to clipboard: %1").arg(result), result});
+            entries.append({this, tr("Copy to clipboard: %1").arg(expression), expression});
+        }
+    }
 
     return entries;
 }
@@ -77,6 +101,11 @@ void JavaScriptFilter::accept(Core::LocatorFilterEntry selection, QString *newTe
     if (selection.internalData.isNull())
         return;
 
+    if (selection.internalData.userType() == ResetEngine) {
+        m_engine.reset();
+        return;
+    }
+
     QClipboard *clipboard = QGuiApplication::clipboard();
     clipboard->setText(selection.internalData.toString());
 }
@@ -89,10 +118,7 @@ void JavaScriptFilter::refresh(QFutureInterface<void> &future)
 
 void JavaScriptFilter::setupEngine()
 {
-    if (m_engine)
-        return;
-
-    m_engine = new QJSEngine(this);
+    m_engine.reset(new QScriptEngine);
     m_engine->evaluate(
                 "function abs(x) { return Math.abs(x); }\n"
                 "function acos(x) { return Math.acos(x); }\n"
@@ -107,8 +133,8 @@ void JavaScriptFilter::setupEngine()
                 "function floor(x) { return Math.floor(x); }\n"
                 "function hex(x) { return '0x' + x.toString(16); }\n"
                 "function log(x) { return Math.log(x); }\n"
-                "function max(x, y) { return Math.max(x, y); }\n"
-                "function min(x, y) { return Math.min(x, y); }\n"
+                "function max() { return Math.max.apply(null, arguments); }\n"
+                "function min() { return Math.min.apply(null, arguments); }\n"
                 "function oct(x) { return '0' + x.toString(8); }\n"
                 "function pi() { return Math.PI; }\n"
                 "function pow(x, y) { return Math.pow(x, y); }\n"

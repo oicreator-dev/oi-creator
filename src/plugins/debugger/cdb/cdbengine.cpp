@@ -154,7 +154,7 @@ static const char localsPrefixC[] = "local.";
 
 struct MemoryViewCookie
 {
-    explicit MemoryViewCookie(MemoryAgent *a = 0, quint64 addr = 0, quint64 l = 0)
+    explicit MemoryViewCookie(MemoryAgent *a = nullptr, quint64 addr = 0, quint64 l = 0)
         : agent(a), address(addr), length(l)
     {}
 
@@ -649,12 +649,17 @@ void CdbEngine::runEngine()
     // else the debugger will slow down considerably.
     const auto cb = [this](const DebuggerResponse &r) { handleBreakInsert(r, BreakpointModelId()); };
     if (boolSetting(CdbBreakOnCrtDbgReport)) {
-        const QString module = msvcRunTime(runParameters().toolChainAbi.osFlavor());
-        const QString debugModule = module + 'D';
-        const QString wideFunc = QString::fromLatin1(CdbOptionsPage::crtDbgReport).append('W');
-        runCommand({breakAtFunctionCommand(QLatin1String(CdbOptionsPage::crtDbgReport), module), BuiltinCommand, cb});
-        runCommand({breakAtFunctionCommand(wideFunc, module), BuiltinCommand, cb});
-        runCommand({breakAtFunctionCommand(QLatin1String(CdbOptionsPage::crtDbgReport), debugModule), BuiltinCommand, cb});
+        Abi::OSFlavor flavor = runParameters().toolChainAbi.osFlavor();
+        // CrtDebugReport can not be safely resolved for vc 19
+        if ((flavor > Abi::WindowsMsvc2005Flavor && flavor <= Abi::WindowsMsvc2013Flavor) ||
+                flavor > Abi::WindowsMSysFlavor || flavor <= Abi::WindowsCEFlavor) {
+            const QString module = msvcRunTime(flavor);
+            const QString debugModule = module + 'D';
+            const QString wideFunc = QString::fromLatin1(CdbOptionsPage::crtDbgReport).append('W');
+            runCommand({breakAtFunctionCommand(QLatin1String(CdbOptionsPage::crtDbgReport), module), BuiltinCommand, cb});
+            runCommand({breakAtFunctionCommand(wideFunc, module), BuiltinCommand, cb});
+            runCommand({breakAtFunctionCommand(QLatin1String(CdbOptionsPage::crtDbgReport), debugModule), BuiltinCommand, cb});
+        }
     }
 //    if (boolSetting(BreakOnWarning)) {
 //        runCommand({"bm /( QtCored4!qWarning", BuiltinCommand}); // 'bm': All overloads.
@@ -2730,7 +2735,7 @@ CdbEngine::NormalizedSourceFileName CdbEngine::sourceMapNormalizeFileNameFromDeb
 
 // Parse frame from GDBMI. Duplicate of the gdb code, but that
 // has more processing.
-static StackFrames parseFrames(const GdbMi &gdbmi, bool *incomplete = 0)
+static StackFrames parseFrames(const GdbMi &gdbmi, bool *incomplete = nullptr)
 {
     if (incomplete)
         *incomplete = false;

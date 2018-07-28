@@ -709,7 +709,7 @@ NodeMetaInfoPrivate::NodeMetaInfoPrivate(Model *model, TypeName type, int maj, i
                 } else {
                     m_isFileComponent = true;
                     const Imports *imports = context()->imports(document());
-                    ImportInfo importInfo = imports->info(lookupNameComponent().last(), context().data());
+                    ImportInfo importInfo = imports->info(lookupNameComponent().constLast(), context().data());
                     if (importInfo.isValid() && importInfo.type() == ImportType::Library) {
                         m_majorVersion = importInfo.version().majorVersion();
                         m_minorVersion = importInfo.version().minorVersion();
@@ -729,7 +729,7 @@ const CppComponentValue *NodeMetaInfoPrivate::getCppComponentValue() const
     const QList<TypeName> nameComponents = m_qualfiedTypeName.split('.');
     if (nameComponents.size() < 2)
         return 0;
-    const TypeName type = nameComponents.last();
+    const TypeName &type = nameComponents.constLast();
 
     TypeName module;
     for (int i = 0; i < nameComponents.size() - 1; ++i) {
@@ -739,16 +739,20 @@ const CppComponentValue *NodeMetaInfoPrivate::getCppComponentValue() const
     }
 
     // get the qml object value that's available in the document
-    foreach (const QmlJS::Import &import, context()->imports(document())->all()) {
-        if (import.info.path() != QString::fromUtf8(module))
-            continue;
-        const Value *lookupResult = import.object->lookupMember(QString::fromUtf8(type), context());
-        const CppComponentValue *cppValue = value_cast<CppComponentValue>(lookupResult);
-        if (cppValue
-                && (m_majorVersion == -1 || m_majorVersion == cppValue->componentVersion().majorVersion())
-                && (m_minorVersion == -1 || m_minorVersion == cppValue->componentVersion().minorVersion())
-                )
-            return cppValue;
+    const QmlJS::Imports *importsPtr = context()->imports(document());
+    if (importsPtr) {
+        const QList<QmlJS::Import> imports = importsPtr->all();
+        foreach (const QmlJS::Import &import, imports) {
+            if (import.info.path() != QString::fromUtf8(module))
+                continue;
+            const Value *lookupResult = import.object->lookupMember(QString::fromUtf8(type), context());
+            const CppComponentValue *cppValue = value_cast<CppComponentValue>(lookupResult);
+            if (cppValue
+                    && (m_majorVersion == -1 || m_majorVersion == cppValue->componentVersion().majorVersion())
+                    && (m_minorVersion == -1 || m_minorVersion == cppValue->componentVersion().minorVersion())
+                    )
+                return cppValue;
+        }
     }
 
     const CppComponentValue *value = value_cast<CppComponentValue>(getObjectValue());
@@ -821,8 +825,8 @@ bool NodeMetaInfoPrivate::isPropertyWritable(const PropertyName &propertyName) c
 
     if (propertyName.contains('.')) {
         const PropertyNameList parts = propertyName.split('.');
-        const PropertyName objectName = parts.first();
-        const PropertyName rawPropertyName = parts.last();
+        const PropertyName &objectName = parts.constFirst();
+        const PropertyName &rawPropertyName = parts.constLast();
         const TypeName objectType = propertyType(objectName);
 
         if (isValueType(objectType))
@@ -854,8 +858,8 @@ bool NodeMetaInfoPrivate::isPropertyList(const PropertyName &propertyName) const
 
     if (propertyName.contains('.')) {
         const PropertyNameList parts = propertyName.split('.');
-        const PropertyName objectName = parts.first();
-        const PropertyName rawPropertyName = parts.last();
+        const PropertyName &objectName = parts.constFirst();
+        const PropertyName &rawPropertyName = parts.constLast();
         const TypeName objectType = propertyType(objectName);
 
         if (isValueType(objectType))
@@ -883,8 +887,8 @@ bool NodeMetaInfoPrivate::isPropertyPointer(const PropertyName &propertyName) co
 
     if (propertyName.contains('.')) {
         const PropertyNameList parts = propertyName.split('.');
-        const PropertyName objectName = parts.first();
-        const PropertyName rawPropertyName = parts.last();
+        const PropertyName &objectName = parts.constFirst();
+        const PropertyName &rawPropertyName = parts.constLast();
         const TypeName objectType = propertyType(objectName);
 
         if (isValueType(objectType))
@@ -915,8 +919,8 @@ bool NodeMetaInfoPrivate::isPropertyEnum(const PropertyName &propertyName) const
 
     if (propertyName.contains('.')) {
         const PropertyNameList parts = propertyName.split('.');
-        const PropertyName objectName = parts.first();
-        const PropertyName rawPropertyName = parts.last();
+        const PropertyName &objectName = parts.constFirst();
+        const PropertyName &rawPropertyName = parts.constLast();
         const TypeName objectType = propertyType(objectName);
 
         if (isValueType(objectType))
@@ -947,8 +951,8 @@ QString NodeMetaInfoPrivate::propertyEnumScope(const PropertyName &propertyName)
 
     if (propertyName.contains('.')) {
         const PropertyNameList parts = propertyName.split('.');
-        const PropertyName objectName = parts.first();
-        const PropertyName rawPropertyName = parts.last();
+        const PropertyName &objectName = parts.constFirst();
+        const PropertyName &rawPropertyName = parts.constLast();
         const TypeName objectType = propertyType(objectName);
 
         if (isValueType(objectType))
@@ -989,7 +993,7 @@ static QByteArray getUnqualifiedName(const QByteArray &name)
     const QList<QByteArray> nameComponents = name.split('.');
     if (nameComponents.size() < 2)
         return name;
-    return nameComponents.last();
+    return nameComponents.constLast();
 }
 
 static QByteArray getPackage(const QByteArray &name)
@@ -1138,7 +1142,7 @@ QString NodeMetaInfoPrivate::importDirectoryPath() const
 
     if (isValid()) {
         const Imports *imports = context()->imports(document());
-        ImportInfo importInfo = imports->info(lookupNameComponent().last(), context().data());
+        ImportInfo importInfo = imports->info(lookupNameComponent().constLast(), context().data());
 
         if (importInfo.type() == ImportType::Directory) {
             return importInfo.path();

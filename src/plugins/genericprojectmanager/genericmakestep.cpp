@@ -311,17 +311,15 @@ GenericMakeAllStepFactory::GenericMakeAllStepFactory()
 {
     struct Step : GenericMakeStep
     {
-        Step(BuildStepList *bsl) : GenericMakeStep(bsl)
-        {
-            setBuildTarget("all", true);
-        }
+        Step(BuildStepList *bsl) : GenericMakeStep(bsl, QString("all")) { }
     };
 
     registerStep<Step>(GENERIC_MS_ID);
     setDisplayName(QCoreApplication::translate(
         "GenericProjectManager::Internal::GenericMakeStep", GENERIC_MS_DISPLAY_NAME));
     setSupportedProjectType(Constants::GENERICPROJECT_ID);
-    setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_BUILD);
+    setSupportedStepLists({ProjectExplorer::Constants::BUILDSTEPS_BUILD,
+                           ProjectExplorer::Constants::BUILDSTEPS_DEPLOY});
 }
 
 //

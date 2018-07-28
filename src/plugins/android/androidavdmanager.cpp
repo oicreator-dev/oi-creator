@@ -26,6 +26,7 @@
 
 #include "androidtoolmanager.h"
 
+#include "coreplugin/icore.h"
 #include "utils/algorithm.h"
 #include "utils/qtcassert.h"
 #include "utils/runextensions.h"
@@ -34,9 +35,11 @@
 #include <QApplication>
 #include <QFileInfo>
 #include <QLoggingCategory>
+#include <QMessageBox>
 #include <QSettings>
 
 #include <chrono>
+#include <functional>
 
 namespace {
 Q_LOGGING_CATEGORY(avdManagerLog, "qtc.android.avdManager")
@@ -53,6 +56,7 @@ const char avdInfoPathKey[] = "Path:";
 const char avdInfoAbiKey[] = "abi.type";
 const char avdInfoTargetKey[] = "target";
 const char avdInfoErrorKey[] = "Error:";
+const char googleApiTag[] = "google_apis";
 
 const int avdCreateTimeoutMs = 30000;
 
@@ -65,6 +69,8 @@ static bool avdManagerCommand(const AndroidConfig config, const QStringList &arg
 {
     QString avdManagerToolPath = config.avdManagerToolPath().toString();
     Utils::SynchronousProcess proc;
+    auto env = AndroidConfigurations::toolsEnvironment(config).toStringList();
+    proc.setEnvironment(env);
     Utils::SynchronousProcessResponse response = proc.runBlocking(avdManagerToolPath, args);
     if (response.result == Utils::SynchronousProcessResponse::Finished) {
         if (output)
@@ -111,13 +117,17 @@ static CreateAvdInfo createAvdCommand(const AndroidConfig config, const CreateAv
         return result;
     }
 
-    QStringList arguments({"create", "avd", "-k", result.sdkPlatform->sdkStylePath(), "-n", result.name});
+    QStringList arguments({"create", "avd", "-n", result.name});
 
     if (!result.abi.isEmpty()) {
         SystemImage *image = Utils::findOrDefault(result.sdkPlatform->systemImages(),
                                                  Utils::equal(&SystemImage::abiName, result.abi));
         if (image && image->isValid()) {
             arguments << "-k" << image->sdkStylePath();
+            // Google api system images requires explicit abi as
+            // google-apis/ABI or --tag "google-apis"
+            if (image->sdkStylePath().contains(googleApiTag))
+                arguments << "--tag" << googleApiTag;
         } else {
             QString name = result.sdkPlatform->displayText();
             qCDebug(avdManagerLog) << "AVD Create failed. Cannot find system image for the platform"
@@ -186,6 +196,18 @@ static CreateAvdInfo createAvdCommand(const AndroidConfig config, const CreateAv
     QTC_CHECK(proc.state() == QProcess::NotRunning);
     result.error = errorOutput;
     return result;
+}
+
+static void avdProcessFinished(int exitCode, QProcess *p)
+{
+    QTC_ASSERT(p, return);
+    if (exitCode) {
+        QString title = QCoreApplication::translate("Android::Internal::AndroidAvdManager",
+                                                    "AVD Start Error");
+        QMessageBox::critical(Core::ICore::dialogParent(), title,
+                              QString::fromLatin1(p->readAll()));
+    }
+    p->deleteLater();
 }
 
 /*!
@@ -265,9 +287,21 @@ QString AndroidAvdManager::startAvd(const QString &name) const
 
 bool AndroidAvdManager::startAvdAsync(const QString &avdName) const
 {
+    QFileInfo info(m_config.emulatorToolPath().toString());
+    if (!info.exists()) {
+        QMessageBox::critical(Core::ICore::dialogParent(),
+                              tr("Emulator Tool Is Missing"),
+                              tr("Install the missing emulator tool (%1) to the"
+                                 " installed Android SDK.")
+                              .arg(m_config.emulatorToolPath().toString()));
+        return false;
+    }
     QProcess *avdProcess = new QProcess();
-    QObject::connect(avdProcess, static_cast<void (QProcess::*)(int)>(&QProcess::finished),
-                     avdProcess, &QObject::deleteLater);
+    avdProcess->setReadChannelMode(QProcess::MergedChannels);
+    QObject::connect(avdProcess,
+                     static_cast<void (QProcess::*)(int)>(&QProcess::finished),
+                     avdProcess,
+                     std::bind(&avdProcessFinished, std::placeholders::_1, avdProcess));
 
     // start the emulator
     QStringList arguments;

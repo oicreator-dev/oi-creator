@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Form</string>
+   <string/>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout_2">
    <item>
@@ -84,44 +84,27 @@
     </widget>
    </item>
    <item>
-    <widget class="QLabel" name="clangCodeModelIsEnabledHint">
-     <property name="text">
-      <string>&lt;i&gt;The Clang Code Model is enabled because the corresponding plugin is loaded.&lt;/i&gt;</string>
-     </property>
-    </widget>
-   </item>
-   <item>
-    <widget class="QLabel" name="clangCodeModelIsDisabledHint">
-     <property name="text">
-      <string>&lt;i&gt;The Clang Code Model is disabled because the corresponding plugin is not loaded.&lt;/i&gt;</string>
-     </property>
-    </widget>
-   </item>
-   <item>
-    <widget class="QGroupBox" name="clangSettingsGroupBox">
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
-       <horstretch>0</horstretch>
-       <verstretch>0</verstretch>
-      </sizepolicy>
-     </property>
+    <widget class="QGroupBox" name="groupBox">
      <property name="title">
-      <string>Clang Code Model Warnings</string>
+      <string>Clang Code Model</string>
      </property>
-     <property name="checkable">
-      <bool>false</bool>
-     </property>
-     <layout class="QVBoxLayout" name="verticalLayout_3"/>
-    </widget>
-   </item>
-   <item>
-    <widget class="QGroupBox" name="clangPlugins">
-     <property name="title">
-      <string>Clang Plugins</string>
-     </property>
-     <layout class="QHBoxLayout" name="horizontalLayout_2">
+     <layout class="QVBoxLayout" name="verticalLayout_3">
       <item>
-       <widget class="QTabWidget" name="pluginChecks"/>
+       <widget class="QLabel" name="clangCodeModelIsEnabledHint">
+        <property name="text">
+         <string>&lt;i&gt;The Clang Code Model is enabled because the corresponding plugin is loaded.&lt;/i&gt;</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="clangCodeModelIsDisabledHint">
+        <property name="text">
+         <string>&lt;i&gt;The Clang Code Model is disabled because the corresponding plugin is not loaded.&lt;/i&gt;</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="CppTools::ClangDiagnosticConfigsSelectionWidget" name="clangDiagnosticConfigsSelectionWidget" native="true"/>
       </item>
      </layout>
     </widget>
@@ -134,13 +117,20 @@
      <property name="sizeHint" stdset="0">
       <size>
        <width>20</width>
-       <height>151</height>
+       <height>40</height>
       </size>
      </property>
     </spacer>
    </item>
   </layout>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>CppTools::ClangDiagnosticConfigsSelectionWidget</class>
+   <extends>QWidget</extends>
+   <header>cpptools/clangdiagnosticconfigsselectionwidget.h</header>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>

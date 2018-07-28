@@ -41,6 +41,8 @@
 
 #include <QDir>
 
+using namespace ProjectExplorer;
+
 using namespace WinRt;
 using namespace WinRt::Internal;
 
@@ -48,7 +50,7 @@ WinRtRunnerHelper::WinRtRunnerHelper(ProjectExplorer::RunWorker *runWorker, QStr
     : QObject(runWorker)
     , m_worker(runWorker)
 {
-    auto runConfiguration = qobject_cast<WinRtRunConfiguration *>(runWorker->runControl()->runConfiguration());
+    auto runConfiguration = runWorker->runControl()->runConfiguration();
 
     ProjectExplorer::Target *target = runConfiguration->target();
     m_device = runWorker->device().dynamicCast<const WinRtDevice>();
@@ -66,11 +68,12 @@ WinRtRunnerHelper::WinRtRunnerHelper(ProjectExplorer::RunWorker *runWorker, QStr
         return;
     }
 
-    const QString &proFile = runConfiguration->proFilePath();
-    m_executableFilePath = target->applicationTargets().targetForProject(proFile).toString();
+    const BuildTargetInfo bti = target->applicationTargets().buildTargetInfo(runConfiguration->buildKey());
+    m_executableFilePath = bti.targetFilePath.toString();
+
     if (m_executableFilePath.isEmpty()) {
         *errorMessage = tr("Cannot determine the executable file path for \"%1\".").arg(
-                    QDir::toNativeSeparators(proFile));
+                    QDir::toNativeSeparators(bti.projectFilePath.toString()));
         return;
     }
 
@@ -78,8 +81,10 @@ WinRtRunnerHelper::WinRtRunnerHelper(ProjectExplorer::RunWorker *runWorker, QStr
     if (!m_executableFilePath.endsWith(QLatin1String(".exe")))
         m_executableFilePath += QStringLiteral(".exe");
 
-    m_arguments = runConfiguration->arguments();
-    m_uninstallAfterStop = runConfiguration->uninstallAfterStop();
+    if (auto aspect = runConfiguration->extraAspect<ArgumentsAspect>())
+        m_arguments = aspect->arguments();
+    if (auto aspect = runConfiguration->extraAspect<UninstallAfterStopAspect>())
+        m_uninstallAfterStop = aspect->value();
 
     if (ProjectExplorer::BuildConfiguration *bc = target->activeBuildConfiguration())
         m_environment = bc->environment();
@@ -169,7 +174,7 @@ void WinRtRunnerHelper::startWinRtRunner(const RunConf &conf)
             QtcProcess::addArg(&runnerArgs, QStringLiteral("--debugger-arguments"));
             QtcProcess::addArg(&runnerArgs, m_debuggerArguments);
         }
-        // fall through
+        Q_FALLTHROUGH();
     case Start:
         QtcProcess::addArgs(&runnerArgs, QStringLiteral("--start --stop --install --wait 0"));
         connectProcess = true;

@@ -50,6 +50,8 @@
 #include <projectexplorer/deploymentdata.h>
 #include <projectexplorer/headerpath.h>
 #include <projectexplorer/projectexplorer.h>
+#include <projectexplorer/projectexplorerconstants.h>
+#include <projectexplorer/runconfiguration.h>
 #include <projectexplorer/target.h>
 #include <projectexplorer/taskhub.h>
 #include <projectexplorer/toolchain.h>
@@ -167,7 +169,6 @@ QmakeProject::QmakeProject(const FileName &fileName) :
     s_projects.append(this);
     setId(Constants::QMAKEPROJECT_ID);
     setProjectLanguages(Core::Context(ProjectExplorer::Constants::CXX_LANGUAGE_ID));
-    setRequiredKitPredicate(QtSupport::QtKitInformation::qtVersionPredicate());
     setDisplayName(fileName.toFileInfo().completeBaseName());
 
     const QTextCodec *codec = Core::EditorManager::defaultTextCodec();
@@ -294,7 +295,7 @@ void QmakeProject::updateCppCodeModel()
         CppTools::RawProjectPart rpp;
         rpp.setDisplayName(pro->displayName());
         rpp.setProjectFileLocation(pro->filePath().toString());
-        rpp.setBuildSystemTarget(pro->targetInformation().target);
+        rpp.setBuildSystemTarget(pro->filePath().toString());
         const bool isExecutable = pro->projectType() == ProjectType::ApplicationTemplate;
         rpp.setBuildTargetType(isExecutable ? CppTools::ProjectPart::Executable
                                             : CppTools::ProjectPart::Library);
@@ -372,12 +373,14 @@ void QmakeProject::updateQmlJSCodeModel()
         QString errorMessage;
         foreach (const QString &rc, exactResources) {
             QString contents;
-            if (m_qmakeVfs->readFile(rc, QMakeVfs::VfsExact, &contents, &errorMessage) == QMakeVfs::ReadOk)
+            int id = m_qmakeVfs->idForFileName(rc, QMakeVfs::VfsExact);
+            if (m_qmakeVfs->readFile(id, &contents, &errorMessage) == QMakeVfs::ReadOk)
                 projectInfo.resourceFileContents[rc] = contents;
         }
         foreach (const QString &rc, cumulativeResources) {
             QString contents;
-            if (m_qmakeVfs->readFile(rc, QMakeVfs::VfsCumulative, &contents, &errorMessage) == QMakeVfs::ReadOk)
+            int id = m_qmakeVfs->idForFileName(rc, QMakeVfs::VfsCumulative);
+            if (m_qmakeVfs->readFile(id, &contents, &errorMessage) == QMakeVfs::ReadOk)
                 projectInfo.resourceFileContents[rc] = contents;
         }
         if (!hasQmlLib) {
@@ -419,7 +422,6 @@ void QmakeProject::scheduleAsyncUpdate(QmakeProFile *file, QmakeProFile::AsyncUp
         return;
     }
 
-    emitParsingStarted();
     file->setParseInProgressRecursive(true);
     setAllBuildConfigurationsEnabled(false);
 
@@ -476,7 +478,6 @@ void QmakeProject::scheduleAsyncUpdate(QmakeProFile::AsyncUpdateDelay delay)
         return;
     }
 
-    emitParsingStarted();
     rootProFile()->setParseInProgressRecursive(true);
     setAllBuildConfigurationsEnabled(false);
 
@@ -499,12 +500,15 @@ void QmakeProject::startAsyncTimer(QmakeProFile::AsyncUpdateDelay delay)
     m_asyncUpdateTimer.stop();
     m_asyncUpdateTimer.setInterval(qMin(m_asyncUpdateTimer.interval(),
                                         delay == QmakeProFile::ParseLater ? UPDATE_INTERVAL : 0));
+    if (!isParsing())
+        emitParsingStarted();
     m_asyncUpdateTimer.start();
 }
 
 void QmakeProject::incrementPendingEvaluateFutures()
 {
     ++m_pendingEvaluateFuturesCount;
+    QTC_ASSERT(isParsing(), emitParsingStarted());
     m_asyncUpdateFutureInterface->setProgressRange(m_asyncUpdateFutureInterface->progressMinimum(),
                                                    m_asyncUpdateFutureInterface->progressMaximum() + 1);
 }
@@ -559,7 +563,12 @@ void QmakeProject::asyncUpdate()
 {
     m_asyncUpdateTimer.setInterval(UPDATE_INTERVAL);
 
-    m_qmakeVfs->invalidateCache();
+    if (m_invalidateQmakeVfsContents) {
+        m_invalidateQmakeVfsContents = false;
+        m_qmakeVfs->invalidateContents();
+    } else {
+        m_qmakeVfs->invalidateCache();
+    }
 
     Q_ASSERT(!m_asyncUpdateFutureInterface);
     m_asyncUpdateFutureInterface = new QFutureInterface<void>();
@@ -585,15 +594,17 @@ void QmakeProject::asyncUpdate()
 void QmakeProject::buildFinished(bool success)
 {
     if (success)
-        m_qmakeVfs->invalidateContents();
+        m_invalidateQmakeVfsContents = true;
 }
 
-bool QmakeProject::supportsKit(Kit *k, QString *errorMessage) const
+QList<Task> QmakeProject::projectIssues(const Kit *k) const
 {
-    QtSupport::BaseQtVersion *version = QtSupport::QtKitInformation::qtVersion(k);
-    if (!version && errorMessage)
-        *errorMessage = tr("No Qt version set in kit.");
-    return version;
+    QList<Task> result = Project::projectIssues(k);
+    if (!QtSupport::QtKitInformation::qtVersion(k))
+        result.append(createProjectTask(Task::TaskType::Error, tr("No Qt version set in kit.")));
+    if (!ToolChainKitInformation::toolChain(k, ProjectExplorer::Constants::CXX_LANGUAGE_ID))
+        result.append(createProjectTask(Task::TaskType::Error, tr("No C++ compiler set in kit.")));
+    return result;
 }
 
 // Find the folder that contains a file with a certain name (recurse down)
@@ -734,7 +745,7 @@ void QmakeProject::destroyProFileReader(QtSupport::ProFileReader *reader)
         QString dir = projectFilePath().toString();
         if (!dir.endsWith(QLatin1Char('/')))
             dir += QLatin1Char('/');
-        QtSupport::ProFileCacheManager::instance()->discardFiles(dir);
+        QtSupport::ProFileCacheManager::instance()->discardFiles(dir, qmakeVfs());
         QtSupport::ProFileCacheManager::instance()->decRefCount();
 
         m_qmakeGlobals.reset();
@@ -778,36 +789,6 @@ QList<QmakeProFile *> QmakeProject::allProFiles(const QList<ProjectType> &projec
     return list;
 }
 
-bool QmakeProject::hasApplicationProFile(const FileName &path) const
-{
-    const QList<QmakeProFile *> list = applicationProFiles();
-    return Utils::contains(list, Utils::equal(&QmakeProFile::filePath, path));
-}
-
-QList<BuildTargetInfo> QmakeProject::buildTargets(IRunConfigurationFactory::CreationMode mode,
-                                                  const QList<ProjectType> &projectTypes)
-{
-    QList<ProjectType> realTypes = projectTypes;
-    if (realTypes.isEmpty())
-        realTypes = {ProjectType::ApplicationTemplate, ProjectType::ScriptTemplate};
-    QList<QmakeProFile *> files = allProFiles(realTypes);
-    QList<QmakeProFile *> temp = files;
-
-    if (mode == IRunConfigurationFactory::AutoCreate) {
-        QList<QmakeProFile *> filtered = Utils::filtered(files, [](const QmakeProFile *f) {
-            return f->isQtcRunnable();
-        });
-        temp = filtered.isEmpty() ? files : filtered;
-    }
-
-    return Utils::transform(temp, [](QmakeProFile *f) {
-        BuildTargetInfo bti;
-        bti.targetName = f->filePath().toString();
-        bti.displayName = QFileInfo(bti.targetName).completeBaseName();
-        return bti;
-    });
-}
-
 void QmakeProject::activeTargetWasChanged()
 {
     if (m_activeTarget) {
@@ -816,6 +797,7 @@ void QmakeProject::activeTargetWasChanged()
     }
 
     m_activeTarget = activeTarget();
+    m_invalidateQmakeVfsContents = true;
 
     if (!m_activeTarget)
         return;
@@ -840,7 +822,8 @@ void QmakeProject::setAllBuildConfigurationsEnabled(bool enabled)
 static void notifyChangedHelper(const FileName &fileName, QmakeProFile *file)
 {
     if (file->filePath() == fileName) {
-        QtSupport::ProFileCacheManager::instance()->discardFile(fileName.toString());
+        QtSupport::ProFileCacheManager::instance()->discardFile(
+                    fileName.toString(), file->project()->qmakeVfs());
         file->scheduleUpdate(QmakeProFile::ParseNow);
     }
 
@@ -1023,11 +1006,6 @@ void CentralizedFolderWatcher::delayedFolderChanged(const QString &folder)
         m_project->updateCodeModels();
 }
 
-bool QmakeProject::needsConfiguration() const
-{
-    return targets().isEmpty();
-}
-
 void QmakeProject::configureAsExampleProject(const QSet<Core::Id> &platforms)
 {
     QList<const BuildInfo *> infoList;
@@ -1049,39 +1027,6 @@ void QmakeProject::configureAsExampleProject(const QSet<Core::Id> &platforms)
     qDeleteAll(infoList);
 }
 
-bool QmakeProject::requiresTargetPanel() const
-{
-    return !targets().isEmpty();
-}
-
-// All the Qmake run configurations should share code.
-// This is a rather suboptimal way to do that for disabledReason()
-// but more pratical then duplicated the code everywhere
-QString QmakeProject::disabledReasonForRunConfiguration(const FileName &proFilePath)
-{
-    if (!proFilePath.exists())
-        return tr("The .pro file \"%1\" does not exist.")
-                .arg(proFilePath.fileName());
-
-    if (!rootProjectNode()) // Shutting down
-        return QString();
-
-    if (!rootProjectNode()->findProFileFor(proFilePath))
-        return tr("The .pro file \"%1\" is not part of the project.")
-                .arg(proFilePath.fileName());
-
-    return tr("The .pro file \"%1\" could not be parsed.")
-            .arg(proFilePath.fileName());
-}
-
-QString QmakeProject::buildNameFor(const Kit *k)
-{
-    if (!k)
-        return QLatin1String("unknown");
-
-    return k->fileSystemFriendlyName();
-}
-
 void QmakeProject::updateBuildSystemData()
 {
     Target *const target = activeTarget();
@@ -1096,10 +1041,76 @@ void QmakeProject::updateBuildSystemData()
     target->setDeploymentData(deploymentData);
 
     BuildTargetInfoList appTargetList;
-    for (const QmakeProFile * const file : applicationProFiles()) {
-        appTargetList.list << BuildTargetInfo(file->targetInformation().target,
-                                              FileName::fromString(executableFor(file)),
-                                              file->filePath());
+    for (const QmakeProFile * const proFile : applicationProFiles()) {
+        TargetInformation ti = proFile->targetInformation();
+        if (!ti.valid)
+            continue;
+
+        const QStringList &config = proFile->variableValue(Variable::Config);
+
+        QString destDir = ti.destDir.toString();
+        QString workingDir;
+        if (!destDir.isEmpty()) {
+            bool workingDirIsBaseDir = false;
+            if (destDir == ti.buildTarget)
+                workingDirIsBaseDir = true;
+            if (QDir::isRelativePath(destDir))
+                destDir = QDir::cleanPath(ti.buildDir.toString() + '/' + destDir);
+
+            if (workingDirIsBaseDir)
+                workingDir = ti.buildDir.toString();
+            else
+                workingDir = destDir;
+        } else {
+            destDir = ti.buildDir.toString();
+            workingDir = ti.buildDir.toString();
+        }
+
+        if (HostOsInfo::isMacHost() && config.contains("app_bundle")) {
+            const QString infix = '/' + ti.target + ".app/Contents/MacOS";
+            workingDir += infix;
+            destDir += infix;
+        }
+
+        BuildTargetInfo bti;
+        bti.targetFilePath = FileName::fromString(executableFor(proFile));
+        bti.projectFilePath = proFile->filePath();
+        bti.workingDirectory = FileName::fromString(workingDir);
+        bti.displayName = proFile->filePath().toFileInfo().completeBaseName();
+        bti.buildKey = bti.projectFilePath.toString();
+        bti.isQtcRunnable = config.contains("qtc_runnable");
+
+        if (config.contains("console") && !config.contains("testcase")) {
+            const QStringList qt = proFile->variableValue(Variable::Qt);
+            bti.usesTerminal = !qt.contains("testlib") && !qt.contains("qmltest");
+        }
+
+        QStringList libraryPaths;
+
+        // The user could be linking to a library found via a -L/some/dir switch
+        // to find those libraries while actually running we explicitly prepend those
+        // dirs to the library search path
+        const QStringList libDirectories = proFile->variableValue(Variable::LibDirectories);
+        if (!libDirectories.isEmpty()) {
+            const QString proDirectory = proFile->buildDir().toString();
+            foreach (QString dir, libDirectories) {
+                // Fix up relative entries like "LIBS+=-L.."
+                const QFileInfo fi(dir);
+                if (!fi.isAbsolute())
+                    dir = QDir::cleanPath(proDirectory + '/' + dir);
+                libraryPaths.append(dir);
+            }
+        }
+        QtSupport::BaseQtVersion *qtVersion = QtSupport::QtKitInformation::qtVersion(target->kit());
+        if (qtVersion)
+            libraryPaths.append(qtVersion->librarySearchPath().toString());
+
+        bti.runEnvModifier = [libraryPaths](Environment &env, bool useLibrarySearchPath) {
+            if (useLibrarySearchPath)
+                env.prependOrSetLibrarySearchPaths(libraryPaths);
+        };
+
+        appTargetList.list.append(bti);
     }
     target->setApplicationTargets(appTargetList);
 }

@@ -52,8 +52,10 @@
 #include <utils/algorithm.h>
 #include <utils/environment.h>
 #include <utils/hostosinfo.h>
+#include <utils/qtcassert.h>
 #include <utils/temporarydirectory.h>
 
+#include <QApplication>
 #include <QProcess>
 #include <QCoreApplication>
 #include <QCryptographicHash>
@@ -227,7 +229,7 @@ QProcess *PuppetCreator::puppetProcess(const QString &puppetPath,
 #endif
     if (debugPuppet == puppetMode || debugPuppet == "all") {
         QMessageBox::information(Core::ICore::dialogParent(),
-            QCoreApplication::translate("PuppetCreator", "Puppet is starting ..."),
+            QCoreApplication::translate("PuppetCreator", "Puppet is starting..."),
             QCoreApplication::translate("PuppetCreator", "You can now attach your debugger to the %1 puppet with process id: %2.")
                                  .arg(puppetMode, QString::number(puppetProcess->processId())));
     }
@@ -420,10 +422,10 @@ QProcessEnvironment PuppetCreator::processEnvironment() const
         environment.prependOrSetPath(qtBinPath.toString());
     }
     environment.set("QML_BAD_GUI_RENDER_LOOP", "true");
-    environment.set("QML_USE_MOCKUPS", "true");
     environment.set("QML_PUPPET_MODE", "true");
     environment.set("QML_DISABLE_DISK_CACHE", "true");
-    if (!environment.hasKey("QT_SCREEN_SCALE_FACTORS"))
+    if (!environment.hasKey("QT_SCREEN_SCALE_FACTORS") && !environment.hasKey("QT_SCALE_FACTOR")
+            && QApplication::testAttribute(Qt::AA_EnableHighDpiScaling))
         environment.set("QT_AUTO_SCREEN_SCALE_FACTOR", "1");
 
 #ifndef QMLDESIGNER_TEST

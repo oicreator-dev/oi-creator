@@ -116,7 +116,9 @@ static void addSystemHeaderPaths(QList<ProjectExplorer::HeaderPath> &paths,
     const Utils::FileName ndkPath = AndroidConfigurations::currentConfig().ndkLocation();
 
     // Get short version (for example 4.9)
-    const QString clangVersion = version.left(version.lastIndexOf('.'));
+    auto versionNumber = QVersionNumber::fromString(version);
+    const QString clangVersion = QString("%1.%2")
+            .arg(versionNumber.majorVersion()).arg(versionNumber.minorVersion());
     Utils::FileName stdcppPath = ndkPath;
     stdcppPath.appendPath("sources/cxx-stl/gnu-libstdc++/" + clangVersion);
     Utils::FileName includePath = stdcppPath;
@@ -150,7 +152,8 @@ QString AndroidToolChain::typeDisplayName() const
 bool AndroidToolChain::isValid() const
 {
     return GccToolChain::isValid() && targetAbi().isValid() && !m_ndkToolChainVersion.isEmpty()
-            && compilerCommand().isChildOf(AndroidConfigurations::currentConfig().ndkLocation());
+            && compilerCommand().isChildOf(AndroidConfigurations::currentConfig().ndkLocation())
+            && !originalTargetTriple().isEmpty();
 }
 
 void AndroidToolChain::addToEnvironment(Environment &env) const
@@ -417,6 +420,9 @@ bool AndroidToolChainFactory::versionCompareLess(const QList<int> &a, const QLis
 bool AndroidToolChainFactory::versionCompareLess(QList<AndroidToolChain *> atc,
                                                  QList<AndroidToolChain *> btc)
 {
+    if (atc.isEmpty() || btc.isEmpty())
+        return false;
+
     const QList<int> a = versionNumberFromString(atc.at(0)->ndkToolChainVersion());
     const QList<int> b = versionNumberFromString(btc.at(0)->ndkToolChainVersion());
 
@@ -463,15 +469,18 @@ AndroidToolChainFactory::autodetectToolChainsForNdk(const FileName &ndkPath,
             FileName compilerPath = AndroidConfigurations::currentConfig().gccPath(abi, lang, version);
 
             AndroidToolChain *tc = findToolChain(compilerPath, lang, alreadyKnown);
-            if (!tc) {
+            if (!tc || tc->originalTargetTriple().isEmpty()) {
                 tc = new AndroidToolChain(abi, version, lang,
                                           ToolChain::AutoDetection);
                 tc->resetToolChain(compilerPath);
+                QTC_ASSERT(!tc->originalTargetTriple().isEmpty(),
+                           delete tc; continue);
             }
-            QTC_ASSERT(!tc->originalTargetTriple().isEmpty(), continue);
             result.append(tc);
             toolChainBundle.append(tc);
         }
+
+        QTC_ASSERT(!toolChainBundle.isEmpty(), continue);
 
         auto it = newestToolChainForArch.constFind(abi);
         if (it == newestToolChainForArch.constEnd())

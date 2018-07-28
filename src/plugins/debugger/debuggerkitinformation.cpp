@@ -77,6 +77,8 @@ QVariant DebuggerKitInformation::defaultValue(const Kit *k) const
 
 void DebuggerKitInformation::setup(Kit *k)
 {
+    QTC_ASSERT(k, return);
+
     // This can be anything (Id, binary path, "auto")
     // With 3.0 we have:
     // <value type="QString" key="Debugger.Information">{75ecf347-f221-44c3-b613-ea1d29929cd4}</value>
@@ -101,13 +103,20 @@ void DebuggerKitInformation::setup(Kit *k)
 
     DebuggerItem bestItem;
     DebuggerItem::MatchLevel bestLevel = DebuggerItem::DoesNotMatch;
-
+    const Environment systemEnvironment = Environment::systemEnvironment();
     foreach (const DebuggerItem &item, DebuggerItemManager::debuggers()) {
         DebuggerItem::MatchLevel level = DebuggerItem::DoesNotMatch;
 
         if (rawId.isNull()) {
             // Initial setup of a kit.
             level = item.matchTarget(tcAbi);
+            // Hack to prefer a debugger from PATH (e.g. autodetected) over other matches.
+            // This improves the situation a bit if a cross-compilation tool chain has the
+            // same ABI as the host.
+            if (level == DebuggerItem::MatchesPerfectly
+                    && systemEnvironment.path().contains(item.command().parentDir())) {
+                level = DebuggerItem::MatchesPerfectlyInPath;
+            }
         } else if (rawId.type() == QVariant::String) {
             // New structure.
             if (item.id() == rawId) {
@@ -158,6 +167,8 @@ void DebuggerKitInformation::setup(Kit *k)
 // This handles the upgrade path from 2.8 to 3.0
 void DebuggerKitInformation::fix(Kit *k)
 {
+    QTC_ASSERT(k, return);
+
     // This can be Id, binary path, but not "auto" anymore.
     const QVariant rawId = k->value(DebuggerKitInformation::id());
 
@@ -238,14 +249,14 @@ DebuggerKitInformation::ConfigurationErrors DebuggerKitInformation::configuratio
 
 const DebuggerItem *DebuggerKitInformation::debugger(const Kit *kit)
 {
-    QTC_ASSERT(kit, return 0);
+    QTC_ASSERT(kit, return nullptr);
     const QVariant id = kit->value(DebuggerKitInformation::id());
     return DebuggerItemManager::findById(id);
 }
 
-StandardRunnable DebuggerKitInformation::runnable(const Kit *kit)
+Runnable DebuggerKitInformation::runnable(const Kit *kit)
 {
-    StandardRunnable runnable;
+    Runnable runnable;
     if (const DebuggerItem *item = debugger(kit)) {
         runnable.executable = item->command().toString();
         runnable.workingDirectory = item->workingDirectory().toString();
@@ -299,6 +310,7 @@ KitConfigWidget *DebuggerKitInformation::createConfigWidget(Kit *k) const
 
 void DebuggerKitInformation::addToMacroExpander(Kit *kit, MacroExpander *expander) const
 {
+    QTC_ASSERT(kit, return);
     expander->registerVariable("Debugger:Name", tr("Name of Debugger"),
                                [kit]() -> QString {
                                    const DebuggerItem *item = debugger(kit);
@@ -353,6 +365,7 @@ void DebuggerKitInformation::setDebugger(Kit *k, const QVariant &id)
 {
     // Only register reasonably complete debuggers.
     QTC_ASSERT(DebuggerItemManager::findById(id), return);
+    QTC_ASSERT(k, return);
     k->setValue(DebuggerKitInformation::id(), id);
 }
 

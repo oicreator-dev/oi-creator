@@ -133,6 +133,7 @@ void ViewManager::attachRewriterView()
 
         currentModel()->setRewriterView(view);
         view->reactivateTextMofifierChangeSignals();
+        view->restoreAuxiliaryData();
     }
 
     qCInfo(viewBenchmark) << "RewriterView:" << time.elapsed();
@@ -158,6 +159,20 @@ void ViewManager::switchStateEditorViewToSavedState()
 {
     if (d->savedState.isValid() && d->statesEditorView.isAttached())
         d->statesEditorView.setCurrentState(d->savedState);
+}
+
+QList<QPointer<AbstractView> > ViewManager::views() const
+{
+    auto list = d->additionalViews;
+    list.append({
+                    &d->formEditorView,
+                    &d->textEditorView,
+                    &d->itemLibraryView,
+                    &d->navigatorView,
+                    &d->propertyEditorView,
+                    &d->statesEditorView
+                });
+    return list;
 }
 
 void ViewManager::resetPropertyEditorView()
@@ -359,16 +374,14 @@ QWidget *ViewManager::widget(const QString &uniqueId) const
 
 void ViewManager::disableWidgets()
 {
-    foreach (const WidgetInfo &widgetInfo, widgetInfos())
-        if (widgetInfo.widgetFlags == DesignerWidgetFlags::DisableOnError)
-            widgetInfo.widget->setEnabled(false);
+    for (auto view : views())
+        view->disableWidget();
 }
 
 void ViewManager::enableWidgets()
 {
-    foreach (const WidgetInfo &widgetInfo, widgetInfos())
-        if (widgetInfo.widgetFlags == DesignerWidgetFlags::DisableOnError)
-            widgetInfo.widget->setEnabled(true);
+    for (auto view : views())
+        view->enableWidget();
 }
 
 void ViewManager::pushFileOnCrumbleBar(const Utils::FileName &fileName)
@@ -411,9 +424,9 @@ void ViewManager::toggleStatesViewExpanded()
     d->statesEditorView.toggleStatesViewExpanded();
 }
 
-QString ViewManager::qmlJSEditorHelpId() const
+void ViewManager::qmlJSEditorHelpId(const Core::IContext::HelpIdCallback &callback) const
 {
-    return d->textEditorView.qmlJSEditorHelpId();
+    d->textEditorView.qmlJSEditorHelpId(callback);
 }
 
 Model *ViewManager::currentModel() const
@@ -434,6 +447,11 @@ void ViewManager::exportAsImage()
 void ViewManager::reformatFileUsingTextEditorView()
 {
     d->textEditorView.reformatFile();
+}
+
+bool ViewManager::usesRewriterView(RewriterView *rewriterView)
+{
+    return currentDesignDocument()->rewriterView() == rewriterView;
 }
 
 } // namespace QmlDesigner

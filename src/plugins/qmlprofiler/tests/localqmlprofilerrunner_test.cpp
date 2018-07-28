@@ -26,11 +26,12 @@
 #include "localqmlprofilerrunner_test.h"
 
 #include <debugger/analyzer/analyzermanager.h>
-#include <projectexplorer/runnables.h>
+
 #include <qmlprofiler/qmlprofilerruncontrol.h>
 #include <qmlprofiler/qmlprofilertool.h>
 
 #include <utils/url.h>
+#include <utils/temporaryfile.h>
 
 #include <QtTest>
 #include <QTcpServer>
@@ -44,10 +45,10 @@ LocalQmlProfilerRunnerTest::LocalQmlProfilerRunnerTest(QObject *parent) : QObjec
 
 void LocalQmlProfilerRunnerTest::testRunner()
 {
-    QmlProfilerTool tool(nullptr);
+    QmlProfilerTool tool;
     QPointer<ProjectExplorer::RunControl> runControl;
     QPointer<LocalQmlProfilerSupport> profiler;
-    ProjectExplorer::StandardRunnable debuggee;
+    ProjectExplorer::Runnable debuggee;
     QUrl serverUrl;
 
     bool running = false;
@@ -95,6 +96,9 @@ void LocalQmlProfilerRunnerTest::testRunner()
 
     connectRunner();
 
+    QTest::ignoreMessage(
+                QtDebugMsg, "Invalid run control state transition from  "
+                            "\"RunControlState::Starting\"  to  \"RunControlState::Stopped\"");
     runControl->initiateStart();
 
     QTRY_COMPARE_WITH_TIMEOUT(startCount, 1, 30000);
@@ -144,6 +148,31 @@ void LocalQmlProfilerRunnerTest::testRunner()
     QCOMPARE(startCount, 3);
     QCOMPARE(stopCount, 3);
     QCOMPARE(runCount, 2);
+
+    runControl->initiateFinish();
+    QTRY_VERIFY(runControl.isNull());
+    QVERIFY(profiler.isNull());
+
+    debuggee.commandLineArguments = QString("-test QmlProfiler,");
+    serverUrl.setScheme(Utils::urlSocketScheme());
+    {
+        Utils::TemporaryFile file("file with spaces");
+        if (file.open())
+            serverUrl.setPath(file.fileName());
+    }
+
+    runControl = new ProjectExplorer::RunControl(nullptr,
+                                                 ProjectExplorer::Constants::QML_PROFILER_RUN_MODE);
+    runControl->setRunnable(debuggee);
+    profiler = new LocalQmlProfilerSupport(&tool, runControl, serverUrl);
+    connectRunner();
+    runControl->initiateStart();
+
+    QTRY_VERIFY_WITH_TIMEOUT(running, 30000);
+    QTRY_VERIFY_WITH_TIMEOUT(!running, 30000);
+    QCOMPARE(startCount, 4);
+    QCOMPARE(stopCount, 4);
+    QCOMPARE(runCount, 3);
 
     runControl->initiateFinish();
     QTRY_VERIFY(runControl.isNull());

@@ -133,15 +133,27 @@ ToolChain::CompilerFlags AbstractMsvcToolChain::compilerFlags(const QStringList 
     if (cxxflags.contains(QLatin1String("/Za")))
         flags &= ~MicrosoftExtensions;
 
+    bool cLanguage = (language() == ProjectExplorer::Constants::C_LANGUAGE_ID);
+
     switch (m_abi.osFlavor()) {
     case Abi::WindowsMsvc2010Flavor:
-    case Abi::WindowsMsvc2012Flavor: flags |= StandardCxx11;
+    case Abi::WindowsMsvc2012Flavor:
+        if (cLanguage)
+            flags |= StandardC99;
+        else
+            flags |= StandardCxx11;
         break;
     case Abi::WindowsMsvc2013Flavor:
-    case Abi::WindowsMsvc2015Flavor: flags |= StandardCxx14;
+    case Abi::WindowsMsvc2015Flavor:
+        if (cLanguage)
+            flags |= StandardC99;
+        else
+            flags |= StandardCxx14;
         break;
     case Abi::WindowsMsvc2017Flavor:
-        if (cxxflags.contains("/std:c++17") || cxxflags.contains("/std:c++latest"))
+        if (cLanguage)
+            flags |= StandardC11;
+        else if (cxxflags.contains("/std:c++17") || cxxflags.contains("/std:c++latest"))
             flags |= StandardCxx17;
         else
             flags |= StandardCxx14;
@@ -235,24 +247,46 @@ void AbstractMsvcToolChain::addToEnvironment(Utils::Environment &env) const
     env = m_resultEnvironment;
 }
 
+static QString wrappedMakeCommand(const QString &command)
+{
+    const QString wrapperPath = QDir::currentPath() + "/msvc_make.bat";
+    QFile wrapper(wrapperPath);
+    if (!wrapper.open(QIODevice::WriteOnly))
+        return command;
+    QTextStream stream(&wrapper);
+    stream << "chcp 65001\n";
+    stream << command << " %*";
+
+    return wrapperPath;
+}
+
 QString AbstractMsvcToolChain::makeCommand(const Utils::Environment &environment) const
 {
     bool useJom = ProjectExplorerPlugin::projectExplorerSettings().useJom;
-    const QString jom = QLatin1String("jom.exe");
-    const QString nmake = QLatin1String("nmake.exe");
+    const QString jom("jom.exe");
+    const QString nmake("nmake.exe");
     Utils::FileName tmp;
 
+    QString command;
     if (useJom) {
         tmp = environment.searchInPath(jom, {Utils::FileName::fromString(QCoreApplication::applicationDirPath())});
         if (!tmp.isEmpty())
-            return tmp.toString();
+            command = tmp.toString();
     }
-    tmp = environment.searchInPath(nmake);
-    if (!tmp.isEmpty())
-        return tmp.toString();
 
-    // Nothing found :(
-    return useJom ? jom : nmake;
+    if (command.isEmpty()) {
+        tmp = environment.searchInPath(nmake);
+        if (!tmp.isEmpty())
+            command = tmp.toString();
+    }
+
+    if (command.isEmpty())
+        command = useJom ? jom : nmake;
+
+    if (environment.hasKey("VSLANG"))
+        return wrappedMakeCommand(command);
+
+    return command;
 }
 
 Utils::FileName AbstractMsvcToolChain::compilerCommand() const
@@ -282,10 +316,10 @@ bool AbstractMsvcToolChain::canClone() const
     return true;
 }
 
-bool AbstractMsvcToolChain::generateEnvironmentSettings(const Utils::Environment &env,
-                                                        const QString &batchFile,
-                                                        const QString &batchArgs,
-                                                        QMap<QString, QString> &envPairs)
+Utils::optional<QString> AbstractMsvcToolChain::generateEnvironmentSettings(const Utils::Environment &env,
+                                                                            const QString &batchFile,
+                                                                            const QString &batchArgs,
+                                                                            QMap<QString, QString> &envPairs)
 {
     const QString marker = "####################";
     // Create a temporary file name for the output. Use a temporary file here
@@ -308,7 +342,7 @@ bool AbstractMsvcToolChain::generateEnvironmentSettings(const Utils::Environment
     saver.write("@echo " + marker.toLocal8Bit() + "\r\n");
     if (!saver.finalize()) {
         qWarning("%s: %s", Q_FUNC_INFO, qPrintable(saver.errorString()));
-        return false;
+        return QString();
     }
 
     Utils::SynchronousProcess run;
@@ -333,27 +367,17 @@ bool AbstractMsvcToolChain::generateEnvironmentSettings(const Utils::Environment
     run.setCodec(QTextCodec::codecForName("UTF-8"));
     Utils::SynchronousProcessResponse response = run.runBlocking(cmdPath.toString(), cmdArguments);
 
-    QString command = QDir::toNativeSeparators(batchFile);
-    if (!response.stdErr().isEmpty()) {
-        TaskHub::addTask(Task::Error,
-                         QCoreApplication::translate("ProjectExplorer::Internal::AbstractMsvcToolChain",
-                                                     "Failed to retrieve MSVC Environment from \"%1\":\n"
-                                                     "%2")
-                         .arg(command, response.stdErr()), Constants::TASK_CATEGORY_COMPILE);
-        return false;
-    }
-
     if (response.result != Utils::SynchronousProcessResponse::Finished) {
-        const QString message = response.exitMessage(cmdPath.toString(), 10);
+        const QString message = !response.stdErr().isEmpty()
+                ? response.stdErr()
+                : response.exitMessage(cmdPath.toString(), 10);
         qWarning().noquote() << message;
+        QString command = QDir::toNativeSeparators(batchFile);
         if (!batchArgs.isEmpty())
             command += ' ' + batchArgs;
-        TaskHub::addTask(Task::Error,
-                         QCoreApplication::translate("ProjectExplorer::Internal::AbstractMsvcToolChain",
-                                                     "Failed to retrieve MSVC Environment from \"%1\":\n"
-                                                     "%2")
-                         .arg(command, message), Constants::TASK_CATEGORY_COMPILE);
-        return false;
+        return QCoreApplication::translate("ProjectExplorer::Internal::AbstractMsvcToolChain",
+                                           "Failed to retrieve MSVC Environment from \"%1\":\n"
+                                           "%2").arg(command, message);
     }
 
     // The SDK/MSVC scripts do not return exit codes != 0. Check on stdout.
@@ -364,13 +388,13 @@ bool AbstractMsvcToolChain::generateEnvironmentSettings(const Utils::Environment
     const int start = stdOut.indexOf(marker);
     if (start == -1) {
         qWarning("Could not find start marker in stdout output.");
-        return false;
+        return QString();
     }
 
     const int end = stdOut.indexOf(marker, start + 1);
     if (end == -1) {
         qWarning("Could not find end marker in stdout output.");
-        return false;
+        return QString();
     }
 
     const QString output = stdOut.mid(start, end - start);
@@ -384,7 +408,7 @@ bool AbstractMsvcToolChain::generateEnvironmentSettings(const Utils::Environment
         }
     }
 
-    return true;
+    return Utils::nullopt;
 }
 
 /**

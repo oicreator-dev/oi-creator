@@ -189,10 +189,10 @@ public:
     ///         warnings and finally info items.
     QList<ProjectExplorer::Task> reportIssues(const QString &proFile, const QString &buildDir) const;
 
-    static bool isQmlDebuggingSupported(ProjectExplorer::Kit *k, QString *reason = 0);
-    bool isQmlDebuggingSupported(QString *reason = 0) const;
-    static bool isQtQuickCompilerSupported(ProjectExplorer::Kit *k, QString *reason = 0);
-    bool isQtQuickCompilerSupported(QString *reason = 0) const;
+    static bool isQmlDebuggingSupported(ProjectExplorer::Kit *k, QString *reason = nullptr);
+    bool isQmlDebuggingSupported(QString *reason = nullptr) const;
+    static bool isQtQuickCompilerSupported(ProjectExplorer::Kit *k, QString *reason = nullptr);
+    bool isQtQuickCompilerSupported(QString *reason = nullptr) const;
 
     virtual QString qmlDumpTool(bool debugVersion) const;
 
@@ -205,7 +205,6 @@ public:
     static QString defaultUnexpandedDisplayName(const Utils::FileName &qmakePath,
                                       bool fromPath = false);
 
-    virtual QSet<Core::Id> availableFeatures() const;
     virtual QSet<Core::Id> targetDeviceTypes() const = 0;
 
     virtual QList<ProjectExplorer::Task> validateKit(const ProjectExplorer::Kit *k);
@@ -233,11 +232,15 @@ public:
     QStringList qtConfigValues() const;
 
     Utils::MacroExpander *macroExpander() const; // owned by the Qt version
+    static std::unique_ptr<Utils::MacroExpander> createMacroExpander(
+        const std::function<BaseQtVersion *()> &qtVersion);
 
     static void populateQmlFileFinder(Utils::FileInProjectFinder *finder,
                                       const ProjectExplorer::Target *target);
 
+    QSet<Core::Id> features() const;
 protected:
+    virtual QSet<Core::Id> availableFeatures() const;
     BaseQtVersion();
     BaseQtVersion(const Utils::FileName &path, bool isAutodetected = false, const QString &autodetectionSource = QString());
     BaseQtVersion(const BaseQtVersion &other);
@@ -262,9 +265,12 @@ private:
     QString findHostBinary(HostBinaries binary) const;
     void updateMkspec() const;
     QHash<ProKey, ProString> versionInfo() const;
-    static bool queryQMakeVariables(const Utils::FileName &binary, const Utils::Environment &env,
-                                    QHash<ProKey, ProString> *versionInfo, QString *error = 0);
-    static QString qmakeProperty(const QHash<ProKey, ProString> &versionInfo, const QByteArray &name,
+    static bool queryQMakeVariables(const Utils::FileName &binary,
+                                    const Utils::Environment &env,
+                                    QHash<ProKey, ProString> *versionInfo,
+                                    QString *error = nullptr);
+    static QString qmakeProperty(const QHash<ProKey, ProString> &versionInfo,
+                                 const QByteArray &name,
                                  PropertyVariant variant = PropertyVariantGet);
     static Utils::FileName mkspecDirectoryFromVersionInfo(const QHash<ProKey,ProString> &versionInfo);
     static Utils::FileName mkspecFromVersionInfo(const QHash<ProKey,ProString> &versionInfo);
@@ -294,6 +300,7 @@ private:
 
     QString m_unexpandedDisplayName;
     QString m_autodetectionSource;
+    QSet<Core::Id> m_overrideFeatures;
     mutable Utils::FileName m_sourcePath;
     mutable Utils::FileName m_qtSources;
 
@@ -313,7 +320,7 @@ private:
 
     mutable QList<ProjectExplorer::Abi> m_qtAbis;
 
-    mutable Utils::MacroExpander m_expander;
+    std::unique_ptr<Utils::MacroExpander> m_expander;
 };
 }
 

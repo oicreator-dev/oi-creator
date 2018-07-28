@@ -22,8 +22,3 @@ QMAKE_CXXFLAGS += $$LLVM_CXXFLAGS
 
 SOURCES += \
     clangrefactoringbackendmain.cpp
-
-unix {
-    !osx: QMAKE_LFLAGS += -Wl,-z,origin
-    !disable_external_rpath: QMAKE_LFLAGS += -Wl,-rpath,$$shell_quote($${LLVM_LIBDIR})
-}

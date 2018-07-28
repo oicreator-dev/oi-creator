@@ -445,8 +445,8 @@ class Dumper(DumperBase):
                     warn('UNKNOWN TYPE KEY: %s: %s' % (typeName, code))
             elif code == lldb.eTypeClassEnumeration:
                 tdata.code = TypeCodeEnum
-                tdata.enumDisplay = lambda intval, addr : \
-                    self.nativeTypeEnumDisplay(nativeType, intval)
+                tdata.enumDisplay = lambda intval, addr, form : \
+                    self.nativeTypeEnumDisplay(nativeType, intval, form)
             elif code in (lldb.eTypeClassComplexInteger, lldb.eTypeClassComplexFloat):
                 tdata.code = TypeCodeComplex
             elif code in (lldb.eTypeClassClass, lldb.eTypeClassStruct, lldb.eTypeClassUnion):
@@ -534,7 +534,7 @@ class Dumper(DumperBase):
         #warn('NATIVE TYPE ID FOR %s IS %s' % (name, typeId))
         return typeId
 
-    def nativeTypeEnumDisplay(self, nativeType, intval):
+    def nativeTypeEnumDisplay(self, nativeType, intval, form):
         if hasattr(nativeType, 'get_enum_members_array'):
             for enumMember in nativeType.get_enum_members_array():
                 # Even when asking for signed we get unsigned with LLDB 3.8.
@@ -543,8 +543,8 @@ class Dumper(DumperBase):
                 if diff & mask == 0:
                     path = nativeType.GetName().split('::')
                     path[-1] = enumMember.GetName()
-                    return '%s (%d)' % ('::'.join(path), intval)
-        return '%d' % intval
+                    return '::'.join(path) + ' (' + (form % intval) + ')'
+        return form % intval
 
     def nativeDynamicTypeName(self, address, baseType):
         return None # FIXME: Seems sufficient, no idea why.
@@ -908,7 +908,10 @@ class Dumper(DumperBase):
         elif self.startMode_ == AttachCore:
             coreFile = args.get('coreFile', '');
             self.process = self.target.LoadCore(coreFile)
-            self.reportState('enginerunokandinferiorunrunnable')
+            if self.process.IsValid():
+                self.reportState('enginerunokandinferiorunrunnable')
+            else:
+                self.reportState('enginerunfailed')
         else:
             launchInfo = lldb.SBLaunchInfo(self.processArgs_)
             launchInfo.SetWorkingDirectory(self.workingDirectory_)

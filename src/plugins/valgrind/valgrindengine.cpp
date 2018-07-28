@@ -83,11 +83,14 @@ void ValgrindToolRunner::start()
     m_runner.setValgrindExecutable(m_settings->valgrindExecutable());
     m_runner.setValgrindArguments(genericToolArguments() + toolArguments());
     m_runner.setDevice(device());
-    QTC_ASSERT(runnable().is<StandardRunnable>(), reportFailure());
-    m_runner.setDebuggee(runnable().as<StandardRunnable>());
+    m_runner.setDebuggee(runnable());
 
     connect(&m_runner, &ValgrindRunner::processOutputReceived,
             this, &ValgrindToolRunner::receiveProcessOutput);
+    connect(&m_runner, &ValgrindRunner::valgrindExecuted,
+            this, [this](const QString &commandLine) {
+        appendMessage(commandLine, NormalMessageFormat);
+    });
     connect(&m_runner, &ValgrindRunner::processErrorReceived,
             this, &ValgrindToolRunner::receiveProcessError);
     connect(&m_runner, &ValgrindRunner::finished,
@@ -110,8 +113,7 @@ void ValgrindToolRunner::stop()
 
 QString ValgrindToolRunner::executable() const
 {
-    QTC_ASSERT(runnable().is<StandardRunnable>(), return QString());
-    return runnable().as<StandardRunnable>().executable;
+    return runnable().executable;
 }
 
 QStringList ValgrindToolRunner::genericToolArguments() const

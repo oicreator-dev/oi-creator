@@ -26,9 +26,6 @@
 source("../../shared/qtcreator.py")
 
 def main():
-    if platform.system() == 'Darwin':
-        test.warning("This needs a Qt 5.4 kit. Skipping it.")
-        return
     pathCreator = os.path.join(srcPath, "creator", "qtcreator.qbs")
     if not neededFilePresent(pathCreator):
         return
@@ -37,8 +34,8 @@ def main():
     if not startedWithoutPluginError():
         return
     openQbsProject(pathCreator)
-    if not addAndActivateKit(Targets.DESKTOP_561_DEFAULT):
-        test.fatal("Failed to activate '%s'" % Targets.getStringForTarget(Targets.DESKTOP_541_GCC))
+    if not addAndActivateKit(Targets.DESKTOP_5_10_1_DEFAULT):
+        test.fatal("Failed to activate '%s'" % Targets.getStringForTarget(Targets.DESKTOP_5_10_1_DEFAULT))
         invokeMenuItem("File", "Exit")
         return
     test.log("Start parsing project")
@@ -49,4 +46,9 @@ def main():
     else:
         test.warning("Parsing project timed out")
     compareProjectTree(rootNodeTemplate % "Qt Creator", "projecttree_creator.tsv")
+    buildIssuesTexts = map(lambda i: str(i[3]), getBuildIssues())
+    deprecationWarnings = filter(lambda s: "deprecated" in s, buildIssuesTexts)
+    if deprecationWarnings:
+        test.warning("Creator claims that the .qbs file uses deprecated features.",
+                     "\n".join(set(deprecationWarnings)))
     invokeMenuItem("File", "Exit")

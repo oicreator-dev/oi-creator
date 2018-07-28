@@ -31,13 +31,12 @@
 #include "clangtranslationunitupdater.h"
 #include "clangfollowsymbol.h"
 #include "clangfollowsymboljob.h"
+#include "tokenprocessor.h"
 
 #include <codecompleter.h>
 #include <cursor.h>
 #include <diagnosticcontainer.h>
 #include <diagnosticset.h>
-#include <tokeninfo.h>
-#include <tokeninfos.h>
 #include <skippedsourceranges.h>
 #include <sourcelocation.h>
 #include <sourcerange.h>
@@ -129,7 +128,7 @@ TranslationUnit::CodeCompletionResult TranslationUnit::complete(
     return CodeCompletionResult{completions, correction};
 }
 
-void TranslationUnit::extractDocumentAnnotations(
+void TranslationUnit::extractAnnotations(
         DiagnosticContainer &firstHeaderErrorDiagnostic,
         QVector<DiagnosticContainer> &mainFileDiagnostics,
         QVector<TokenInfoContainer> &tokenInfos,
@@ -139,7 +138,6 @@ void TranslationUnit::extractDocumentAnnotations(
     tokenInfos = this->tokenInfos().toTokenInfoContainers();
     skippedSourceRanges = this->skippedSourceRanges().toSourceRangeContainers();
 }
-
 
 ToolTipInfo TranslationUnit::tooltip(UnsavedFiles &unsavedFiles,
                                      const Utf8String &textCodecName,
@@ -161,7 +159,7 @@ ReferencesResult TranslationUnit::references(uint line, uint column, bool localR
 
 DiagnosticSet TranslationUnit::diagnostics() const
 {
-    return DiagnosticSet(clang_getDiagnosticSetFromTU(m_cxTranslationUnit));
+    return DiagnosticSet(m_cxTranslationUnit, clang_getDiagnosticSetFromTU(m_cxTranslationUnit));
 }
 
 SourceLocation TranslationUnit::sourceLocationAt(uint line,uint column) const
@@ -202,19 +200,24 @@ Cursor TranslationUnit::cursor() const
     return clang_getTranslationUnitCursor(m_cxTranslationUnit);
 }
 
-TokenInfos TranslationUnit::tokenInfos() const
+TokenProcessor<TokenInfo> TranslationUnit::tokenInfos() const
 {
     return tokenInfosInRange(cursor().sourceRange());
 }
 
-TokenInfos TranslationUnit::tokenInfosInRange(const SourceRange &range) const
+TokenProcessor<TokenInfo> TranslationUnit::tokenInfosInRange(const SourceRange &range) const
 {
-    CXToken *cxTokens = 0;
-    uint cxTokensCount = 0;
+    return TokenProcessor<TokenInfo>(m_cxTranslationUnit, range);
+}
 
-    clang_tokenize(m_cxTranslationUnit, range, &cxTokens, &cxTokensCount);
+TokenProcessor<FullTokenInfo> TranslationUnit::fullTokenInfos() const
+{
+    return fullTokenInfosInRange(cursor().sourceRange());
+}
 
-    return TokenInfos(m_cxTranslationUnit, cxTokens, cxTokensCount);
+TokenProcessor<FullTokenInfo> TranslationUnit::fullTokenInfosInRange(const SourceRange &range) const
+{
+    return TokenProcessor<FullTokenInfo>(m_cxTranslationUnit, range);
 }
 
 SkippedSourceRanges TranslationUnit::skippedSourceRanges() const
@@ -253,7 +256,7 @@ void TranslationUnit::extractDiagnostics(DiagnosticContainer &firstHeaderErrorDi
     }
 }
 
-SourceRangeContainer TranslationUnit::followSymbol(uint line, uint column) const
+FollowSymbolResult TranslationUnit::followSymbol(uint line, uint column) const
 {
     return FollowSymbol::followSymbol(m_cxTranslationUnit, cursorAt(line, column), line, column);
 }

@@ -126,7 +126,7 @@ ProjectWelcomePage::ProjectWelcomePage()
     for (int i = 1; i <= actionsCount; ++i) {
         auto act = new QAction(tr("Open Session #%1").arg(i), this);
         Command *cmd = ActionManager::registerAction(act, sessionBase.withSuffix(i), welcomeContext);
-        cmd->setDefaultKeySequence(QKeySequence((UseMacShortcuts ? tr("Ctrl+Meta+%1") : tr("Ctrl+Alt+%1")).arg(i)));
+        cmd->setDefaultKeySequence(QKeySequence((useMacShortcuts ? tr("Ctrl+Meta+%1") : tr("Ctrl+Alt+%1")).arg(i)));
         connect(act, &QAction::triggered, this, [this, i] { openSessionAt(i - 1); });
 
         act = new QAction(tr("Open Recent Project #%1").arg(i), this);
@@ -336,8 +336,9 @@ public:
                 const QString &action = actions.at(i);
                 const int ww = fm.width(action);
                 const QRect actionRect(xx, yy - 10, ww, 15);
-                const bool isActive = actionRect.contains(mousePos);
-                painter->setPen(linkColor);
+                const bool isForcedDisabled = (i != 0 && sessionName == "default");
+                const bool isActive = actionRect.contains(mousePos) && !isForcedDisabled;
+                painter->setPen(isForcedDisabled ? disabledLinkColor : linkColor);
                 painter->setFont(sizedFont(12, option.widget, isActive));
                 painter->drawText(xx, yy, action);
                 if (i < 2) {
@@ -367,30 +368,34 @@ public:
         const QStyleOptionViewItem &option, const QModelIndex &idx) final
     {
         if (ev->type() == QEvent::MouseButtonRelease) {
+            const QMouseEvent *mouseEvent = static_cast<QMouseEvent *>(ev);
+            const Qt::MouseButtons button = mouseEvent->button();
             const QPoint pos = static_cast<QMouseEvent *>(ev)->pos();
             const QRect rc(option.rect.right() - 24, option.rect.top(), 24, SESSION_LINE_HEIGHT);
             const QString sessionName = idx.data(Qt::DisplayRole).toString();
-            if (rc.contains(pos)) {
+            if (rc.contains(pos) || button == Qt::RightButton) {
                 // The expand/collapse "button".
                 if (m_expandedSessions.contains(sessionName))
                     m_expandedSessions.removeOne(sessionName);
                 else
                     m_expandedSessions.append(sessionName);
                 model->layoutChanged({QPersistentModelIndex(idx)});
-                return false;
+                return true;
             }
-            // One of the action links?
-            const auto sessionModel = qobject_cast<SessionModel *>(model);
-            QTC_ASSERT(sessionModel, return false);
-            if (m_activeSwitchToRect.contains(pos))
-                sessionModel->switchToSession(sessionName);
-            else if (m_activeActionRects[0].contains(pos))
-                sessionModel->cloneSession(sessionName);
-            else if (m_activeActionRects[1].contains(pos))
-                sessionModel->renameSession(sessionName);
-            else if (m_activeActionRects[2].contains(pos))
-                sessionModel->deleteSession(sessionName);
-            return true;
+            if (button == Qt::LeftButton) {
+                // One of the action links?
+                const auto sessionModel = qobject_cast<SessionModel *>(model);
+                QTC_ASSERT(sessionModel, return false);
+                if (m_activeSwitchToRect.contains(pos))
+                    sessionModel->switchToSession(sessionName);
+                else if (m_activeActionRects[0].contains(pos))
+                    sessionModel->cloneSession(ICore::mainWindow(), sessionName);
+                else if (m_activeActionRects[1].contains(pos))
+                    sessionModel->renameSession(ICore::mainWindow(), sessionName);
+                else if (m_activeActionRects[2].contains(pos))
+                    sessionModel->deleteSession(sessionName);
+                return true;
+            }
         }
         if (ev->type() == QEvent::MouseMove) {
             model->layoutChanged({QPersistentModelIndex(idx)}); // Somewhat brutish.
@@ -404,6 +409,7 @@ private:
     const QColor hoverColor = themeColor(Theme::Welcome_HoverColor);
     const QColor textColor = themeColor(Theme::Welcome_TextColor);
     const QColor linkColor = themeColor(Theme::Welcome_LinkColor);
+    const QColor disabledLinkColor = themeColor(Theme::Welcome_DisabledLinkColor);
     const QColor backgroundColor = themeColor(Theme::Welcome_BackgroundColor);
     const QColor foregroundColor1 = themeColor(Theme::Welcome_ForegroundPrimaryColor); // light-ish.
     const QColor foregroundColor2 = themeColor(Theme::Welcome_ForegroundSecondaryColor); // blacker.
@@ -471,9 +477,13 @@ public:
         const QStyleOptionViewItem &, const QModelIndex &idx) final
     {
         if (ev->type() == QEvent::MouseButtonRelease) {
-            QString projectFile = idx.data(ProjectModel::FilePathRole).toString();
-            ProjectExplorerPlugin::openProjectWelcomePage(projectFile);
-            return true;
+            const QMouseEvent *mouseEvent = static_cast<QMouseEvent *>(ev);
+            const Qt::MouseButtons button = mouseEvent->button();
+            if (button == Qt::LeftButton) {
+                const QString projectFile = idx.data(ProjectModel::FilePathRole).toString();
+                ProjectExplorerPlugin::openProjectWelcomePage(projectFile);
+                return true;
+            }
         }
         return false;
     }

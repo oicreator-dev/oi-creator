@@ -35,7 +35,6 @@
 #include <projectexplorer/projectexplorerconstants.h>
 #include <projectexplorer/projectexplorericons.h>
 #include <projectexplorer/runconfiguration.h>
-#include <projectexplorer/runnables.h>
 #include <projectexplorer/target.h>
 
 #include <qtsupport/baseqtversion.h>
@@ -45,7 +44,7 @@
 #include <qmldebug/qmldebugcommandlinearguments.h>
 
 #include <utils/qtcassert.h>
-#include <utils/qtcfallthrough.h>
+#include <utils/qtcprocess.h>
 #include <utils/url.h>
 
 #include <QMessageBox>
@@ -244,7 +243,7 @@ LocalQmlProfilerSupport::LocalQmlProfilerSupport(QmlProfilerTool *profilerTool,
     // In the TCP case, it doesn't hurt either to start the profiler before.
     addStartDependency(m_profiler);
 
-    StandardRunnable debuggee = runnable().as<StandardRunnable>();
+    Runnable debuggee = runnable();
 
     QString code;
     if (serverUrl.scheme() == Utils::urlSocketScheme())
@@ -254,8 +253,8 @@ LocalQmlProfilerSupport::LocalQmlProfilerSupport(QmlProfilerTool *profilerTool,
     else
         QTC_CHECK(false);
 
-    QString arguments = QmlDebug::qmlDebugCommandLineArguments(QmlDebug::QmlProfilerServices,
-                                                               code, true);
+    QString arguments = Utils::QtcProcess::quoteArg(
+                QmlDebug::qmlDebugCommandLineArguments(QmlDebug::QmlProfilerServices, code, true));
 
     if (!debuggee.commandLineArguments.isEmpty())
         arguments += ' ' + debuggee.commandLineArguments;

@@ -59,15 +59,13 @@ AndroidQmakeBuildConfigurationFactory::AndroidQmakeBuildConfigurationFactory()
 
 // AndroidQmakeBuildConfiguration
 
-AndroidQmakeBuildConfiguration::AndroidQmakeBuildConfiguration(Target *target)
-    : QmakeBuildConfiguration(target)
+AndroidQmakeBuildConfiguration::AndroidQmakeBuildConfiguration(Target *target, Core::Id id)
+    : QmakeBuildConfiguration(target, id)
 {
     updateCacheAndEmitEnvironmentChanged();
-
-    auto updateGradle = [this] { AndroidManager::updateGradleProperties(BuildConfiguration::target()); };
-
-    connect(target->project(), &Project::parsingFinished, this, updateGradle);
-    connect(this, &AndroidQmakeBuildConfiguration::enabledChanged, this, updateGradle);
+    connect(target->project(), &Project::parsingFinished, this, [this] {
+        AndroidManager::updateGradleProperties(BuildConfiguration::target());
+    });
 }
 
 void AndroidQmakeBuildConfiguration::initialize(const BuildInfo *info)

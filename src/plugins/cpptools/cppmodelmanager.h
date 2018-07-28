@@ -31,7 +31,6 @@
 #include "projectinfo.h"
 #include "projectpart.h"
 #include "projectpartheaderpath.h"
-#include "stringtable.h"
 
 #include <cplusplus/cppmodelmanagerbase.h>
 #include <coreplugin/find/ifindfilter.h>
@@ -55,6 +54,7 @@ class TextDocument;
 namespace CppTools {
 
 class AbstractEditorSupport;
+class AbstractOverviewModel;
 class BaseEditorDocumentProcessor;
 class CppCompletionAssistProvider;
 class CppEditorDocumentHandle;
@@ -91,11 +91,10 @@ public:
 
 public:
     CppModelManager();
-    ~CppModelManager();
+    ~CppModelManager() override;
 
     static CppModelManager *instance();
-    static void createCppModelManager(Internal::CppToolsPlugin *parent,
-                                      Internal::StringTable &stringTable);
+    static void createCppModelManager(Internal::CppToolsPlugin *parent);
 
      // Documented in source file.
      enum ProgressNotificationMode {
@@ -118,9 +117,6 @@ public:
     QFuture<void> updateProjectInfo(QFutureInterface<void> &futureInterface,
                                     const ProjectInfo &newProjectInfo);
 
-    ProjectInfo updateCompilerCallDataForProject(ProjectExplorer::Project *project,
-                                                 ProjectInfo::CompilerCallData &compilerCallData);
-
     /// \return The project part with the given project file
     ProjectPart::Ptr projectPartForId(const QString &projectPartId) const;
     /// \return All project parts that mention the given file name as one of the sources/headers.
@@ -134,7 +130,7 @@ public:
     ///         all loaded projects.
     ProjectPart::Ptr fallbackProjectPart();
 
-    CPlusPlus::Snapshot snapshot() const;
+    CPlusPlus::Snapshot snapshot() const override;
     Document::Ptr document(const QString &fileName) const;
     bool replaceDocument(Document::Ptr newDoc);
 
@@ -164,7 +160,8 @@ public:
                       const QString &replacement) final;
     void findUsages(const CppTools::CursorInEditor &data,
                     UsagesCallback &&showUsagesCallback) const final;
-    Link globalFollowSymbol(const CursorInEditor &data,
+    void globalFollowSymbol(const CursorInEditor &data,
+                            Utils::ProcessLinkCallback &&processLinkCallback,
                             const CPlusPlus::Snapshot &snapshot,
                             const CPlusPlus::Document::Ptr &documentFromSemanticInfo,
                             SymbolFinder *symbolFinder,
@@ -185,6 +182,7 @@ public:
                     TextEditor::TextDocument *baseTextDocument) const;
     TextEditor::BaseHoverHandler *createHoverHandler() const;
     FollowSymbolInterface &followSymbolInterface() const;
+    std::unique_ptr<AbstractOverviewModel> createOverviewModel() const;
 
     void setIndexingSupport(CppIndexingSupport *indexingSupport);
     CppIndexingSupport *indexingSupport();
@@ -214,12 +212,19 @@ public:
                                      RefactoringEngineInterface *refactoringEngine);
     static void removeRefactoringEngine(RefactoringEngineType type);
 
-    void setLocatorFilter(std::unique_ptr<Core::ILocatorFilter> &&filter = nullptr);
-    void setClassesFilter(std::unique_ptr<Core::ILocatorFilter> &&filter = nullptr);
-    void setIncludesFilter(std::unique_ptr<Core::ILocatorFilter> &&filter = nullptr);
-    void setFunctionsFilter(std::unique_ptr<Core::ILocatorFilter> &&filter = nullptr);
-    void setSymbolsFindFilter(std::unique_ptr<Core::IFindFilter> &&filter = nullptr);
-    void setCurrentDocumentFilter(std::unique_ptr<Core::ILocatorFilter> &&filter = nullptr);
+    void setLocatorFilter(std::unique_ptr<Core::ILocatorFilter> &&filter);
+    void setClassesFilter(std::unique_ptr<Core::ILocatorFilter> &&filter);
+    void setIncludesFilter(std::unique_ptr<Core::ILocatorFilter> &&filter);
+    void setFunctionsFilter(std::unique_ptr<Core::ILocatorFilter> &&filter);
+    void setSymbolsFindFilter(std::unique_ptr<Core::IFindFilter> &&filter);
+    void setCurrentDocumentFilter(std::unique_ptr<Core::ILocatorFilter> &&filter);
+
+    Core::ILocatorFilter *locatorFilter() const;
+    Core::ILocatorFilter *classesFilter() const;
+    Core::ILocatorFilter *includesFilter() const;
+    Core::ILocatorFilter *functionsFilter() const;
+    Core::IFindFilter *symbolsFindFilter() const;
+    Core::ILocatorFilter *currentDocumentFilter() const;
 
     void renameIncludes(const QString &oldFileName, const QString &newFileName);
 
@@ -273,8 +278,7 @@ private:
     ProjectExplorer::Macros internalDefinedMacros() const;
 
     void dumpModelManagerConfiguration(const QString &logFileId);
-    void initCppTools(Internal::StringTable &stringTable);
-    void resetFilters();
+    void initCppTools();
 
 private:
     Internal::CppModelManagerPrivate *d;

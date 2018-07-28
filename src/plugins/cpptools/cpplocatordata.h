@@ -28,17 +28,12 @@
 #include "cpptools_global.h"
 #include "cppmodelmanager.h"
 #include "searchsymbols.h"
-#include "stringtable.h"
 
 #include <cplusplus/CppDocument.h>
 
 #include <QHash>
 
 namespace CppTools {
-
-namespace Internal {
-class CppToolsPlugin;
-} // namespace Internal
 
 class CppLocatorData : public QObject
 {
@@ -67,12 +62,6 @@ public slots:
 private:
     void flushPendingDocument(bool force) const;
     QList<IndexItem::Ptr> allIndexItems(const QHash<QString, QList<IndexItem::Ptr>> &items) const;
-
-    QString findOrInsertFilePath(const QString &path) const
-    { return m_strings->insert(path); }
-
-private:
-    Internal::StringTable *m_strings = nullptr; // Used to avoid QString duplication
 
     mutable SearchSymbols m_search;
     mutable QHash<QString, IndexItem::Ptr> m_infosByFile;

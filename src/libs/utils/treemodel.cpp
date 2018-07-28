@@ -866,10 +866,10 @@ TreeItem *TreeItem::reverseFindAnyChild(const std::function<bool (TreeItem *)> &
 {
     auto end = m_children.rend();
     for (auto it = m_children.rbegin(); it != end; ++it) {
-        if (pred(*it))
-            return *it;
         if (TreeItem *found = (*it)->reverseFindAnyChild(pred))
             return found;
+        if (pred(*it))
+            return *it;
     }
     return nullptr;
 }
@@ -897,6 +897,12 @@ void TreeItem::expand()
 {
     QTC_ASSERT(m_model, return);
     m_model->requestExpansion(index());
+}
+
+void TreeItem::collapse()
+{
+    QTC_ASSERT(m_model, return);
+    m_model->requestCollapse(index());
 }
 
 void TreeItem::propagateModel(BaseTreeModel *m)
@@ -1024,6 +1030,8 @@ QVariant BaseTreeModel::headerData(int section, Qt::Orientation orientation,
 
 bool BaseTreeModel::hasChildren(const QModelIndex &idx) const
 {
+    if (idx.column() > 0)
+        return false;
     TreeItem *item = itemForIndex(idx);
     return !item || item->hasChildren();
 }

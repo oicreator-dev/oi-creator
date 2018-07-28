@@ -67,7 +67,7 @@ def performTest(workingDir, projectName, targetCount, availableConfigs):
         # switching from MSVC to MinGW build will fail on the clean step of 'Rebuild All' because
         # of differences between MSVC's and MinGW's Makefile (so clean before switching kits)
         invokeMenuItem('Build', 'Clean Project "%s"' % projectName)
-        qtVersion = verifyBuildConfig(targetCount, kit, config, True, True, True)[0]
+        qtVersion = verifyBuildConfig(targetCount, kit, config, True, True, True)
         test.log("Selected kit using Qt %s" % qtVersion)
         # explicitly build before start debugging for adding the executable as allowed program to WinFW
         invokeMenuItem("Build", "Rebuild All")
@@ -75,13 +75,6 @@ def performTest(workingDir, projectName, targetCount, availableConfigs):
         if not checkCompile():
             test.fatal("Compile had errors... Skipping current build config")
             continue
-        if platform.system() in ('Microsoft' 'Windows'):
-            switchViewTo(ViewConstants.PROJECTS)
-            switchToBuildOrRunSettingsFor(targetCount, kit, ProjectSettings.BUILD)
-            buildDir = os.path.join(str(waitForObject(":Qt Creator_Utils::BuildDirectoryLineEdit").text),
-                                    "debug")
-            switchViewTo(ViewConstants.EDIT)
-            allowAppThroughWinFW(buildDir, projectName, None)
         switchViewTo(ViewConstants.DEBUG)
         selectFromCombo(":Analyzer Toolbar.AnalyzerManagerToolBox_QComboBox", "QML Profiler")
         recordButton = waitForObject("{container=':DebugModeWidget.Toolbar_QDockWidget' "
@@ -107,9 +100,9 @@ def performTest(workingDir, projectName, targetCount, availableConfigs):
             (colPercent, colTotal, colSelfPercent, colSelf, colCalls,
              colMean, colMedian, colLongest, colShortest) = range(2, 11)
             model = waitForObject(":Events.QmlProfilerEventsTable_QmlProfiler::"
-                                  "Internal::QmlProfilerEventsMainView").model()
-            compareEventsTab(model, "events_qt5.tsv")
-            test.compare(dumpItems(model, column=colPercent)[0], '100.00 %')
+                                  "Internal::QmlProfilerStatisticsMainView").model()
+            compareEventsTab(model, "events_qt%s.tsv" % qtVersion)
+            test.compare(dumpItems(model, column=colPercent)[0], '100 %')
             # cannot run following test on colShortest (unstable)
             for i in [colTotal, colMean, colMedian, colLongest]:
                 for item in dumpItems(model, column=i)[2:5]:
@@ -129,10 +122,8 @@ def performTest(workingDir, projectName, targetCount, availableConfigs):
                         test.compare(model.index(row, colMean).data(), model.index(row, col).data(),
                                      "For just one call, no differences in execution time may be shown.")
                 elif str(model.index(row, colCalls).data()) == "2":
-                    test.compare(model.index(row, colMedian).data(), model.index(row, colLongest).data(),
-                                 "For two calls, median and longest time must be the same.")
-        if platform.system() in ('Microsoft' 'Windows'):
-            deleteAppFromWinFW(buildDir, projectName, None)
+                    test.compare(model.index(row, colMedian).data(), model.index(row, colMean).data(),
+                                 "For two calls, median and mean time must be the same.")
         progressBarWait(15000, False)   # wait for "Build" progressbar to disappear
         clickButton(waitForObject(":Analyzer Toolbar.Clear_QToolButton"))
         test.verify(waitFor("model.rowCount() == 0", 3000), "Analyzer results cleared.")

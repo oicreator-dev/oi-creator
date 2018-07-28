@@ -133,7 +133,6 @@ QtTestOutputReader::QtTestOutputReader(const QFutureInterface<TestResultPtr> &fu
                                        QProcess *testApplication, const QString &buildDirectory,
                                        const QString &projectFile, OutputMode mode, TestType type)
     : TestOutputReader(futureInterface, testApplication, buildDirectory)
-    , m_executable(testApplication ? testApplication->program() : QString())
     , m_projectFile(projectFile)
     , m_mode(mode)
     , m_testType(type)
@@ -142,11 +141,14 @@ QtTestOutputReader::QtTestOutputReader(const QFutureInterface<TestResultPtr> &fu
 
 void QtTestOutputReader::processOutput(const QByteArray &outputLine)
 {
+    static const QByteArray qmlDebug = "QML Debugger: Waiting for connection on port";
     switch (m_mode) {
     case PlainText:
         processPlainTextOutput(outputLine);
         break;
     case XML:
+        if (m_xmlReader.tokenType() == QXmlStreamReader::NoToken && outputLine.startsWith(qmlDebug))
+            return;
         processXMLOutput(outputLine);
         break;
     }
@@ -154,7 +156,7 @@ void QtTestOutputReader::processOutput(const QByteArray &outputLine)
 
 TestResultPtr QtTestOutputReader::createDefaultResult() const
 {
-    QtTestResult *result = new QtTestResult(m_executable, m_projectFile, m_testType, m_className);
+    QtTestResult *result = new QtTestResult(id(), m_projectFile, m_testType, m_className);
     result->setFunctionName(m_testCase);
     result->setDataTag(m_dataTag);
     return TestResultPtr(result);
@@ -172,7 +174,9 @@ void QtTestOutputReader::processXMLOutput(const QByteArray &outputLine)
     if (m_className.isEmpty() && outputLine.trimmed().isEmpty())
         return;
 
-    m_xmlReader.addData(outputLine);
+    // avoid encoding problems for Quick tests
+    m_xmlReader.addData(m_testType == TestType::QuickTest ? QString::fromLatin1(outputLine)
+                                                          : QString::fromLocal8Bit(outputLine));
     while (!m_xmlReader.atEnd()) {
         if (m_futureInterface.isCanceled())
             return;
@@ -287,6 +291,13 @@ void QtTestOutputReader::processXMLOutput(const QByteArray &outputLine)
             break;
         }
         default:
+            // premature end happens e.g. if not all data has been added to the reader yet
+            if (m_xmlReader.error() != QXmlStreamReader::NoError
+                    && m_xmlReader.error() != QXmlStreamReader::PrematureEndOfDocumentError) {
+                createAndReportResult(tr("XML parsing failed.")
+                                      + QString(" (%1) ").arg(m_xmlReader.error())
+                                      + m_xmlReader.errorString(), Result::MessageFatal);
+            }
             break;
         }
     }
@@ -326,7 +337,7 @@ void QtTestOutputReader::processPlainTextOutput(const QByteArray &outputLine)
     static QRegExp finish("^[*]{9} Finished testing of (.*) [*]{9}$");
 
     static QRegExp result("^(PASS   |FAIL!  |XFAIL  |XPASS  |SKIP   |BPASS   |BFAIL   |RESULT "
-                          "|INFO   |QWARN  |WARNING|QDEBUG ): (.*)$");
+                          "|INFO   |QWARN  |WARNING|QDEBUG |QSYSTEM): (.*)$");
 
     static QRegExp benchDetails("^\\s+([\\d,.]+ .* per iteration \\(total: [\\d,.]+, iterations: \\d+\\))$");
     static QRegExp locationUnix("^   Loc: \\[(.*)\\]$");

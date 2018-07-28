@@ -43,12 +43,6 @@ QmlDebugConnectionManager::~QmlDebugConnectionManager()
         disconnectConnectionSignals();
 }
 
-void QmlDebugConnectionManager::setRetryParams(int interval, int maxAttempts)
-{
-    m_retryInterval = interval;
-    m_maximumRetries = maxAttempts;
-}
-
 void QmlDebugConnectionManager::connectToServer(const QUrl &server)
 {
     if (m_server != server) {
@@ -69,6 +63,11 @@ void QmlDebugConnectionManager::disconnectFromServer()
     m_server.clear();
     destroyConnection();
     stopConnectionTimer();
+}
+
+bool QmlDebugConnectionManager::isConnecting() const
+{
+    return m_connectionTimer.isActive();
 }
 
 static quint16 port16(const QUrl &url)
@@ -217,7 +216,7 @@ void QmlDebugConnectionManager::destroyConnection()
 
 void QmlDebugConnectionManager::qmlDebugConnectionOpened()
 {
-    logState(tr("Debug connection opened"));
+    logState(tr("Debug connection opened."));
     QTC_ASSERT(m_connection, return);
     QTC_ASSERT(m_connection->isConnected(), return);
     stopConnectionTimer();
@@ -226,7 +225,7 @@ void QmlDebugConnectionManager::qmlDebugConnectionOpened()
 
 void QmlDebugConnectionManager::qmlDebugConnectionClosed()
 {
-    logState(tr("Debug connection closed"));
+    logState(tr("Debug connection closed."));
     QTC_ASSERT(m_connection, return);
     QTC_ASSERT(!m_connection->isConnected(), return);
     destroyConnection();
@@ -235,7 +234,7 @@ void QmlDebugConnectionManager::qmlDebugConnectionClosed()
 
 void QmlDebugConnectionManager::qmlDebugConnectionFailed()
 {
-    logState(tr("Debug connection failed"));
+    logState(tr("Debug connection failed."));
     QTC_ASSERT(m_connection, return);
     QTC_ASSERT(!m_connection->isConnected(), /**/);
 

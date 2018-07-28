@@ -86,7 +86,7 @@ Core::Id CMakeKitInformation::id()
 CMakeTool *CMakeKitInformation::cmakeTool(const Kit *k)
 {
     if (!k)
-        return 0;
+        return nullptr;
 
     const QVariant id = k->value(TOOL_ID);
     return CMakeToolManager::findById(Core::Id::fromSetting(id));
@@ -142,11 +142,13 @@ KitInformation::ItemList CMakeKitInformation::toUserOutput(const Kit *k) const
 
 KitConfigWidget *CMakeKitInformation::createConfigWidget(Kit *k) const
 {
+    QTC_ASSERT(k, return nullptr);
     return new Internal::CMakeKitConfigWidget(k, this);
 }
 
 void CMakeKitInformation::addToMacroExpander(Kit *k, Utils::MacroExpander *expander) const
 {
+    QTC_ASSERT(k, return);
     expander->registerFileVariables("CMake:Executable", tr("Path to the cmake executable"),
                                     [k]() -> QString {
                                         CMakeTool *tool = CMakeKitInformation::cmakeTool(k);
@@ -304,6 +306,8 @@ QStringList CMakeGeneratorKitInformation::generatorArguments(const Kit *k)
 
 QVariant CMakeGeneratorKitInformation::defaultValue(const Kit *k) const
 {
+    QTC_ASSERT(k, return QVariant());
+
     CMakeTool *tool = CMakeKitInformation::cmakeTool(k);
     if (!tool)
         return QVariant();
@@ -426,6 +430,8 @@ void CMakeGeneratorKitInformation::fix(Kit *k)
 
 void CMakeGeneratorKitInformation::upgrade(Kit *k)
 {
+    QTC_ASSERT(k, return);
+
     const QVariant value = k->value(GENERATOR_ID);
     if (value.type() != QVariant::Map) {
         GeneratorInfo info;
@@ -450,9 +456,9 @@ KitInformation::ItemList CMakeGeneratorKitInformation::toUserOutput(const Kit *k
     } else {
         message = tr("Generator: %1<br>Extra generator: %2").arg(info.generator).arg(info.extraGenerator);
         if (!info.platform.isEmpty())
-            message += tr("<br>Platform: %1").arg(info.platform);
+            message += "<br/>" + tr("Platform: %1").arg(info.platform);
         if (!info.toolset.isEmpty())
-            message += tr("<br>Toolset: %1").arg(info.toolset);
+            message += "<br/>" + tr("Toolset: %1").arg(info.toolset);
     }
     return ItemList() << qMakePair(tr("CMake Generator"), message);
 }
@@ -485,7 +491,7 @@ CMakeConfig CMakeConfigurationKitInformation::configuration(const Kit *k)
     if (!k)
         return CMakeConfig();
     const QStringList tmp = k->value(CONFIGURATION_ID).toStringList();
-    return Utils::transform(tmp, [](const QString &s) { return CMakeConfigItem::fromString(s); });
+    return Utils::transform(tmp, &CMakeConfigItem::fromString);
 }
 
 void CMakeConfigurationKitInformation::setConfiguration(Kit *k, const CMakeConfig &config)
@@ -545,6 +551,8 @@ QVariant CMakeConfigurationKitInformation::defaultValue(const Kit *k) const
 
 QList<Task> CMakeConfigurationKitInformation::validate(const Kit *k) const
 {
+    QTC_ASSERT(k, return QList<Task>());
+
     const QtSupport::BaseQtVersion *const version = QtSupport::QtKitInformation::qtVersion(k);
     const ToolChain *const tcC = ToolChainKitInformation::toolChain(k, ProjectExplorer::Constants::C_LANGUAGE_ID);
     const ToolChain *const tcCxx = ToolChainKitInformation::toolChain(k, ProjectExplorer::Constants::CXX_LANGUAGE_ID);
@@ -659,7 +667,7 @@ KitInformation::ItemList CMakeConfigurationKitInformation::toUserOutput(const Ki
 KitConfigWidget *CMakeConfigurationKitInformation::createConfigWidget(Kit *k) const
 {
     if (!k)
-        return 0;
+        return nullptr;
     return new Internal::CMakeConfigurationKitConfigWidget(k, this);
 }
 

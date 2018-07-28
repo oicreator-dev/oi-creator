@@ -60,7 +60,6 @@
 #include "qmt/tasks/alignonrastervisitor.h"
 #include "qmt/tasks/isceneinspector.h"
 #include "qmt/tasks/voidelementtasks.h"
-#include "utils/asconst.h"
 
 #include <QMenu>
 #include <QFileInfo>
@@ -504,7 +503,7 @@ MPackage *DiagramSceneController::findSuitableParentPackage(DElement *topmostDia
 MDiagram *DiagramSceneController::findDiagramBySearchId(MPackage *package, const QString &diagramName)
 {
     QString diagramSearchId = NameController::calcElementNameSearchId(diagramName);
-    foreach (const Handle<MObject> &handle, package->children()) {
+    for (const Handle<MObject> &handle : package->children()) {
         if (handle.hasTarget()) {
             if (auto diagram = dynamic_cast<MDiagram *>(handle.target())) {
                 if (NameController::calcElementNameSearchId(diagram->name()) == diagramSearchId)
@@ -745,7 +744,7 @@ DObject *DiagramSceneController::addObject(MObject *modelObject, const QPointF &
             if (dobject) {
                 MObject *mobject = m_modelController->findObject(dobject->modelUid());
                 if (mobject) {
-                    foreach (const Handle<MRelation> &handle, mobject->relations()) {
+                    for (const Handle<MRelation> &handle : mobject->relations()) {
                         if (handle.hasTarget()
                                 && ((handle.target()->endAUid() == modelObject->uid()
                                      && handle.target()->endBUid() == mobject->uid())
@@ -754,7 +753,7 @@ DObject *DiagramSceneController::addObject(MObject *modelObject, const QPointF &
                             addRelation(handle.target(), QList<QPointF>(), diagram);
                         }
                     }
-                    foreach (const Handle<MRelation> &handle, modelObject->relations()) {
+                    for (const Handle<MRelation> &handle : modelObject->relations()) {
                         if (handle.hasTarget()
                                 && ((handle.target()->endAUid() == modelObject->uid()
                                      && handle.target()->endBUid() == mobject->uid())
@@ -769,7 +768,7 @@ DObject *DiagramSceneController::addObject(MObject *modelObject, const QPointF &
     }
 
     // add all self relations
-    foreach (const Handle<MRelation> &handle, modelObject->relations()) {
+    for (const Handle<MRelation> &handle : modelObject->relations()) {
         if (handle.hasTarget ()
                 && handle.target()->endAUid() == modelObject->uid()
                 && handle.target()->endBUid() == modelObject->uid()) {

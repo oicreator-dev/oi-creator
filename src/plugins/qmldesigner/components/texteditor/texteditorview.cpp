@@ -49,6 +49,7 @@
 #include <texteditor/texteditorconstants.h>
 #include <qmljseditor/qmljseditordocument.h>
 
+#include <qmljs/qmljsmodelmanagerinterface.h>
 #include <qmljs/qmljsreformatter.h>
 #include <utils/changeset.h>
 
@@ -65,7 +66,7 @@ const char TEXTEDITOR_CONTEXT_ID[] = "QmlDesigner.TextEditorContext";
 TextEditorView::TextEditorView(QObject *parent)
     : AbstractView(parent)
     , m_widget(new TextEditorWidget(this))
-    , m_textEditorContext(new Internal::TextEditorContext(m_widget.get()))
+    , m_textEditorContext(new Internal::TextEditorContext(m_widget))
 {
     Core::ICore::addContextObject(m_textEditorContext);
 
@@ -78,7 +79,7 @@ TextEditorView::TextEditorView(QObject *parent)
 
     QAction *completionAction = new QAction(tr("Trigger Completion"), this);
     Core::Command *command = Core::ActionManager::registerAction(completionAction, TextEditor::Constants::COMPLETE_THIS, context);
-    command->setDefaultKeySequence(QKeySequence(Core::UseMacShortcuts ? tr("Meta+Space") : tr("Ctrl+Space")));
+    command->setDefaultKeySequence(QKeySequence(Core::useMacShortcuts ? tr("Meta+Space") : tr("Ctrl+Space")));
 
     connect(completionAction, &QAction::triggered, [this]() {
         if (m_widget->textEditor())
@@ -88,6 +89,7 @@ TextEditorView::TextEditorView(QObject *parent)
 
 TextEditorView::~TextEditorView()
 {
+    // m_textEditorContext is responsible for deleting the widget
 }
 
 void TextEditorView::modelAttached(Model *model)
@@ -147,22 +149,20 @@ void TextEditorView::nodeReparented(const ModelNode &/*node*/, const NodeAbstrac
 
 WidgetInfo TextEditorView::widgetInfo()
 {
-    return createWidgetInfo(m_widget.get(), 0, "TextEditor", WidgetInfo::CentralPane, 0, tr("Text Editor"), DesignerWidgetFlags::IgnoreErrors);
+    return createWidgetInfo(m_widget, 0, "TextEditor", WidgetInfo::CentralPane, 0, tr("Text Editor"), DesignerWidgetFlags::IgnoreErrors);
 }
 
-QString TextEditorView::contextHelpId() const
+void TextEditorView::contextHelpId(const Core::IContext::HelpIdCallback &callback) const
 {
-    return AbstractView::contextHelpId();
+    AbstractView::contextHelpId(callback);
 }
 
-QString TextEditorView::qmlJSEditorHelpId() const
+void TextEditorView::qmlJSEditorHelpId(const Core::IContext::HelpIdCallback &callback) const
 {
-    if (m_widget->textEditor()) {
-        QString contextHelpId = m_widget->textEditor()->contextHelpId();
-        if (!contextHelpId.isEmpty())
-            return m_widget->textEditor()->contextHelpId();
-    }
-    return QString();
+    if (m_widget->textEditor())
+        m_widget->textEditor()->contextHelpId(callback);
+    else
+        callback(QString());
 }
 
 void TextEditorView::nodeIdChanged(const ModelNode& /*node*/, const QString &/*newId*/, const QString &/*oldId*/)
@@ -188,7 +188,7 @@ void TextEditorView::documentMessagesChanged(const QList<DocumentMessage> &error
     if (errors.isEmpty()) {
         m_widget->clearStatusBar();
     } else {
-        const DocumentMessage error = errors.first();
+        const DocumentMessage &error = errors.constFirst();
         m_widget->setStatusText(QString("%1 (Line: %2)").arg(error.description()).arg(error.line()));
     }
 }
@@ -274,7 +274,26 @@ void TextEditorView::reformatFile()
             && document->filePath().toString().endsWith(".ui.qml")
             &&  DesignerSettings::getValue(DesignerSettingsKey::REFORMAT_UI_QML_FILES).toBool()) {
 
-        const QString &newText = QmlJS::reformat(document->semanticInfo().document);
+        QmlJS::Document::Ptr currentDocument(document->semanticInfo().document);
+        QmlJS::Snapshot snapshot = QmlJS::ModelManagerInterface::instance()->snapshot();
+
+        if (document->isSemanticInfoOutdated()) {
+            QmlJS::Document::MutablePtr latestDocument;
+
+            const QString fileName = document->filePath().toString();
+            latestDocument = snapshot.documentFromSource(QString::fromUtf8(document->contents()),
+                                                         fileName,
+                                                         QmlJS::ModelManagerInterface::guessLanguageOfFile(fileName));
+            latestDocument->parseQml();
+            snapshot.insert(latestDocument);
+
+            currentDocument = latestDocument;
+        }
+
+        if (!currentDocument->isParsedCorrectly())
+            return;
+
+        const QString &newText = QmlJS::reformat(currentDocument);
         QTextCursor tc(document->document());
 
         Utils::ChangeSet changeSet;

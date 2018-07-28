@@ -156,8 +156,6 @@ CppTypeData BackendModel::cppTypeDataForType(const QString &typeName) const
 {
     RewriterView *rewriterView = m_connectionView->model()->rewriterView();
 
-    QStringList list;
-
     if (!rewriterView)
         return CppTypeData();
 
@@ -232,7 +230,7 @@ void BackendModel::addNewBackend()
 
         QString typeName = dialog.type();
 
-        Import import = Import::createLibraryImport(importSplit.first(), importSplit.last());
+        Import import = Import::createLibraryImport(importSplit.constFirst(), importSplit.constLast());
 
         try {
 

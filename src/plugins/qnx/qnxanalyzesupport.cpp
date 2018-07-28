@@ -31,7 +31,6 @@
 
 #include <projectexplorer/devicesupport/deviceusedportsgatherer.h>
 #include <projectexplorer/kitinformation.h>
-#include <projectexplorer/runnables.h>
 #include <projectexplorer/target.h>
 
 #include <utils/qtcassert.h>
@@ -75,11 +74,10 @@ void QnxQmlProfilerSupport::start()
     serverUrl.setScheme("tcp");
     m_profiler->recordData("QmlServerUrl", serverUrl);
 
-    QString args = QmlDebug::qmlDebugTcpArguments(QmlDebug::QmlProfilerServices, qmlPort);
-    auto r = runnable().as<StandardRunnable>();
-    if (!r.commandLineArguments.isEmpty())
-        r.commandLineArguments.append(' ');
-    r.commandLineArguments += args;
+    Runnable r = runnable();
+    QtcProcess::addArg(&r.commandLineArguments,
+                       QmlDebug::qmlDebugTcpArguments(QmlDebug::QmlProfilerServices, qmlPort),
+                       device()->osType());
 
     setRunnable(r);
 

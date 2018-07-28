@@ -38,7 +38,6 @@
 #include <coreplugin/mainwindow.h>
 #include <utils/algorithm.h>
 #include <utils/appmainwindow.h>
-#include <utils/asconst.h>
 #include <utils/fancylineedit.h>
 #include <utils/highlightingitemdelegate.h>
 #include <utils/hostosinfo.h>
@@ -342,8 +341,11 @@ bool LocatorPopup::event(QEvent *event)
 {
     if (event->type() == QEvent::ParentChange)
         updateWindow();
-    // completion list resizes after first items are shown --> LayoutRequest
-    else if (event->type() == QEvent::Show || event->type() == QEvent::LayoutRequest)
+    else if (event->type() == QEvent::Show)
+        // make sure the popup has correct position before it becomes visible
+        updateGeometry();
+    else if (event->type() == QEvent::LayoutRequest)
+        // completion list resizes after first items are shown --> LayoutRequest
         QTimer::singleShot(0, this, &LocatorPopup::updateGeometry);
     return QWidget::event(event);
 }

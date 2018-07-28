@@ -52,17 +52,16 @@ namespace Internal {
 
 class DesignMode;
 class DocumentWidget;
-class DesignModeWidget;
 
 class DesignModeWidget : public QWidget
 {
     Q_OBJECT
 
 public:
-    explicit DesignModeWidget(QWidget *parent = 0);
+    DesignModeWidget();
+    ~DesignModeWidget() override;
 
-    ~DesignModeWidget();
-    QString contextHelpId() const;
+    void contextHelpId(const Core::IContext::HelpIdCallback &callback) const;
 
     void initialize();
 
@@ -84,6 +83,8 @@ public:
     void restoreDefaultView();
     void toggleLeftSidebar();
     void toggleRightSidebar();
+
+    static QWidget *createProjectExplorerWidget(QWidget *parent);
 
 private: // functions
     enum InitializeStatus { NotInitialized, Initializing, Initialized };

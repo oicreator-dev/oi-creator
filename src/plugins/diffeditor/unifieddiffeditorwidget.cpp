@@ -190,14 +190,15 @@ void UnifiedDiffEditorWidget::contextMenuEvent(QContextMenuEvent *e)
 }
 
 void UnifiedDiffEditorWidget::addContextMenuActions(QMenu *menu,
-                                                    int diffFileIndex,
+                                                    int fileIndex,
                                                     int chunkIndex)
 {
     menu->addSeparator();
 
-    m_controller.addCodePasterAction(menu);
-    m_controller.addApplyAction(menu, diffFileIndex, chunkIndex);
-    m_controller.addRevertAction(menu, diffFileIndex, chunkIndex);
+    m_controller.addCodePasterAction(menu, fileIndex, chunkIndex);
+    m_controller.addApplyAction(menu, fileIndex, chunkIndex);
+    m_controller.addRevertAction(menu, fileIndex, chunkIndex);
+    m_controller.addExtraActions(menu, fileIndex, chunkIndex);
 }
 
 void UnifiedDiffEditorWidget::clear(const QString &message)
@@ -283,9 +284,12 @@ void UnifiedDiffEditorWidget::setDiff(const QList<FileData> &diffFileList,
 {
     Q_UNUSED(workingDirectory)
 
+    const bool oldIgnore = m_controller.m_ignoreCurrentIndexChange;
+    m_controller.m_ignoreCurrentIndexChange = true;
     clear();
     m_controller.m_contextFileData = diffFileList;
     showDiff();
+    m_controller.m_ignoreCurrentIndexChange = oldIgnore;
 }
 
 QString UnifiedDiffEditorWidget::showChunk(const ChunkData &chunkData,

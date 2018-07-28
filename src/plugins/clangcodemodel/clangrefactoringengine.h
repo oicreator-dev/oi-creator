@@ -26,6 +26,9 @@
 #pragma once
 
 #include <cpptools/refactoringengineinterface.h>
+#include <cpptools/cppcursorinfo.h>
+
+#include <QFutureWatcher>
 
 namespace ClangBackEnd {
 class RefactoringClientInterface;
@@ -43,12 +46,18 @@ public:
     void globalRename(const CppTools::CursorInEditor &, CppTools::UsagesCallback &&,
                       const QString &) override {}
     void findUsages(const CppTools::CursorInEditor &, CppTools::UsagesCallback &&) const override {}
-    Link globalFollowSymbol(const CppTools::CursorInEditor &, const CPlusPlus::Snapshot &,
-                            const CPlusPlus::Document::Ptr &, CppTools::SymbolFinder *,
+    void globalFollowSymbol(const CppTools::CursorInEditor &,
+                            ::Utils::ProcessLinkCallback &&,
+                            const CPlusPlus::Snapshot &,
+                            const CPlusPlus::Document::Ptr &,
+                            CppTools::SymbolFinder *,
                             bool) const override
     {
-        return Link();
     }
+
+private:
+    using FutureCursorWatcher = QFutureWatcher<CppTools::CursorInfo>;
+    std::unique_ptr<FutureCursorWatcher> m_watcher;
 };
 
 } // namespace ClangRefactoring

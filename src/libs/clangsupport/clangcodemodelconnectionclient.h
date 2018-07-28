@@ -39,13 +39,12 @@ public:
 
 protected:
     void sendEndCommand() override;
-    void resetCounter() override;
+    void resetState() override;
     QString outputName() const override;
     void newConnectedServer(QIODevice *ioDevice) override;
 
 private:
     ClangCodeModelServerProxy m_serverProxy;
-    ClangCodeModelClientInterface *m_client;
 };
 
 } // namespace ClangBackEnd

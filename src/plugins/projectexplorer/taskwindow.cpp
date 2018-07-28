@@ -210,11 +210,18 @@ void TaskView::resizeEvent(QResizeEvent *e)
 class TaskWindowPrivate
 {
 public:
+    ITaskHandler *handler(const QAction *action)
+    {
+        ITaskHandler *handler = m_actionToHandlerMap.value(action, nullptr);
+        return g_taskHandlers.contains(handler) ? handler : nullptr;
+    }
+
     Internal::TaskModel *m_model;
     Internal::TaskFilterModel *m_filter;
     Internal::TaskView *m_listview;
     Internal::TaskWindowContext *m_taskWindowContext;
     QMenu *m_contextMenu;
+    QMap<const QAction *, ITaskHandler *> m_actionToHandlerMap;
     ITaskHandler *m_defaultHandler = nullptr;
     QToolButton *m_filterWarningsButton;
     QToolButton *m_categoriesButton;
@@ -318,14 +325,6 @@ TaskWindow::~TaskWindow()
     delete d;
 }
 
-static ITaskHandler *handler(QAction *action)
-{
-    QVariant prop = action->property("ITaskHandler");
-    ITaskHandler *handler = qobject_cast<ITaskHandler *>(prop.value<QObject *>());
-    QTC_CHECK(handler);
-    return handler;
-}
-
 void TaskWindow::delayedInitialization()
 {
     static bool alreadyDone = false;
@@ -340,14 +339,14 @@ void TaskWindow::delayedInitialization()
 
         QAction *action = h->createAction(this);
         QTC_ASSERT(action, continue);
-        action->setProperty("ITaskHandler", qVariantFromValue(qobject_cast<QObject*>(h)));
+        d->m_actionToHandlerMap.insert(action, h);
         connect(action, &QAction::triggered, this, &TaskWindow::actionTriggered);
         d->m_actions << action;
 
         Core::Id id = h->actionManagerId();
         if (id.isValid()) {
-            Core::Command *cmd = Core::ActionManager::instance()
-                    ->registerAction(action, id, d->m_taskWindowContext->context(), true);
+            Core::Command *cmd =
+                Core::ActionManager::registerAction(action, id, d->m_taskWindowContext->context(), true);
             action = cmd->action();
         }
         d->m_listview->addAction(action);
@@ -395,7 +394,7 @@ void TaskWindow::currentChanged(const QModelIndex &index)
 {
     const Task task = index.isValid() ? d->m_filter->task(index) : Task();
     foreach (QAction *action, d->m_actions) {
-        ITaskHandler *h = handler(action);
+        ITaskHandler *h = d->handler(action);
         action->setEnabled((task.isNull() || !h) ? false : h->canHandle(task));
     }
 }
@@ -447,9 +446,12 @@ void TaskWindow::addTask(const Task &task)
     emit tasksChanged();
     navigateStateChanged();
 
-    if (task.type == Task::Error && d->m_filter->filterIncludesErrors()
-            && !d->m_filter->filteredCategories().contains(task.category))
+    if ((task.options & Task::FlashWorthy)
+         && task.type == Task::Error
+         && d->m_filter->filterIncludesErrors()
+         && !d->m_filter->filteredCategories().contains(task.category)) {
         flash();
+    }
 }
 
 void TaskWindow::removeTask(const Task &task)
@@ -511,7 +513,7 @@ void TaskWindow::actionTriggered()
     auto action = qobject_cast<QAction *>(sender());
     if (!action || !action->isEnabled())
         return;
-    ITaskHandler *h = handler(action);
+    ITaskHandler *h = d->handler(action);
     if (!h)
         return;
 

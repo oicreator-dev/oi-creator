@@ -157,6 +157,15 @@ void LldbEngine::debugLastCommand()
     runCommand(m_lastDebuggableCommand);
 }
 
+void LldbEngine::handleAttachedToCore()
+{
+    QTC_ASSERT(state() == InferiorUnrunnable, qDebug() << state();return);
+    showMessage("Attached to core.");
+    reloadFullStack();
+    reloadModules();
+    updateLocals();
+}
+
 void LldbEngine::shutdownInferior()
 {
     QTC_ASSERT(state() == InferiorShutdownRequested, qDebug() << state());
@@ -292,7 +301,6 @@ void LldbEngine::setupEngine()
                                 .arg(bp.id().toString()).arg(bp.state()));
                 }
             }
-            notifyEngineSetupOk();
         } else {
             notifyEngineSetupFailed();
         }
@@ -735,6 +743,8 @@ void LldbEngine::handleLldbError(QProcess::ProcessError error)
     showMessage(QString("LLDB PROCESS ERROR: %1").arg(error));
     switch (error) {
     case QProcess::Crashed:
+        m_lldbProc.disconnect();
+        notifyEngineShutdownFinished();
         break; // will get a processExited() as well
     // impossible case QProcess::FailedToStart:
     case QProcess::ReadError:
@@ -852,9 +862,11 @@ void LldbEngine::handleStateNotification(const GdbMi &reportedState)
     } else if (newState == "enginerunandinferiorstopok") {
         notifyEngineRunAndInferiorStopOk();
         continueInferior();
-    } else if (newState == "enginerunokandinferiorunrunnable")
+    } else if (newState == "enginerunokandinferiorunrunnable") {
         notifyEngineRunOkAndInferiorUnrunnable();
-    else if (newState == "inferiorshutdownfinished")
+        if (runParameters().startMode == AttachCore)
+            handleAttachedToCore();
+    } else if (newState == "inferiorshutdownfinished")
         notifyInferiorShutdownFinished();
     else if (newState == "engineshutdownfinished")
         notifyEngineShutdownFinished();

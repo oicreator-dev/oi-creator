@@ -25,11 +25,19 @@
 
 #pragma once
 
+#include <cplusplus/Icons.h>
+
 #include <cpptools/projectpart.h>
+
+QT_BEGIN_NAMESPACE
+class QTextBlock;
+QT_END_NAMESPACE
 
 namespace CppTools {
 class CppEditorDocumentHandle;
 }
+
+namespace ClangBackEnd { class TokenInfoContainer; }
 
 namespace ClangCodeModel {
 namespace Utils {
@@ -46,8 +54,11 @@ CppTools::ProjectPart::Ptr projectPartForFile(const QString &filePath);
 CppTools::ProjectPart::Ptr projectPartForFileBasedOnProcessor(const QString &filePath);
 bool isProjectPartLoaded(const CppTools::ProjectPart::Ptr projectPart);
 QString projectPartIdForFile(const QString &filePath);
+int clangColumn(const QTextBlock &lineText, int cppEditorColumn);
 
-int extraUtf8CharsShift(const QString &str, int column);
+QString diagnosticCategoryPrefixRemoved(const QString &text);
+
+CPlusPlus::Icons::IconType iconTypeForToken(const ClangBackEnd::TokenInfoContainer &token);
 
 } // namespace Utils
 } // namespace Clang

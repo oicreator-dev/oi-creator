@@ -25,8 +25,10 @@
 
 #include "modelnodeoperations.h"
 #include "modelnodecontextmenu_helper.h"
+#include "addimagesdialog.h"
 #include "layoutingridlayout.h"
 #include "findimplementation.h"
+
 
 #include "addsignalhandlerdialog.h"
 
@@ -55,6 +57,10 @@
 #include <coreplugin/icore.h>
 
 #include <qmljseditor/qmljsfindreferences.h>
+
+#include <projectexplorer/project.h>
+#include <projectexplorer/projectnodes.h>
+#include <projectexplorer/projecttree.h>
 
 #include <utils/algorithm.h>
 #include <utils/qtcassert.h>
@@ -285,7 +291,7 @@ void setVisible(const SelectionContext &selectionState)
         return;
 
     try {
-        selectionState.selectedModelNodes().first().variantProperty("visible").setValue(selectionState.toggled());
+        selectionState.selectedModelNodes().constFirst().variantProperty("visible").setValue(selectionState.toggled());
     } catch (const RewritingException &e) { //better save then sorry
         e.showException();
     }
@@ -565,22 +571,6 @@ void layoutGridLayout(const SelectionContext &selectionContext)
     }
 }
 
-/*
-bool optionsPageLessThan(const IOptionsPage *p1, const IOptionsPage *p2)
-{
-    if (p1->category() != p2->category())
-        return p1->category().alphabeticallyBefore(p2->category());
-    return p1->id().alphabeticallyBefore(p2->id());
-}
-
-static inline QList<IOptionsPage*> sortedOptionsPages()
-{
-    QList<IOptionsPage*> rc = ExtensionSystem::PluginManager::getObjects<IOptionsPage>();
-    qStableSort(rc.begin(), rc.end(), optionsPageLessThan);
-    return rc;
-}
-
-*/
 static PropertyNameList sortedPropertyNameList(const PropertyNameList &nameList)
 {
     PropertyNameList sortedPropertyNameList = nameList;
@@ -657,7 +647,7 @@ void addSignalHandlerOrGotoImplementation(const SelectionContext &selectionState
 {
     ModelNode modelNode;
     if (selectionState.singleNodeIsSelected())
-        modelNode = selectionState.selectedModelNodes().first();
+        modelNode = selectionState.selectedModelNodes().constFirst();
 
     bool isModelNodeRoot = true;
 
@@ -690,7 +680,7 @@ void addSignalHandlerOrGotoImplementation(const SelectionContext &selectionState
     const QString fileName = currentDesignDocument.toString();
     const QString typeName = currentDesignDocument.toFileInfo().baseName();
 
-    QStringList signalNames = cleanSignalNames(getSortedSignalNameList(selectionState.selectedModelNodes().first()));
+    QStringList signalNames = cleanSignalNames(getSortedSignalNameList(selectionState.selectedModelNodes().constFirst()));
 
     QList<QmlJSEditor::FindReferences::Usage> usages = QmlJSEditor::FindReferences::findUsageOfType(fileName, typeName);
 
@@ -701,12 +691,12 @@ void addSignalHandlerOrGotoImplementation(const SelectionContext &selectionState
         return;
     }
 
-    usages = FindImplementation::run(usages.first().path, typeName, itemId);
+    usages = FindImplementation::run(usages.constFirst().path, typeName, itemId);
 
     Core::ModeManager::activateMode(Core::Constants::MODE_EDIT);
 
     if (usages.count() > 0 && (addAlwaysNewSlot || usages.count() < 2)  && (!isModelNodeRoot  || addAlwaysNewSlot)) {
-        Core::EditorManager::openEditorAt(usages.first().path, usages.first().line, usages.first().col);
+        Core::EditorManager::openEditorAt(usages.constFirst().path, usages.constFirst().line, usages.constFirst().col);
 
         if (!signalNames.isEmpty()) {
             AddSignalHandlerDialog *dialog = new AddSignalHandlerDialog(Core::ICore::dialogParent());
@@ -732,7 +722,7 @@ void addSignalHandlerOrGotoImplementation(const SelectionContext &selectionState
                 //Move cursor to correct curser position
                 const QString filePath = Core::EditorManager::currentDocument()->filePath().toString();
                 QList<QmlJSEditor::FindReferences::Usage> usages = FindImplementation::run(filePath, typeName, itemId);
-                Core::EditorManager::openEditorAt(filePath, usages.first().line, usages.first().col + 1);
+                Core::EditorManager::openEditorAt(filePath, usages.constFirst().line, usages.constFirst().col + 1);
             } );
             dialog->show();
 
@@ -740,7 +730,7 @@ void addSignalHandlerOrGotoImplementation(const SelectionContext &selectionState
         return;
     }
 
-    Core::EditorManager::openEditorAt(usages.first().path, usages.first().line, usages.first().col + 1);
+    Core::EditorManager::openEditorAt(usages.constFirst().path, usages.constFirst().line, usages.constFirst().col + 1);
 }
 
 void removeLayout(const SelectionContext &selectionContext)
@@ -794,7 +784,7 @@ void moveToComponent(const SelectionContext &selectionContext)
 {
     ModelNode modelNode;
     if (selectionContext.singleNodeIsSelected())
-        modelNode = selectionContext.selectedModelNodes().first();
+        modelNode = selectionContext.selectedModelNodes().constFirst();
 
     if (modelNode.isValid())
         selectionContext.view()->model()->rewriterView()->moveToComponent(modelNode);
@@ -886,7 +876,7 @@ PropertyName getIndexPropertyName(const ModelNode &modelNode)
     return PropertyName();
 }
 
-void static setIndexProperty(const AbstractProperty &property, const QVariant &value)
+static void setIndexProperty(const AbstractProperty &property, const QVariant &value)
 {
     if (!property.exists() || property.isVariantProperty()) {
         /* Using QmlObjectNode ensures we take states into account. */
@@ -1018,6 +1008,37 @@ void addTabBarToStackedContainer(const SelectionContext &selectionContext)
     }  catch (RewritingException &exception) { //better safe than sorry! There always might be cases where we fail
         exception.showException();
     }
+}
+
+bool addImageToProject(const QStringList &fileNames, const QString &defaultDirectory)
+{
+    QString directory = AddImagesDialog::getDirectory(fileNames, defaultDirectory);
+
+    if (directory.isEmpty())
+        return true;
+
+    bool allSuccessful = true;
+    for (const QString &fileName : fileNames) {
+        const QString targetFile = directory + "/" + QFileInfo(fileName).fileName();
+        const bool success = QFile::copy(fileName, targetFile);
+
+        auto document = QmlDesignerPlugin::instance()->currentDesignDocument();
+
+        QTC_ASSERT(document, return false);
+
+        if (success) {
+            ProjectExplorer::Node *node = ProjectExplorer::ProjectTree::nodeForFile(document->fileName());
+            if (node) {
+                ProjectExplorer::FolderNode *containingFolder = node->parentFolderNode();
+                if (containingFolder)
+                    containingFolder->addFiles(QStringList(targetFile));
+            }
+        } else {
+            allSuccessful = false;
+        }
+    }
+
+    return allSuccessful;
 }
 
 } // namespace Mode

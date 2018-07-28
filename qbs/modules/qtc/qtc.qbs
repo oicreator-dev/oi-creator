@@ -4,20 +4,20 @@ import qbs.FileInfo
 import "qtc.js" as HelperFunctions
 
 Module {
-    property string qtcreator_display_version: '4.7.0-beta1'
+    property string qtcreator_display_version: '4.7.1'
     property string ide_version_major: '4'
-    property string ide_version_minor: '6'
-    property string ide_version_release: '82'
+    property string ide_version_minor: '7'
+    property string ide_version_release: '1'
     property string qtcreator_version: ide_version_major + '.' + ide_version_minor + '.'
                                        + ide_version_release
 
     property string ide_compat_version_major: '4'
-    property string ide_compat_version_minor: '6'
-    property string ide_compat_version_release: '82'
+    property string ide_compat_version_minor: '7'
+    property string ide_compat_version_release: '0'
     property string qtcreator_compat_version: ide_compat_version_major + '.'
             + ide_compat_version_minor + '.' + ide_compat_version_release
 
-    property string qtcreator_copyright_year: '2017'
+    property string qtcreator_copyright_year: '2018'
     property string qtcreator_copyright_string: "(C) " + qtcreator_copyright_year + " The Qt Company Ltd"
 
     property string ide_display_name: 'Qt Creator'
@@ -85,6 +85,7 @@ Module {
         "QT_USE_FAST_OPERATOR_PLUS",
         "QT_USE_FAST_CONCATENATION",
     ].concat(testsEnabled ? ["WITH_TESTS"] : [])
+     .concat(qbs.toolchain.contains("msvc") ? ["_CRT_SECURE_NO_WARNINGS"] : [])
 
     Rule {
         condition: make_dev_package

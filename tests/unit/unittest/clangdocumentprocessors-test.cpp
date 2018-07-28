@@ -126,6 +126,19 @@ TEST_F(DocumentProcessors, Remove)
     ASSERT_TRUE(documentProcessors.processors().empty());
 }
 
+TEST_F(DocumentProcessors, ResetTakesOverJobsInQueue)
+{
+    documentProcessors.create(document);
+    documentProcessors.processor(document).addJob(JobRequest::Type::RequestReferences);
+    documents.remove({document.fileContainer()});
+    const auto newDocument = *documents.create({document.fileContainer()}).begin();
+
+    documentProcessors.reset(document, newDocument);
+
+    ASSERT_THAT(documentProcessors.processor(document).queue().first().type,
+                JobRequest::Type::RequestReferences);
+}
+
 TEST_F(DocumentProcessors, RemoveThrowsForNotExisting)
 {
     ASSERT_THROW(documentProcessors.remove(document),
@@ -144,7 +157,7 @@ TEST_F(DocumentProcessors, ProcessEmpty)
 TEST_F(DocumentProcessorsSlowTest, ProcessSingle)
 {
     DocumentProcessor documentProcessor = documentProcessors.create(document);
-    documentProcessor.addJob(JobRequest::Type::UpdateDocumentAnnotations);
+    documentProcessor.addJob(JobRequest::Type::UpdateAnnotations);
 
     const JobRequests jobsStarted = documentProcessors.process();
 

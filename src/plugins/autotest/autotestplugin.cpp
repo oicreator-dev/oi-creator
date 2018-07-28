@@ -47,16 +47,24 @@
 #include <coreplugin/actionmanager/actionmanager.h>
 #include <coreplugin/actionmanager/command.h>
 #include <coreplugin/coreconstants.h>
+#include <coreplugin/messagemanager.h>
+#include <cppeditor/cppeditorconstants.h>
 #include <extensionsystem/pluginmanager.h>
 #include <projectexplorer/buildmanager.h>
 #include <projectexplorer/projectexplorer.h>
+#include <projectexplorer/projectexplorericons.h>
+#include <projectexplorer/session.h>
+#include <projectexplorer/target.h>
+#include <texteditor/texteditor.h>
+#include <utils/textutils.h>
 #include <utils/utilsicons.h>
 
 #include <QAction>
+#include <QList>
 #include <QMessageBox>
 #include <QMainWindow>
 #include <QMenu>
-
+#include <QTextCursor>
 #include <QtPlugin>
 
 #ifdef WITH_TESTS
@@ -81,17 +89,15 @@ AutotestPlugin::AutotestPlugin()
 
 AutotestPlugin::~AutotestPlugin()
 {
+    delete m_navigationWidgetFactory;
+    delete m_resultsPane;
+    delete m_testSettingPage;
     delete m_frameworkManager;
 }
 
-AutotestPlugin *AutotestPlugin::instance()
+QSharedPointer<TestSettings> AutotestPlugin::settings()
 {
-    return s_instance;
-}
-
-QSharedPointer<TestSettings> AutotestPlugin::settings() const
-{
-    return m_settings;
+    return s_instance->m_settings;
 }
 
 void AutotestPlugin::initializeMenuEntries()
@@ -118,6 +124,18 @@ void AutotestPlugin::initializeMenuEntries()
     command = ActionManager::registerAction(action, Constants::ACTION_RUN_SELECTED_ID);
     command->setDefaultKeySequence(QKeySequence(tr("Alt+Shift+T,Alt+R")));
     connect(action, &QAction::triggered, this, &AutotestPlugin::onRunSelectedTriggered);
+    action->setEnabled(false);
+    menu->addAction(command);
+
+    action = new QAction(tr("Run Tests for Current &File"), this);
+    Utils::Icon runFileIcon = Utils::Icons::RUN_SMALL_TOOLBAR;
+    for (const Utils::IconMaskAndColor &maskAndColor : Icons::RUN_FILE_OVERLAY)
+        runFileIcon.append(maskAndColor);
+    action->setIcon(runFileIcon.icon());
+    action->setToolTip(tr("Run Tests for Current File"));
+    command = ActionManager::registerAction(action, Constants::ACTION_RUN_FILE_ID);
+    command->setDefaultKeySequence(QKeySequence(tr("Alt+Shift+T,Alt+F")));
+    connect(action, &QAction::triggered, this, &AutotestPlugin::onRunFileTriggered);
     action->setEnabled(false);
     menu->addAction(command);
 
@@ -154,9 +172,9 @@ bool AutotestPlugin::initialize(const QStringList &arguments, QString *errorStri
     m_frameworkManager->registerTestFramework(new GTestFramework);
 
     m_frameworkManager->synchronizeSettings(ICore::settings());
-    addAutoReleasedObject(new TestSettingsPage(m_settings));
-    addAutoReleasedObject(new TestNavigationWidgetFactory);
-    addAutoReleasedObject(TestResultsPane::instance());
+    m_testSettingPage = new TestSettingsPage(m_settings);
+    m_navigationWidgetFactory = new TestNavigationWidgetFactory;
+    m_resultsPane = TestResultsPane::instance();
 
     m_frameworkManager->activateFrameworksFromSettings(m_settings);
     TestTreeModel::instance()->syncTestFrameworks();
@@ -166,6 +184,30 @@ bool AutotestPlugin::initialize(const QStringList &arguments, QString *errorStri
 
 void AutotestPlugin::extensionsInitialized()
 {
+    ActionContainer *contextMenu = ActionManager::actionContainer(CppEditor::Constants::M_CONTEXT);
+    if (!contextMenu) // if QC is started without CppEditor plugin
+        return;
+
+    QAction *action = new QAction(tr("&Run Test Under Cursor"), this);
+    action->setEnabled(false);
+    action->setIcon(Utils::Icons::RUN_SMALL_TOOLBAR.icon());
+
+    Command *command = ActionManager::registerAction(action, Constants::ACTION_RUN_UCURSOR);
+    connect(action, &QAction::triggered, std::bind(&AutotestPlugin::onRunUnderCursorTriggered, this,
+                                                   TestRunMode::Run));
+    contextMenu->addSeparator();
+    contextMenu->addAction(command);
+
+    action = new QAction(tr("&Debug Test Under Cursor"), this);;
+    action->setEnabled(false);
+    action->setIcon(ProjectExplorer::Icons::DEBUG_START_SMALL.icon());
+
+
+    command = ActionManager::registerAction(action, Constants::ACTION_RUN_DBG_UCURSOR);
+    connect(action, &QAction::triggered, std::bind(&AutotestPlugin::onRunUnderCursorTriggered, this,
+                                                   TestRunMode::Debug));
+    contextMenu->addAction(command);
+    contextMenu->addSeparator();
 }
 
 ExtensionSystem::IPlugin::ShutdownFlag AutotestPlugin::aboutToShutdown()
@@ -190,18 +232,79 @@ void AutotestPlugin::onRunSelectedTriggered()
     runner->prepareToRunTests(TestRunMode::Run);
 }
 
+void AutotestPlugin::onRunFileTriggered()
+{
+    const IDocument *document = EditorManager::currentDocument();
+    if (!document)
+        return;
+
+    const Utils::FileName &fileName = document->filePath();
+    if (fileName.isEmpty())
+        return;
+
+    TestTreeModel *model = TestTreeModel::instance();
+    const QList<TestConfiguration *> tests = model->getTestsForFile(fileName);
+    if (tests.isEmpty())
+        return;
+
+    TestRunner *runner = TestRunner::instance();
+    runner->setSelectedTests(tests);
+    runner->prepareToRunTests(TestRunMode::Run);
+}
+
+void AutotestPlugin::onRunUnderCursorTriggered(TestRunMode mode)
+{
+    QTextCursor cursor = Utils::Text::wordStartCursor(
+                             TextEditor::BaseTextEditor::currentTextEditor()->editorWidget()->textCursor());
+    cursor.movePosition(QTextCursor::EndOfWord, QTextCursor::KeepAnchor);
+    const QString text = cursor.selectedText();
+    if (text.isEmpty())
+        return; // Do not trigger when no name under cursor
+
+    const QList<TestTreeItem *> testsItems = TestTreeModel::instance()->testItemsByName(text);
+    if (testsItems.isEmpty())
+        return; // Wrong location triggered
+
+    QList<TestConfiguration *> testsToRun;
+    for (const TestTreeItem * item : testsItems){
+        if (TestConfiguration *cfg = item->asConfiguration(mode))
+            testsToRun << cfg;
+    }
+
+    if (testsToRun.isEmpty()) {
+        MessageManager::write(tr("Selected test was not found (%1).").arg(text), MessageManager::Flash);
+        return;
+    }
+
+    auto runner = TestRunner::instance();
+    runner->setSelectedTests(testsToRun);
+    runner->prepareToRunTests(mode);
+}
+
 void AutotestPlugin::updateMenuItemsEnabledState()
 {
-    const bool enabled = !ProjectExplorer::BuildManager::isBuilding()
-            && !TestRunner::instance()->isTestRunning()
-            && TestTreeModel::instance()->parser()->state() == TestCodeParser::Idle
-            && ProjectExplorer::ProjectExplorerPlugin::canRunStartupProject(
-                ProjectExplorer::Constants::NORMAL_RUN_MODE);
+    const ProjectExplorer::Project *project = ProjectExplorer::SessionManager::startupProject();
+    const ProjectExplorer::Target *target = project ? project->activeTarget() : nullptr;
+    const bool canScan = !TestRunner::instance()->isTestRunning()
+            && TestTreeModel::instance()->parser()->state() == TestCodeParser::Idle;
     const bool hasTests = TestTreeModel::instance()->hasTests();
+    // avoid expensive call to PE::canRunStartupProject() - limit to minimum necessary checks
+    const bool canRun = hasTests && canScan
+            && project && !project->needsConfiguration()
+            && target && target->activeRunConfiguration()
+            && !ProjectExplorer::BuildManager::isBuilding();
 
-    ActionManager::command(Constants::ACTION_RUN_ALL_ID)->action()->setEnabled(enabled && hasTests);
-    ActionManager::command(Constants::ACTION_RUN_SELECTED_ID)->action()->setEnabled(enabled && hasTests);
-    ActionManager::command(Constants::ACTION_SCAN_ID)->action()->setEnabled(enabled);
+    ActionManager::command(Constants::ACTION_RUN_ALL_ID)->action()->setEnabled(canRun);
+    ActionManager::command(Constants::ACTION_RUN_SELECTED_ID)->action()->setEnabled(canRun);
+    ActionManager::command(Constants::ACTION_RUN_FILE_ID)->action()->setEnabled(canRun);
+    ActionManager::command(Constants::ACTION_SCAN_ID)->action()->setEnabled(canScan);
+
+    ActionContainer *contextMenu = ActionManager::actionContainer(CppEditor::Constants::M_CONTEXT);
+    if (!contextMenu)
+        return; // When no context menu, actions do not exists
+
+    ActionManager::command(Constants::ACTION_RUN_UCURSOR)->action()->setEnabled(canRun);
+    ActionManager::command(Constants::ACTION_RUN_DBG_UCURSOR)->action()->setEnabled(canRun);
 }
 
 QList<QObject *> AutotestPlugin::createTestObjects() const

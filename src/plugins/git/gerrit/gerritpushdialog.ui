@@ -77,19 +77,19 @@
      <item>
       <widget class="QCheckBox" name="draftCheckBox">
        <property name="toolTip">
-        <string>Checked - Mark change as private
-Unchecked - Unmark change as private
-Semi-checked - Do not change current state</string>
+        <string>Checked - Mark change as private.
+Unchecked - Remove mark.
+Partially checked - Do not change current state.</string>
        </property>
        <property name="text">
-        <string>&amp;Draft/Private</string>
+        <string>&amp;Draft/private</string>
        </property>
       </widget>
      </item>
      <item>
       <widget class="QCheckBox" name="wipCheckBox">
        <property name="text">
-        <string>&amp;Work-In-Progress</string>
+        <string>&amp;Work-in-progress</string>
        </property>
        <property name="tristate">
         <bool>true</bool>

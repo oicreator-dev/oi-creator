@@ -35,6 +35,7 @@
 #include "cppprojectfile.h"
 #include "cpptoolsbridge.h"
 #include "projectinfo.h"
+#include "stringtable.h"
 #include "cpptoolsbridgeqtcreatorimplementation.h"
 
 #include <coreplugin/actionmanager/actioncontainer.h>
@@ -57,7 +58,6 @@
 #include <utils/mimetypes/mimedatabase.h>
 #include <utils/qtcassert.h>
 
-#include <QtPlugin>
 #include <QFileInfo>
 #include <QDir>
 #include <QDebug>
@@ -72,12 +72,41 @@ namespace Internal {
 
 enum { debug = 0 };
 
-static CppToolsPlugin *m_instance = 0;
+static CppToolsPlugin *m_instance = nullptr;
 static QHash<QString, QString> m_headerSourceMapping;
+
+class CppToolsPluginPrivate
+{
+public:
+    CppToolsPluginPrivate()
+        : m_codeModelSettings(new CppCodeModelSettings)
+    {
+        StringTable::initialize();
+        CppModelManager::createCppModelManager(m_instance);
+        m_settings = new CppToolsSettings(m_instance); // force registration of cpp tools settings
+        m_codeModelSettings->fromSettings(ICore::settings());
+        m_cppFileSettingsPage = new CppFileSettingsPage(m_instance->m_fileSettings);
+        m_cppCodeModelSettingsPage = new CppCodeModelSettingsPage(m_codeModelSettings);
+        m_cppCodeStyleSettingsPage = new CppCodeStyleSettingsPage;
+    }
+
+    ~CppToolsPluginPrivate()
+    {
+        StringTable::destroy();
+        delete m_cppFileSettingsPage;
+        delete m_cppCodeModelSettingsPage;
+        delete m_cppCodeStyleSettingsPage;
+    }
+
+    QSharedPointer<CppCodeModelSettings> m_codeModelSettings;
+    CppToolsSettings *m_settings = nullptr;
+    CppFileSettingsPage *m_cppFileSettingsPage = nullptr;
+    CppCodeModelSettingsPage *m_cppCodeModelSettingsPage = nullptr;
+    CppCodeStyleSettingsPage *m_cppCodeStyleSettingsPage = nullptr;
+};
 
 CppToolsPlugin::CppToolsPlugin()
     : m_fileSettings(new CppFileSettings)
-    , m_codeModelSettings(new CppCodeModelSettings)
 {
     m_instance = this;
     auto bridgeImplementation = std::unique_ptr<CppToolsBridgeQtCreatorImplementation>(new CppToolsBridgeQtCreatorImplementation);
@@ -86,7 +115,9 @@ CppToolsPlugin::CppToolsPlugin()
 
 CppToolsPlugin::~CppToolsPlugin()
 {
-    m_instance = 0;
+    delete d;
+    d = nullptr;
+    m_instance = nullptr;
 }
 
 CppToolsPlugin *CppToolsPlugin::instance()
@@ -134,17 +165,9 @@ bool CppToolsPlugin::initialize(const QStringList &arguments, QString *error)
     Q_UNUSED(arguments)
     Q_UNUSED(error)
 
-    CppModelManager::createCppModelManager(this, m_stringTable);
-
-    m_settings = new CppToolsSettings(this); // force registration of cpp tools settings
-
-    m_codeModelSettings->fromSettings(ICore::settings());
+    d = new CppToolsPluginPrivate;
 
     JsExpander::registerQObjectForJs(QLatin1String("Cpp"), new CppToolsJsExtension);
-
-    addAutoReleasedObject(new CppFileSettingsPage(m_fileSettings));
-    addAutoReleasedObject(new CppCodeModelSettingsPage(m_codeModelSettings));
-    addAutoReleasedObject(new CppCodeStyleSettingsPage);
 
     // Menus
     ActionContainer *mtools = ActionManager::actionContainer(Core::Constants::M_TOOLS);
@@ -188,24 +211,14 @@ void CppToolsPlugin::extensionsInitialized()
 {
     // The Cpp editor plugin, which is loaded later on, registers the Cpp mime types,
     // so, apply settings here
-    m_fileSettings->fromSettings(ICore::settings());
-    if (!m_fileSettings->applySuffixesToMimeDB())
+    m_instance->m_fileSettings->fromSettings(ICore::settings());
+    if (!m_instance->m_fileSettings->applySuffixesToMimeDB())
         qWarning("Unable to apply cpp suffixes to mime database (cpp mime types not found).\n");
-}
-
-ExtensionSystem::IPlugin::ShutdownFlag CppToolsPlugin::aboutToShutdown()
-{
-    return SynchronousShutdown;
 }
 
 QSharedPointer<CppCodeModelSettings> CppToolsPlugin::codeModelSettings() const
 {
-    return m_codeModelSettings;
-}
-
-StringTable &CppToolsPlugin::stringTable()
-{
-    return instance()->m_stringTable;
+    return d->m_codeModelSettings;
 }
 
 void CppToolsPlugin::switchHeaderSource()

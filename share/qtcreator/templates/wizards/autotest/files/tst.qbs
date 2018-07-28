@@ -17,6 +17,7 @@ CppApplication {
     ]
 @else
     consoleApplication: true
+@endif
 
 @if "%{TestFrameWork}" == "GTest"
     property string googletestDir: {
@@ -28,7 +29,6 @@ CppApplication {
             return Environment.getEnv("GOOGLETEST_DIR")
         }
     }
-@endif
 
 @if "%{GTestCXX11}" == "true"
     cpp.cxxLanguageVersion: "c++11"
@@ -43,13 +43,33 @@ CppApplication {
     }
 
 
-    cpp.includePaths: [].concat(googleCommon.getGTestIncludes(googletestDir))
-                        .concat(googleCommon.getGMockIncludes(googletestDir))
+    cpp.includePaths: [].concat(googleCommon.getGTestIncludes(qbs, googletestDir))
+                        .concat(googleCommon.getGMockIncludes(qbs, googletestDir))
 
     files: [
         "%{MainCppName}",
         "%{TestCaseFileWithHeaderSuffix}",
-    ].concat(googleCommon.getGTestAll(googletestDir))
-     .concat(googleCommon.getGMockAll(googletestDir))
+    ].concat(googleCommon.getGTestAll(qbs, googletestDir))
+     .concat(googleCommon.getGMockAll(qbs, googletestDir))
+@endif
+@if "%{TestFrameWork}" == "QtQuickTest"
+    Depends { name: "cpp" }
+    Depends { name: "Qt.core" }
+    Depends {
+        condition: Qt.core.versionMajor > 4
+        name: "Qt.qmltest"
+    }
+
+    Group {
+        name: "main application"
+        files: [ "%{MainCppName}" ]
+    }
+
+    Group {
+        name: "qml test files"
+        files: "%{TestCaseFileWithQmlSuffix}"
+    }
+
+    cpp.defines: base.concat("QUICK_TEST_SOURCE_DIR=\\"" + path + "\\"")
 @endif
 }

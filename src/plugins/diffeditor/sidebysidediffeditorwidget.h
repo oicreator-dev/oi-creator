@@ -85,9 +85,9 @@ private:
                                              int lineNumber, int columnNumber);
     void slotRightJumpToOriginalFileRequested(int diffFileIndex,
                                               int lineNumber, int columnNumber);
-    void slotLeftContextMenuRequested(QMenu *menu, int diffFileIndex,
+    void slotLeftContextMenuRequested(QMenu *menu, int fileIndex,
                                       int chunkIndex);
-    void slotRightContextMenuRequested(QMenu *menu, int diffFileIndex,
+    void slotRightContextMenuRequested(QMenu *menu, int fileIndex,
                                        int chunkIndex);
     void leftVSliderChanged();
     void rightVSliderChanged();
@@ -95,6 +95,7 @@ private:
     void rightHSliderChanged();
     void leftCursorPositionChanged();
     void rightCursorPositionChanged();
+    void syncHorizontalScrollBarPolicy();
     void handlePositionChange(SideDiffEditorWidget *source, SideDiffEditorWidget *dest);
     void syncCursor(SideDiffEditorWidget *source, SideDiffEditorWidget *dest);
 

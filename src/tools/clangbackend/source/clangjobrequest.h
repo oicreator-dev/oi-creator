@@ -49,16 +49,15 @@ public:
     enum class Type {
         Invalid,
 
-        UpdateDocumentAnnotations,
-        CreateInitialDocumentPreamble,
+        UpdateAnnotations,
+        UpdateExtraAnnotations,
 
         ParseSupportiveTranslationUnit,
-        ReparseSupportiveTranslationUnit,
 
-        CompleteCode,
-        RequestDocumentAnnotations,
+        RequestCompletions,
+        RequestAnnotations,
         RequestReferences,
-        FollowSymbol,
+        RequestFollowSymbol,
         RequestToolTip,
 
         SuspendDocument,
@@ -96,6 +95,7 @@ public:
 
     IAsyncJob *createJob() const;
     void cancelJob(ClangCodeModelClientInterface &client) const;
+    bool isTakeOverable() const;
 
     bool operator==(const JobRequest &other) const;
 

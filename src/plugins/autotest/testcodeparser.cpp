@@ -173,7 +173,7 @@ void TestCodeParser::updateTestTree(ITestParser *parser)
 
 static QStringList filterFiles(const QString &projectDir, const QStringList &files)
 {
-    const QSharedPointer<TestSettings> &settings = AutotestPlugin::instance()->settings();
+    const QSharedPointer<TestSettings> &settings = AutotestPlugin::settings();
     const QSet<QString> &filters = settings->whiteListFilters.toSet(); // avoid duplicates
     if (!settings->filterScan || filters.isEmpty())
         return files;
@@ -276,7 +276,7 @@ bool TestCodeParser::postponed(const QStringList &fileList)
                     m_reparseTimer.start();
                     return true;
                 }
-                // intentional fall-through
+                Q_FALLTHROUGH();
             default:
                 m_postponedFiles.insert(fileList.first());
                 m_reparseTimer.stop();

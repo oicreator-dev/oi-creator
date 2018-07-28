@@ -209,6 +209,18 @@ bool NavigatorView::isNodeInvisible(const ModelNode &modelNode) const
     return modelNode.auxiliaryData("invisible").toBool();
 }
 
+void NavigatorView::disableWidget()
+{
+    if (m_widget)
+        m_widget->disableNavigator();
+}
+
+void NavigatorView::enableWidget()
+{
+    if (m_widget)
+        m_widget->enableNavigator();
+}
+
 ModelNode NavigatorView::modelNodeForIndex(const QModelIndex &modelIndex) const
 {
     return modelIndex.model()->data(modelIndex, ModelNodeRole).value<ModelNode>();
@@ -454,7 +466,7 @@ void NavigatorView::updateItemSelection()
     blockSelectionChangedSignal(blocked);
 
     if (!selectedModelNodes().isEmpty())
-        treeWidget()->scrollTo(indexForModelNode(selectedModelNodes().first()));
+        treeWidget()->scrollTo(indexForModelNode(selectedModelNodes().constFirst()));
 
     // make sure selected nodes a visible
     foreach (const QModelIndex &selectedIndex, itemSelection.indexes()) {

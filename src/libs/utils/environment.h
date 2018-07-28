@@ -60,9 +60,18 @@ public:
         return operation == other.operation && name == other.name && value == other.value;
     }
 
+    bool operator!=(const EnvironmentItem &other) const
+    {
+        return !(*this == other);
+    }
+
     static void sort(QList<EnvironmentItem> *list);
     static QList<EnvironmentItem> fromStringList(const QStringList &list);
     static QStringList toStringList(const QList<EnvironmentItem> &list);
+    static QList<EnvironmentItem> itemsFromVariantList(const QVariantList &list);
+    static QVariantList toVariantList(const QList<EnvironmentItem> &list);
+    static EnvironmentItem itemFromVariantList(const QVariantList &list);
+    static QVariantList toVariantList(const EnvironmentItem &item);
 
 private:
     void apply(Environment *e, Operation op) const;
@@ -91,6 +100,7 @@ public:
     /// Return the Environment changes necessary to modify this into the other environment.
     QList<EnvironmentItem> diff(const Environment &other, bool checkAppendPrepend = false) const;
     bool hasKey(const QString &key) const;
+    OsType osType() const;
 
     QString userName() const;
 

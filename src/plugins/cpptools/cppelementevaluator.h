@@ -81,6 +81,8 @@ private:
     QString m_diagnosis;
 };
 
+class CppClass;
+
 class CPPTOOLS_EXPORT CppElement
 {
 protected:
@@ -89,6 +91,8 @@ protected:
 public:
     virtual ~CppElement();
 
+    virtual CppClass *toCppClass();
+
     TextEditor::HelpItem::Category helpCategory;
     QStringList helpIdCandidates;
     QString helpMark;
@@ -96,32 +100,7 @@ public:
     QString tooltip;
 };
 
-class Unknown : public CppElement
-{
-public:
-    explicit Unknown(const QString &type);
-
-public:
-    QString type;
-};
-
-class CppInclude : public CppElement
-{
-public:
-    explicit CppInclude(const CPlusPlus::Document::Include &includeFile);
-
-public:
-    QString path;
-    QString fileName;
-};
-
-class CppMacro : public CppElement
-{
-public:
-    explicit CppMacro(const CPlusPlus::Macro &macro);
-};
-
-class CppDeclarableElement : public CppElement
+class CPPTOOLS_EXPORT CppDeclarableElement : public CppElement
 {
 public:
     explicit CppDeclarableElement(CPlusPlus::Symbol *declaration);
@@ -134,13 +113,7 @@ public:
     QIcon icon;
 };
 
-class CppNamespace : public CppDeclarableElement
-{
-public:
-    explicit CppNamespace(CPlusPlus::Symbol *declaration);
-};
-
-class CppClass : public CppDeclarableElement
+class CPPTOOLS_EXPORT CppClass : public CppDeclarableElement
 {
 public:
     CppClass();
@@ -148,44 +121,14 @@ public:
 
     bool operator==(const CppClass &other);
 
+    CppClass *toCppClass() final;
+
     void lookupBases(CPlusPlus::Symbol *declaration, const CPlusPlus::LookupContext &context);
     void lookupDerived(CPlusPlus::Symbol *declaration, const CPlusPlus::Snapshot &snapshot);
 
 public:
     QList<CppClass> bases;
     QList<CppClass> derived;
-};
-
-class CppFunction : public CppDeclarableElement
-{
-public:
-    explicit CppFunction(CPlusPlus::Symbol *declaration);
-};
-
-class CppEnum : public CppDeclarableElement
-{
-public:
-    explicit CppEnum(CPlusPlus::Enum *declaration);
-};
-
-class CppTypedef : public CppDeclarableElement
-{
-public:
-    explicit CppTypedef(CPlusPlus::Symbol *declaration);
-};
-
-class CppVariable : public CppDeclarableElement
-{
-public:
-    CppVariable(CPlusPlus::Symbol *declaration,
-                const CPlusPlus::LookupContext &context,
-                CPlusPlus::Scope *scope);
-};
-
-class CppEnumerator : public CppDeclarableElement
-{
-public:
-    explicit CppEnumerator(CPlusPlus::EnumeratorDeclaration *declaration);
 };
 
 } // namespace CppTools

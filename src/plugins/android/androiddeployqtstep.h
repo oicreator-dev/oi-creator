@@ -113,11 +113,9 @@ private:
 
     Utils::FileName m_manifestName;
     QString m_serialNumber;
-    QString m_buildDirectory;
     QString m_avdName;
     QString m_apkPath;
-    QStringList m_appProcessBinaries;
-    QString m_libdir;
+    QMap<QString, QString> m_filesToPull;
 
     QString m_targetArch;
     bool m_uninstallPreviousPackage = false;

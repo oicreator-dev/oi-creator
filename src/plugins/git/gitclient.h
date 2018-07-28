@@ -329,12 +329,10 @@ public:
 
 private:
     void finishSubmoduleUpdate();
-    void slotChunkActionsRequested(QMenu *menu, bool isValid);
-    void slotStageChunk();
-    void slotUnstageChunk();
-    void branchesForCommit(const QString &revision);
+    void chunkActionsRequested(QMenu *menu, int fileIndex, int chunkIndex);
 
-    void stage(const QString &patch, bool revert);
+    void stage(DiffEditor::DiffEditorController *diffController,
+               const QString &patch, bool revert);
 
     enum CodecType { CodecSource, CodecLogOutput, CodecNone };
     QTextCodec *codecFor(CodecType codecType, const QString &source = QString()) const;
@@ -378,7 +376,6 @@ private:
     QMap<QString, StashInfo> m_stashInfo;
     QStringList m_updatedSubmodules;
     bool m_disableEditor;
-    QPointer<DiffEditor::DiffEditorController> m_contextController;
     QFutureSynchronizer<void> m_synchronizer; // for commit updates
 };
 

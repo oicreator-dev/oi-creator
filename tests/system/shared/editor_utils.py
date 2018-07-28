@@ -333,7 +333,7 @@ def validateSearchResult(expectedCount):
             resultTreeView.scrollTo(chIndex)
             text = str(chIndex.data()).rstrip('\r')
             rect = resultTreeView.visualRect(chIndex)
-            doubleClick(resultTreeView, rect.x+5, rect.y+5, 0, Qt.LeftButton)
+            doubleClick(resultTreeView, rect.x+50, rect.y+5, 0, Qt.LeftButton)
             editor = getEditorForFileSuffix(itemText)
             if not waitFor("lineUnderCursor(editor) == text", 2000):
                 test.warning("Jumping to search result '%s' is pretty slow." % text)
@@ -362,6 +362,7 @@ def invokeFindUsage(editor, line, typeOperation, n=1):
         return False
     for i in range(n):
         type(editor, typeOperation)
+    snooze(1)
     invokeContextMenuItem(editor, "Find Usages")
     return True
 

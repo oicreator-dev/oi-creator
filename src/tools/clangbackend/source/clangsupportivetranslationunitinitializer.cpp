@@ -56,8 +56,7 @@ SupportiveTranslationUnitInitializer::State SupportiveTranslationUnitInitializer
 
 void SupportiveTranslationUnitInitializer::startInitializing()
 {
-    QTC_CHECK(m_state == State::NotInitialized);
-    if (abortIfDocumentIsClosed())
+    if (!checkStateAndDocument(State::NotInitialized))
         return;
 
     m_document.translationUnits().createAndAppend();
@@ -71,51 +70,43 @@ void SupportiveTranslationUnitInitializer::startInitializing()
     m_state = State::WaitingForParseJob;
 }
 
+void SupportiveTranslationUnitInitializer::abort()
+{
+    m_jobs.setJobFinishedCallback(Jobs::JobFinishedCallback());
+    m_state = State::Aborted;
+}
+
 void SupportiveTranslationUnitInitializer::checkIfParseJobFinished(const Jobs::RunningJob &job)
 {
-    QTC_CHECK(m_state == State::WaitingForParseJob);
-    if (abortIfDocumentIsClosed())
+    if (!checkStateAndDocument(State::WaitingForParseJob))
         return;
 
     if (job.jobRequest.type == JobRequest::Type::ParseSupportiveTranslationUnit) {
-        m_jobs.setJobFinishedCallback([this](const Jobs::RunningJob &runningJob) {
-            checkIfReparseJobFinished(runningJob);
-        });
-
-        addJob(JobRequest::Type::ReparseSupportiveTranslationUnit);
-
-        m_state = State::WaitingForReparseJob;
-    }
-}
-
-void SupportiveTranslationUnitInitializer::checkIfReparseJobFinished(const Jobs::RunningJob &job)
-{
-    QTC_CHECK(m_state == State::WaitingForReparseJob);
-    if (abortIfDocumentIsClosed())
-        return;
-
-    if (job.jobRequest.type == JobRequest::Type::ReparseSupportiveTranslationUnit) {
         if (m_document.translationUnits().areAllTranslationUnitsParsed()) {
             m_jobs.setJobFinishedCallback(nullptr);
             m_state = State::Initialized;
         } else {
-            // The supportive translation unit was reparsed, but the document
+            // The supportive translation unit was parsed, but the document
             // revision changed in the meanwhile, so try again.
-            addJob(JobRequest::Type::ReparseSupportiveTranslationUnit);
+            addJob(JobRequest::Type::ParseSupportiveTranslationUnit);
         }
     }
 }
 
-bool SupportiveTranslationUnitInitializer::abortIfDocumentIsClosed()
+bool SupportiveTranslationUnitInitializer::checkStateAndDocument(State currentExpectedState)
 {
-    QTC_CHECK(m_isDocumentClosedChecker);
-
-    if (m_isDocumentClosedChecker(m_document.filePath(), m_document.projectPart().id())) {
+    if (m_state != currentExpectedState) {
         m_state = State::Aborted;
-        return true;
+        return false;
     }
 
-    return false;
+    QTC_CHECK(m_isDocumentClosedChecker);
+    if (m_isDocumentClosedChecker(m_document.filePath(), m_document.projectPart().id())) {
+        m_state = State::Aborted;
+        return false;
+    }
+
+    return true;
 }
 
 void SupportiveTranslationUnitInitializer::addJob(JobRequest::Type jobRequestType)

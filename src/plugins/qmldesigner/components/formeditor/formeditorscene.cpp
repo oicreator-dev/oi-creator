@@ -44,7 +44,6 @@
 
 #include <utils/algorithm.h>
 #include <utils/qtcassert.h>
-#include <utils/qtcfallthrough.h>
 
 namespace QmlDesigner {
 
@@ -200,8 +199,8 @@ void FormEditorScene::dropEvent(QGraphicsSceneDragDropEvent * event)
 {
     currentTool()->dropEvent(removeLayerItems(itemsAt(event->scenePos())), event);
 
-    if (views().first())
-        views().first()->setFocus();
+    if (views().constFirst())
+        views().constFirst()->setFocus();
 }
 
 void FormEditorScene::dragEnterEvent(QGraphicsSceneDragDropEvent * event)
@@ -237,7 +236,7 @@ QList<QGraphicsItem *> FormEditorScene::itemsAt(const QPointF &pos)
     QTransform transform;
 
     if (!views().isEmpty())
-        transform = views().first()->transform();
+        transform = views().constFirst()->transform();
 
     return items(pos,
                  Qt::IntersectsItemShape,

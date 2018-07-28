@@ -43,15 +43,13 @@ QT_END_NAMESPACE
 
 namespace QmlJS {
     class ModelManagerInterface;
-    class IContextPane;
 namespace AST { class UiObjectMember; }
 }
-
-namespace TextEditor { class TextMark; }
 
 namespace QmlJSEditor {
 
 class QmlJSEditorDocument;
+class QuickToolBar;
 class FindReferences;
 
 namespace Internal {
@@ -105,9 +103,10 @@ protected:
     void scrollContentsBy(int dx, int dy) override;
     void applyFontSettings() override;
     void createToolBar();
-    Utils::Link findLinkAt(const QTextCursor &cursor,
-                           bool resolveTarget = true,
-                           bool inNextSplit = false) override;
+    void findLinkAt(const QTextCursor &cursor,
+                    Utils::ProcessLinkCallback &&processLinkCallback,
+                    bool resolveTarget = true,
+                    bool inNextSplit = false) override;
     QString foldReplacementText(const QTextBlock &block) const override;
     void onRefactorMarkerClicked(const TextEditor::RefactorMarker &marker) override;
 
@@ -126,16 +125,8 @@ private:
     QModelIndex m_outlineModelIndex;
     QmlJS::ModelManagerInterface *m_modelManager = nullptr;
 
-    QmlJS::IContextPane *m_contextPane = nullptr;
+    QuickToolBar *m_contextPane = nullptr;
     int m_oldCursorPosition = -1;
-
-    void createTextMarks(const QList<QmlJS::DiagnosticMessage> &diagnostics);
-    void cleanDiagnosticMarks();
-    QVector<TextEditor::TextMark *> m_diagnosticMarks;
-
-    void createTextMarks(const QmlJSTools::SemanticInfo &info);
-    void cleanSemanticMarks();
-    QVector<TextEditor::TextMark *> m_semanticMarks;
 
     FindReferences *m_findReferences;
 };

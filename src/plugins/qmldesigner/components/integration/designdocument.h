@@ -31,6 +31,8 @@
 #include <componenttextmodifier.h>
 #include <subcomponentmanager.h>
 
+#include <coreplugin/icontext.h>
+
 #include <QObject>
 #include <QString>
 
@@ -58,8 +60,8 @@ class QMLDESIGNERCORE_EXPORT DesignDocument: public QObject
 {
     Q_OBJECT
 public:
-    DesignDocument(QObject *parent = 0);
-    ~DesignDocument();
+    DesignDocument(QObject *parent = nullptr);
+    ~DesignDocument() override;
 
     QString displayName() const;
     QString simplfiedDisplayName() const;
@@ -75,7 +77,7 @@ public:
     Model *currentModel() const;
     Model *documentModel() const;
 
-    QString contextHelpId() const;
+    void contextHelpId(const Core::IContext::HelpIdCallback &callback) const;
     QList<DocumentMessage> qmlParseWarnings() const;
     bool hasQmlParseWarnings() const;
     QList<DocumentMessage> qmlParseErrors() const;

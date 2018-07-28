@@ -36,11 +36,17 @@ class Document;
 
 class SourceLocation
 {
-    friend class Diagnostic;
     friend class SourceRange;
     friend class TranslationUnit;
-    friend class Cursor;
-    friend bool operator==(const SourceLocation &first, const SourceLocation &second);
+
+    friend bool operator==(const SourceLocation &first, const SourceLocation &second)
+    {
+        return clang_equalLocations(first.cxSourceLocation, second.cxSourceLocation);
+    }
+    friend bool operator!=(const SourceLocation &first, const SourceLocation &second)
+    {
+        return !(first == second);
+    }
 
 public:
     SourceLocation();
@@ -48,6 +54,8 @@ public:
                    const Utf8String &filePath,
                    uint line,
                    uint column);
+    SourceLocation(CXTranslationUnit cxTranslationUnit,
+                   CXSourceLocation cxSourceLocation);
 
     const Utf8String &filePath() const;
     uint line() const;
@@ -57,20 +65,17 @@ public:
     SourceLocationContainer toSourceLocationContainer() const;
 
 private:
-    SourceLocation(CXSourceLocation cxSourceLocation);
-
     operator CXSourceLocation() const;
 
 private:
    CXSourceLocation cxSourceLocation;
+   CXTranslationUnit cxTranslationUnit;
    mutable Utf8String filePath_;
    uint line_ = 0;
    uint column_ = 0;
    uint offset_ = 0;
    mutable bool isFilePathNormalized_ = true;
 };
-
-bool operator==(const SourceLocation &first, const SourceLocation &second);
 
 std::ostream &operator<<(std::ostream &os, const SourceLocation &sourceLocation);
 

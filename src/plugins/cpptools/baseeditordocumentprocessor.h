@@ -67,7 +67,7 @@ class CPPTOOLS_EXPORT BaseEditorDocumentProcessor : public QObject
 
 public:
     BaseEditorDocumentProcessor(QTextDocument *textDocument, const QString &filePath);
-    virtual ~BaseEditorDocumentProcessor();
+    ~BaseEditorDocumentProcessor() override;
 
     void run(bool projectsUpdated = false);
     virtual void semanticRehighlight() = 0;
@@ -93,6 +93,8 @@ public:
     virtual QFuture<SymbolInfo> requestFollowSymbol(int line, int column) = 0;
     virtual QFuture<ToolTipInfo> toolTipInfo(const QByteArray &codecName, int line, int column);
 
+    QString filePath() const { return m_filePath; }
+
 public:
     using HeaderErrorDiagnosticWidgetCreator = std::function<QWidget*()>;
 
@@ -117,7 +119,6 @@ protected:
                           BaseEditorDocumentParser::UpdateParams updateParams);
 
     // Convenience
-    QString filePath() const { return m_filePath; }
     unsigned revision() const { return static_cast<unsigned>(m_textDocument->revision()); }
     QTextDocument *textDocument() const { return m_textDocument; }
 

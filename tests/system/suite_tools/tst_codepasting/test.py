@@ -42,6 +42,19 @@ def invalidPasteId(protocol):
     else:
         return -1
 
+def closeHTTPStatusAndPasterDialog(protocol, pasterDialog):
+    mBoxStr = "{type='QMessageBox' unnamed='1' visible='1' windowTitle?='%s *'}" % protocol
+    mBox = waitForObject(mBoxStr, 1000)
+    text = str(mBox.text)
+    # close message box and paster window
+    clickButton("{type='QPushButton' text='Cancel' visible='1' window=%s}" % mBoxStr)
+    clickButton("{type='QPushButton' text='Cancel' visible='1' window='%s'}" % pasterDialog)
+    if 'Service Unavailable' in text:
+        test.warning(text)
+        return True
+    test.log("Closed dialog without expected error.", text)
+    return False
+
 def pasteFile(sourceFile, protocol):
     def resetFiles():
         clickButton(waitForObject(":*Qt Creator.Clear_QToolButton"))
@@ -71,12 +84,17 @@ def pasteFile(sourceFile, protocol):
     # make sure to read all former errors (they won't get read twice)
     aut.readStderr()
     clickButton(waitForObject(":Send to Codepaster.Paste_QPushButton"))
-    outputWindow = waitForObject(":Qt Creator_Core::OutputWindow")
-    waitFor("'https://' in str(outputWindow.plainText)", 20000)
     try:
+        outputWindow = waitForObject(":Qt Creator_Core::OutputWindow")
+        waitFor("'https://' in str(outputWindow.plainText)", 20000)
         output = str(outputWindow.plainText).splitlines()[-1]
     except:
         output = ""
+        try:
+            if closeHTTPStatusAndPasterDialog(protocol, ':Send to Codepaster_CodePaster::PasteView'):
+                raise Exception(serverProblems)
+        except:
+            pass
     stdErrOut = aut.readStderr()
     match = re.search("^%s protocol error: (.*)$" % protocol, stdErrOut, re.MULTILINE)
     if match:
@@ -102,7 +120,14 @@ def fetchSnippet(protocol, description, pasteId, skippedPasting):
     foundSnippet = True
     invokeMenuItem("Tools", "Code Pasting", "Fetch Snippet...")
     selectFromCombo(":PasteSelectDialog.protocolBox_QComboBox", protocol)
-    pasteModel = waitForObject(":PasteSelectDialog.listWidget_QListWidget").model()
+    try:
+        pasteModel = waitForObject(":PasteSelectDialog.listWidget_QListWidget").model()
+    except:
+        try:
+            if closeHTTPStatusAndPasterDialog(protocol, ':PasteSelectDialog_CodePaster::PasteSelectDialog'):
+                return -1
+        except:
+            pass
     waitFor("pasteModel.rowCount() > 1", 20000)
     if (not skippedPasting and not protocol == NAME_PBCA
         and not any(map(lambda str:pasteId in str, dumpItems(pasteModel)))):
@@ -155,7 +180,7 @@ def main():
         skippedPasting = True
         description = "Paste from 2017-05-11"
         if protocol == NAME_KDE:
-            pasteId = "pyy2xvjh7"   # valid for one year
+            pasteId = "pysjk6n2i"
             pastedText = readFile(os.path.join(os.getcwd(), "testdata", "main-prepasted.cpp"))
         elif skipPastingToPastebinCom and protocol == NAME_PBCOM:
             pasteId = "8XHP0ZgH"
@@ -186,7 +211,7 @@ def main():
             clickButton(waitForObject(":*Qt Creator.Clear_QToolButton"))
             continue
         test.compare(filenameCombo.currentText, "%s: %s" % (protocol, pasteId), "Verify title of editor")
-        if protocol == NAME_PBCOM and pastedText.endswith("\n"):
+        if protocol in (NAME_KDE, NAME_PBCOM) and pastedText.endswith("\n"):
             pastedText = pastedText[:-1]
         test.compare(editor.plainText, pastedText, "Verify that pasted and fetched texts are the same")
         invokeMenuItem("File", "Close All")

@@ -55,13 +55,11 @@ void TestResultDelegate::paint(QPainter *painter, const QStyleOptionViewItem &op
 {
     QStyleOptionViewItem opt = option;
     initStyleOption(&opt, index);
-    painter->save();
 
     QFontMetrics fm(opt.font);
     QBrush background;
     QColor foreground;
 
-    const QAbstractItemView *view = qobject_cast<const QAbstractItemView *>(opt.widget);
     const bool selected = opt.state & QStyle::State_Selected;
 
     if (selected) {
@@ -71,10 +69,14 @@ void TestResultDelegate::paint(QPainter *painter, const QStyleOptionViewItem &op
         background = opt.palette.window().color();
         foreground = opt.palette.text().color();
     }
+
+    auto resultFilterModel = qobject_cast<const TestResultFilterModel *>(index.model());
+    if (!resultFilterModel)
+        return;
+    painter->save();
     painter->fillRect(opt.rect, background);
     painter->setPen(foreground);
 
-    TestResultFilterModel *resultFilterModel = static_cast<TestResultFilterModel *>(view->model());
     LayoutPositions positions(opt, resultFilterModel);
     const TestResult *testResult = resultFilterModel->testResult(index);
     QTC_ASSERT(testResult, painter->restore();return);
@@ -105,8 +107,7 @@ void TestResultDelegate::paint(QPainter *painter, const QStyleOptionViewItem &op
     if (selected) {
         output.replace('\n', QChar::LineSeparator);
 
-        if (AutotestPlugin::instance()->settings()->limitResultOutput
-                && output.length() > outputLimit)
+        if (AutotestPlugin::settings()->limitResultOutput && output.length() > outputLimit)
             output = output.left(outputLimit).append("...");
 
         recalculateTextLayout(index, output, painter->font(), positions.textAreaWidth());
@@ -163,8 +164,7 @@ QSize TestResultDelegate::sizeHint(const QStyleOptionViewItem &option, const QMo
         QString output = testResult->outputString(selected);
         output.replace('\n', QChar::LineSeparator);
 
-        if (AutotestPlugin::instance()->settings()->limitResultOutput
-                && output.length() > outputLimit)
+        if (AutotestPlugin::settings()->limitResultOutput && output.length() > outputLimit)
             output = output.left(outputLimit).append("...");
 
         recalculateTextLayout(index, output, opt.font, positions.textAreaWidth());

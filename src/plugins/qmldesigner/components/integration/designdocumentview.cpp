@@ -24,6 +24,8 @@
 ****************************************************************************/
 
 #include "designdocumentview.h"
+
+#include <exception.h>
 #include <rewriterview.h>
 #include <basetexteditmodifier.h>
 #include <modelmerger.h>
@@ -130,8 +132,9 @@ QString DesignDocumentView::toText() const
 
     ModelNode rewriterNode(rewriterView->rootModelNode());
 
+    rewriterView->writeAuxiliaryData();
+    return rewriterView->extractText({rewriterNode}).value(rewriterNode) + rewriterView->getRawAuxiliaryData();
     //get the text of the root item without imports
-    return rewriterView->extractText({rewriterNode}).value(rewriterNode);
 }
 
 void DesignDocumentView::fromText(QString text)
@@ -151,9 +154,15 @@ void DesignDocumentView::fromText(QString text)
     rewriterView->setTextModifier(&modifier);
     inputModel->setRewriterView(rewriterView.data());
 
+    rewriterView->restoreAuxiliaryData();
+
     if (rewriterView->errors().isEmpty() && rewriterView->rootModelNode().isValid()) {
         ModelMerger merger(this);
-        merger.replaceModel(rewriterView->rootModelNode());
+        try {
+            merger.replaceModel(rewriterView->rootModelNode());
+        } catch(Exception &e) {
+            e.showException();
+        }
     }
 }
 
@@ -170,17 +179,17 @@ Model *DesignDocumentView::pasteToModel()
 {
     Model *parentModel = currentModel();
 
-    QTC_ASSERT(parentModel, return 0);
+    QTC_ASSERT(parentModel, return nullptr);
 
     Model *pasteModel(Model::create("empty", 1, 0, parentModel));
-
-    pasteModel->setFileUrl(parentModel->fileUrl());
-    pasteModel->changeImports(parentModel->imports(), {});
 
     Q_ASSERT(pasteModel);
 
     if (!pasteModel)
-        return 0;
+        return nullptr;
+
+    pasteModel->setFileUrl(parentModel->fileUrl());
+    pasteModel->changeImports(parentModel->imports(), {});
 
     DesignDocumentView view;
     pasteModel->attachView(&view);
@@ -219,7 +228,7 @@ void DesignDocumentView::copyModelNodes(const QList<ModelNode> &nodesToCopy)
     copyModel->attachView(&view);
 
     if (selectedNodes.count() == 1) {
-        ModelNode selectedNode(selectedNodes.first());
+        const ModelNode &selectedNode = selectedNodes.constFirst();
 
         if (!selectedNode.isValid())
             return;

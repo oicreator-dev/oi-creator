@@ -171,7 +171,28 @@ bool StringDetectRule::doMatchSucceed(const QString &text,
     return false;
 }
 
+bool WordDetectRule::doMatchSucceed(const QString &text, const int length, ProgressData *progress)
+{
+    const int offset = progress->offset();
+    if (length - offset < m_length)
+        return false;
+    if (offset > 0 && !definition()->isDelimiter(text.at(offset - 1)))
+        return false;
+    if (text.midRef(offset, m_string.size()).compare(m_string, m_caseSensitivity) != 0)
+        return false;
+    if (length > offset + m_string.size() && !definition()->isDelimiter(text.at(offset + m_string.size())))
+        return false;
+    progress->incrementOffset(m_length);
+    return true;
+}
+
 // RegExpr
+RegExprRule::~RegExprRule()
+{
+    if (m_progress)
+        m_progress->unTrackRule(this);
+}
+
 void RegExprRule::setPattern(const QString &pattern)
 {
     if (pattern.startsWith(QLatin1Char('^')))
@@ -194,6 +215,7 @@ void RegExprRule::doReplaceExpressions(const QStringList &captures)
 
 void RegExprRule::doProgressFinished()
 {
+    m_progress = nullptr;
     m_isCached = false;
 }
 
@@ -234,9 +256,18 @@ bool RegExprRule::doMatchSucceed(const QString &text,
         return true;
 
     m_isCached = true;
+    m_progress = progress;
     progress->trackRule(this);
 
     return false;
+}
+
+RegExprRule *RegExprRule::doClone() const
+{
+    auto clone = new RegExprRule(*this);
+    if (m_progress)
+        m_progress->trackRule(clone);
+    return clone;
 }
 
 // Keyword

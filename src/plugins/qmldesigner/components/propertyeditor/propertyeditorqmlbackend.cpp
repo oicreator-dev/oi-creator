@@ -29,6 +29,7 @@
 #include "propertyeditortransaction.h"
 #include <qmldesignerconstants.h>
 #include <qmldesignerplugin.h>
+#include <qmltimeline.h>
 
 #include <qmlobjectnode.h>
 #include <nodemetainfo.h>
@@ -270,6 +271,8 @@ void PropertyEditorQmlBackend::setup(const QmlObjectNode &qmlObjectNode, const Q
 
     if (qmlObjectNode.isValid()) {
 
+        m_contextObject->setModel(propertyEditor->model());
+
         qCInfo(propertyEditorBenchmark) << Q_FUNC_INFO;
 
         QTime time;
@@ -328,6 +331,9 @@ void PropertyEditorQmlBackend::setup(const QmlObjectNode &qmlObjectNode, const Q
         contextObject()->setIsBaseState(qmlObjectNode.isInBaseState());
 
         contextObject()->setHasAliasExport(qmlObjectNode.isAliasExported());
+
+        contextObject()->setHasActiveTimeline(QmlTimeline::hasActiveTimeline(qmlObjectNode.view()));
+
         contextObject()->setSelectionChanged(false);
 
         contextObject()->setSelectionChanged(false);
@@ -502,7 +508,8 @@ QString PropertyEditorQmlBackend::fileFromUrl(const QUrl &url)
 
 bool PropertyEditorQmlBackend::checkIfUrlExists(const QUrl &url)
 {
-    return QFileInfo::exists(fileFromUrl(url));
+    const QString &file = fileFromUrl(url);
+    return !file.isEmpty() && QFileInfo::exists(file);
 }
 
 void PropertyEditorQmlBackend::emitSelectionToBeChanged()
@@ -550,12 +557,12 @@ QString PropertyEditorQmlBackend::locateQmlFile(const NodeMetaInfo &info, const 
 
     //Check for qml files with versions first
 
-    const QString withoutDir = relativePath.split(QStringLiteral("/")).last();
+    const QString withoutDir = relativePath.split(QStringLiteral("/")).constLast();
 
     if (importDirVersion.exists(withoutDir))
         return importDirVersion.absoluteFilePath(withoutDir);
 
-    const QString withoutDirWithVersion = relativePathWithVersion.split(QStringLiteral("/")).last();
+    const QString withoutDirWithVersion = relativePathWithVersion.split(QStringLiteral("/")).constLast();
 
     const QStringList possiblePaths = {
         importDir.absoluteFilePath(relativePathWithVersion),
