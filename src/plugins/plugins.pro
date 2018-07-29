@@ -27,12 +27,8 @@ SUBDIRS   = \
     todo \
     beautifier \
     silversearcher \
-    lmakeprojectmanager
-
-!isEmpty(NoRemoveQmakeProjectManager) {
-    SUBDIRS+=qmakeprojectmanager
-}
-
+    lmakeprojectmanager \
+    qmakeprojectmanager
 
 qtHaveModule(serialport) {
     SUBDIRS += serialterminal
