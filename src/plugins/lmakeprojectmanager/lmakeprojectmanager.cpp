@@ -20,7 +20,12 @@ LmakeManager::LmakeManager(QObject *parent)
 
 bool LmakeManager::runLMake()
 {
-    QString currentFileName = Core::EditorManager::currentDocument()->filePath().toString();
+    auto document = Core::EditorManager::currentDocument();
+    if (document == nullptr) {
+        qDebug() << "No file opening";
+        return false;
+    }
+    QString currentFileName = document->filePath().toString();
     QStringList lmakeMessage = m_lmakeapi->runLMake(currentFileName);
     qDebug() << lmakeMessage;
     if (!lmakeMessage.empty()) {
