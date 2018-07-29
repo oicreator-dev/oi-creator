@@ -27,8 +27,7 @@ SUBDIRS   = \
     todo \
     beautifier \
     silversearcher \
-    lmakeprojectmanager \
-    lmake
+    lmakeprojectmanager
 
 !isEmpty(NoRemoveQmakeProjectManager) {
     SUBDIRS+=qmakeprojectmanager
