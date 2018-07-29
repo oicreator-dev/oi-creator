@@ -2,6 +2,7 @@
 
 #include <QString>
 
+namespace LMake {
 class Error
 {
 public:
@@ -20,3 +21,4 @@ private:
     int m_line;
     QString m_fileName;
 };
+} // namespace LMake

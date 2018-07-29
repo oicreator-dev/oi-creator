@@ -11,6 +11,8 @@
 #include <QStringList>
 #include <QTextStream>
 
+namespace LMake {
+
 QStringList readFromConfigFile(QFile &file)
 {
     QTextStream ts(file.readAll(), QIODevice::ReadOnly);
@@ -121,3 +123,4 @@ bool isRightVariableName(const QString &code)
     Q_UNUSED(code)
     return true;
 }
+} // namespace LMake

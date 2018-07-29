@@ -12,7 +12,7 @@
 #include <QObject>
 #include <QUrl>
 
-using namespace LMake;
+namespace LMake {
 LMakeAPI::LMakeAPI(QObject *parent)
     : QObject(parent)
 {}
@@ -59,7 +59,7 @@ QStringList LMakeAPI::runLMake(QString fileName)
         try {
             QString make = generateMakeFile();
             QFile makeFile;
-            makeFile.setFileName(sourceFileString + ".Makefile");
+            makeFile.setFileName(removeExtension(sourceFileString) + ".Makefile");
             makeFile.open(QIODevice::WriteOnly);
             makeFile.write(make.toLocal8Bit());
         } catch (Error &e) {
@@ -72,3 +72,4 @@ QStringList LMakeAPI::runLMake(QString fileName)
     }
     return QStringList();
 }
+} // namespace LMake

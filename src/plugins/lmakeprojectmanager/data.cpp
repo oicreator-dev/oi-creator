@@ -2,6 +2,8 @@
 
 #include <QDebug>
 
+namespace LMake {
+
 QMap<QString, QVariantList> Data::m_variable = QMap<QString, QVariantList>();
 
 Data::Data() {}
@@ -142,3 +144,4 @@ QMap<QString, QVariantList> Data::debugOnly_getVariableMap()
     return m_variable;
 }
 #endif
+} // namespace LMake

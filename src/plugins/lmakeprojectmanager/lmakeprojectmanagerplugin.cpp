@@ -10,10 +10,10 @@
 
 #include <QAction>
 
-using namespace LmakeProjectManager;
-
 using namespace Core;
 using namespace ProjectExplorer;
+
+namespace LmakeProjectManager {
 
 bool LmakeProjectManagerPlugin::initialize(const QStringList &arguments, QString *errorMessage)
 {
@@ -29,11 +29,11 @@ bool LmakeProjectManagerPlugin::initialize(const QStringList &arguments, QString
 
     Command *command = nullptr; //似乎是用来保存命令的
 
-    m_runLMakeAction = new QAction(tr("Run lmake"), this);
+    m_runLMakeAction = new QAction(tr("Build"), this);
     const Context globalcontext(Core::Constants::C_GLOBAL);
-    command = ActionManager::registerAction(m_runLMakeAction, "Qt4Builder.RunLMake", globalcontext);
+    command = ActionManager::registerAction(m_runLMakeAction, "Qt4Builder.Build", globalcontext);
     mbuild->addAction(command, ProjectExplorer::Constants::G_BUILD_BUILD);
-    connect(m_runLMakeAction, &QAction::triggered, m_lmakeProjectManager, &LmakeManager::runLMake);
+    connect(m_runLMakeAction, &QAction::triggered, m_lmakeProjectManager, &LmakeManager::build);
 
     return true;
 }
@@ -41,3 +41,4 @@ bool LmakeProjectManagerPlugin::initialize(const QStringList &arguments, QString
 void LmakeProjectManagerPlugin::extensionsInitialized() {}
 
 LmakeProjectManagerPlugin::LmakeProjectManagerPlugin() {}
+} // namespace LmakeProjectManager

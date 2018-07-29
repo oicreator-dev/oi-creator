@@ -3,6 +3,8 @@
 #include <QRegExp>
 #include <QString>
 
+namespace LMake {
+
 QString removeExtension(const QString &source)
 {
     QString pattern(R"(^(.*)\.[^/\\.]*$)");
@@ -34,3 +36,4 @@ QString removeSpace(const QString &code)
     }
     return formattedCode;
 }
+} // namespace LMake

@@ -6,6 +6,8 @@
 #include <QDebug>
 #endif
 
+using namespace LMake;
+
 Error::Error(const QString &errorMessage, int line, const QString &fileName)
     : m_errorMessage(errorMessage)
     , m_line(line)

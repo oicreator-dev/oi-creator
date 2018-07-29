@@ -4,6 +4,7 @@
 #include <QString>
 #include <QVariantList>
 
+namespace LMake {
 /*! \class Data
   \since 0.0.1
   \brief Data类存储解析出来的变量和函数等内容,以及一些对他们的操作
@@ -29,3 +30,4 @@ public:
 private:
     static QMap<QString, QVariantList> m_variable;
 };
+} // namespace LMake

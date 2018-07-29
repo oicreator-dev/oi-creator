@@ -11,6 +11,8 @@
 #include <QVariant>
 #include <QVariantList>
 
+namespace LMake {
+
 QString generateMakeFile()
 {
     QString str;
@@ -169,3 +171,4 @@ bool checkVariableSize(const QString &name, int min, int max, int mode)
         throw Error(QObject::tr("too few value in varibale %1").arg(name));
     return true;
 }
+} // namespace LMake
