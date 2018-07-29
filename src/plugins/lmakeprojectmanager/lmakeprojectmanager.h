@@ -1,10 +1,10 @@
 #pragma once
 
-#include <QObject>
 #include "lmakeapi.h"
 
-namespace LmakeProjectManager
-{
+#include <QObject>
+
+namespace LmakeProjectManager {
 class LmakeManager : public QObject
 {
     Q_OBJECT
@@ -16,6 +16,6 @@ signals:
 
 public slots:
 private:
-    LMake::LMakeAPI* m_lmakeapi=nullptr;
+    LMake::LMakeAPI *m_lmakeapi = nullptr;
 };
-}
+} // namespace LmakeProjectManager

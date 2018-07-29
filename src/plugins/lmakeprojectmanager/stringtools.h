@@ -1,10 +1,7 @@
-#ifndef STRINGTOOLS_H
-#define STRINGTOOLS_H
+#pragma once
 
 class QString;
 
-QString removeExtension(const QString& source);
+QString removeExtension(const QString &source);
 
 QString removeSpace(const QString &code);
-
-#endif // STRINGTOOLS_H

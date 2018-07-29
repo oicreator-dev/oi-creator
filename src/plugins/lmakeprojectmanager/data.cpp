@@ -2,12 +2,9 @@
 
 #include <QDebug>
 
-QMap<QString,QVariantList> Data::m_variable=QMap<QString,QVariantList>();
+QMap<QString, QVariantList> Data::m_variable = QMap<QString, QVariantList>();
 
-Data::Data()
-{
-
-}
+Data::Data() {}
 
 /*!
  * 设置名为\a name的变量的值为\a value
@@ -16,9 +13,9 @@ Data::Data()
  * \param value 变量的值
  * \return 操作成功返回 \c true;操作失败返回 \c false;
  */
-bool Data::setVariable(const QString &name, const QVariantList& value)
+bool Data::setVariable(const QString &name, const QVariantList &value)
 {
-    m_variable[name]=value;
+    m_variable[name] = value;
     return true;
 }
 
@@ -30,10 +27,10 @@ bool Data::setVariable(const QString &name, const QVariantList& value)
  */
 bool Data::setVariable(const QString &name, const QVariant &value)
 {
-    QString l_name=name.toLower();
+    QString l_name = name.toLower();
     QVariantList list;
     list.append(value);
-    m_variable[l_name]= list;
+    m_variable[l_name] = list;
     return true;
 }
 
@@ -45,11 +42,11 @@ bool Data::setVariable(const QString &name, const QVariant &value)
  */
 bool Data::appendVariable(const QString &name, const QVariant &value)
 {
-    QString l_name=name.toLower();
-    auto &var=m_variable[l_name];
-    for(const auto &it: var)
-    {
-        if (it.type()==value.type() && it==value) return false;
+    QString l_name = name.toLower();
+    auto &var = m_variable[l_name];
+    for (const auto &it : var) {
+        if (it.type() == value.type() && it == value)
+            return false;
     }
     var.append(value);
     return true;
@@ -63,11 +60,10 @@ bool Data::appendVariable(const QString &name, const QVariant &value)
  */
 bool Data::appendVariable(const QString &name, const QVariantList &value)
 {
-    QString l_name=name.toLower();
-    bool isSuccess=true;
-    for(const auto &it : value)
-    {
-        isSuccess = appendVariable(l_name,it) && isSuccess;
+    QString l_name = name.toLower();
+    bool isSuccess = true;
+    for (const auto &it : value) {
+        isSuccess = appendVariable(l_name, it) && isSuccess;
     }
     return isSuccess;
 }
@@ -79,10 +75,9 @@ bool Data::appendVariable(const QString &name, const QVariantList &value)
  */
 bool Data::deleteVariable(const QString &name)
 {
-    QString l_name=name.toLower();
-    auto it=m_variable.find(l_name);
-    if (it!=m_variable.end())
-    {
+    QString l_name = name.toLower();
+    auto it = m_variable.find(l_name);
+    if (it != m_variable.end()) {
         m_variable.erase(it);
         return true;
     }
@@ -96,8 +91,8 @@ bool Data::deleteVariable(const QString &name)
  */
 bool Data::isVariable(const QString &name)
 {
-    QString l_name=name.toLower();
-    return m_variable.find(l_name)!=m_variable.end();
+    QString l_name = name.toLower();
+    return m_variable.find(l_name) != m_variable.end();
 }
 
 /*!
@@ -108,21 +103,23 @@ bool Data::isVariable(const QString &name)
  */
 bool Data::isValueInVariable(const QString &name, const QVariant &value)
 {
-    QString l_name=name.toLower();
-    auto it=m_variable.find(l_name);
-    if (it==m_variable.end()) return false;
-    auto &var=*it;
-    for(const auto &i : var)
-    {
-        if (i.type()==value.type() && i==value) return true;
+    QString l_name = name.toLower();
+    auto it = m_variable.find(l_name);
+    if (it == m_variable.end())
+        return false;
+    auto &var = *it;
+    for (const auto &i : var) {
+        if (i.type() == value.type() && i == value)
+            return true;
     }
     return false;
 }
 
 bool Data::addVariable(const QString &name)
 {
-    if (isVariable(name)) return false;
-    m_variable[name]=QVariantList();
+    if (isVariable(name))
+        return false;
+    m_variable[name] = QVariantList();
     return true;
 }
 
@@ -134,10 +131,9 @@ bool Data::addVariable(const QString &name)
  */
 const QVariantList &Data::getVariable(const QString &name)
 {
-    QString l_name=name.toLower();
+    QString l_name = name.toLower();
     return m_variable[l_name];
 }
-
 
 #ifdef QT_DEBUG
 // 仅供debug使用

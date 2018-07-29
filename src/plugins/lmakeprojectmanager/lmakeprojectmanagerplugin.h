@@ -1,9 +1,9 @@
 #pragma once
 
-#include <extensionsystem/iplugin.h>
 #include <coreplugin/icontext.h>
-namespace LmakeProjectManager
-{
+#include <extensionsystem/iplugin.h>
+
+namespace LmakeProjectManager {
 class LmakeManager;
 class LmakeProjectManagerPlugin : public ExtensionSystem::IPlugin
 {
@@ -12,11 +12,12 @@ class LmakeProjectManagerPlugin : public ExtensionSystem::IPlugin
 public:
     bool initialize(const QStringList &arguments, QString *errorMessage) override;
     void extensionsInitialized() override;
+
 public:
     LmakeProjectManagerPlugin();
-private:
-    QAction *m_runLMakeAction=nullptr;
-    LmakeManager *m_lmakeProjectManager=nullptr;
-};
-}
 
+private:
+    QAction *m_runLMakeAction = nullptr;
+    LmakeManager *m_lmakeProjectManager = nullptr;
+};
+} // namespace LmakeProjectManager

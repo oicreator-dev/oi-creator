@@ -1,16 +1,14 @@
 #include "lmakeprojectmanagerplugin.h"
-
-#include <QAction>
-
 #include "lmakeprojectmanager.h"
 
-#include <coreplugin/icore.h>
-#include <coreplugin/coreconstants.h>
-#include <coreplugin/actionmanager/actionmanager.h>
 #include <coreplugin/actionmanager/actioncontainer.h>
+#include <coreplugin/actionmanager/actionmanager.h>
 #include <coreplugin/actionmanager/command.h>
-
+#include <coreplugin/coreconstants.h>
+#include <coreplugin/icore.h>
 #include <projectexplorer/projectexplorerconstants.h>
+
+#include <QAction>
 
 using namespace LmakeProjectManager;
 
@@ -26,8 +24,8 @@ bool LmakeProjectManagerPlugin::initialize(const QStringList &arguments, QString
 
     m_lmakeProjectManager = new LmakeManager;
 
-    ActionContainer *mbuild =  //build菜单
-            ActionManager::actionContainer(ProjectExplorer::Constants::M_BUILDPROJECT);
+    ActionContainer *mbuild = //build菜单
+        ActionManager::actionContainer(ProjectExplorer::Constants::M_BUILDPROJECT);
 
     Command *command = nullptr; //似乎是用来保存命令的
 
@@ -40,12 +38,6 @@ bool LmakeProjectManagerPlugin::initialize(const QStringList &arguments, QString
     return true;
 }
 
-void LmakeProjectManagerPlugin::extensionsInitialized()
-{
+void LmakeProjectManagerPlugin::extensionsInitialized() {}
 
-}
-
-LmakeProjectManagerPlugin::LmakeProjectManagerPlugin()
-{
-
-}
+LmakeProjectManagerPlugin::LmakeProjectManagerPlugin() {}

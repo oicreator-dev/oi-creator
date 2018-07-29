@@ -1,37 +1,35 @@
 #include "stringtools.h"
 
-#include <QString>
 #include <QRegExp>
-
+#include <QString>
 
 QString removeExtension(const QString &source)
 {
     QString pattern(R"(^(.*)\.[^/\\.]*$)");
     QRegExp rx(pattern);
-    if (rx.exactMatch(source))
-    {
+    if (rx.exactMatch(source)) {
         return rx.cap(1);
     }
     return QString();
 }
 
-QString removeSpace(const QString& code)
+QString removeSpace(const QString &code)
 {
     QString formattedCode;
-    bool isSpace=false;
-    for(const QChar& it:code)
-    {
-        if (isSpace)
-        {
-            if (it==' ' || it=='\t' || it == QChar('\0')) continue;
-            if (!formattedCode.isEmpty()) formattedCode.append(' ');
+    bool isSpace = false;
+    for (const QChar &it : code) {
+        if (isSpace) {
+            if (it == ' ' || it == '\t' || it == QChar('\0'))
+                continue;
+            if (!formattedCode.isEmpty())
+                formattedCode.append(' ');
             formattedCode.append(it);
-            isSpace=false;
-        }
-        else
-        {
-            if (it==' ' || it=='\t' || it == QChar('\0')) isSpace=true;
-            else formattedCode.append(it);
+            isSpace = false;
+        } else {
+            if (it == ' ' || it == '\t' || it == QChar('\0'))
+                isSpace = true;
+            else
+                formattedCode.append(it);
         }
     }
     return formattedCode;
