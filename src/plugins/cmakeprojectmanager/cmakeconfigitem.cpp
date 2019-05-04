@@ -42,9 +42,9 @@ namespace CMakeProjectManager {
 
 CMakeConfigItem::CMakeConfigItem() = default;
 
-CMakeConfigItem::CMakeConfigItem(const CMakeConfigItem &other) :
+CMakeConfigItem::CMakeConfigItem(const CMakeConfigItem &other) : // What about inCMakeCache?
     key(other.key), type(other.type), isAdvanced(other.isAdvanced),
-    inCMakeCache(false), isUnset(other.isUnset), value(other.value),
+    isUnset(other.isUnset), value(other.value),
     documentation(other.documentation), values(other.values)
 {}
 

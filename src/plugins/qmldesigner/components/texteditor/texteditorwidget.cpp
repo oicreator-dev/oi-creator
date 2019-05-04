@@ -94,9 +94,9 @@ void TextEditorWidget::setTextEditor(TextEditor::BaseTextEditor *textEditor)
         oldEditor->deleteLater();
 }
 
-void TextEditorWidget::contextHelpId(const Core::IContext::HelpIdCallback &callback) const
+void TextEditorWidget::contextHelp(const Core::IContext::HelpCallback &callback) const
 {
-    m_textEditorView->contextHelpId(callback);
+    m_textEditorView->contextHelp(callback);
 }
 
 void TextEditorWidget::updateSelectionByCursorPosition()
@@ -108,15 +108,20 @@ void TextEditorWidget::updateSelectionByCursorPosition()
     const int cursorPosition = m_textEditor->editorWidget()->textCursor().position();
     RewriterView *rewriterView = m_textEditorView->model()->rewriterView();
 
+    m_blockRoundTrip = true;
     if (rewriterView) {
         ModelNode modelNode = rewriterView->nodeAtTextCursorPosition(cursorPosition);
         if (modelNode.isValid() && !m_textEditorView->isSelectedModelNode(modelNode))
             m_textEditorView->setSelectedModelNode(modelNode);
     }
+    m_blockRoundTrip = false;
 }
 
 void TextEditorWidget::jumpTextCursorToSelectedModelNode()
 {
+    if (m_blockRoundTrip)
+        return;
+
     ModelNode selectedNode;
 
     if (hasFocus())
@@ -133,9 +138,10 @@ void TextEditorWidget::jumpTextCursorToSelectedModelNode()
 
         const int nodeOffset = rewriterView->nodeOffset(selectedNode);
         if (nodeOffset > 0) {
-                int line, column;
-                m_textEditor->editorWidget()->convertPosition(nodeOffset, &line, &column);
-                m_textEditor->editorWidget()->gotoLine(line, column);
+            int line, column;
+            m_textEditor->editorWidget()->convertPosition(nodeOffset, &line, &column);
+            // line has to be 1 based, column 0 based!
+            m_textEditor->editorWidget()->gotoLine(line, column - 1);
         }
     }
     m_updateSelectionTimer.stop();
@@ -186,7 +192,7 @@ bool TextEditorWidget::eventFilter( QObject *, QEvent *event)
                                                            QKeySequence(Qt::Key_Down + Qt::CTRL)
                                                          };
     if (event->type() == QEvent::ShortcutOverride) {
-        QKeyEvent *keyEvent = static_cast<QKeyEvent *>(event);
+        auto keyEvent = static_cast<QKeyEvent *>(event);
 
         if (std::find(overrideKeys.begin(), overrideKeys.end(), keyEvent->key()) != overrideKeys.end()) {
             keyEvent->accept();
@@ -199,7 +205,7 @@ bool TextEditorWidget::eventFilter( QObject *, QEvent *event)
                 | Qt::MetaModifier;
 
         QKeySequence keySqeuence(keyEvent->key() | (keyEvent->modifiers() & relevantModifiers));
-        for (QKeySequence overrideSequence : overrideSequences)
+        for (const QKeySequence &overrideSequence : overrideSequences)
             if (keySqeuence.matches(overrideSequence)) {
                 keyEvent->accept();
                 return true;

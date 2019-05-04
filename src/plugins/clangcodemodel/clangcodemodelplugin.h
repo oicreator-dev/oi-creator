@@ -29,26 +29,35 @@
 
 #include <extensionsystem/iplugin.h>
 
+#include <utils/parameteraction.h>
+
+#include <QFutureWatcher>
+
 namespace ClangCodeModel {
 namespace Internal {
 
-class ClangCodeModelPlugin: public ExtensionSystem::IPlugin
+class ClangCodeModelPlugin final: public ExtensionSystem::IPlugin
 {
     Q_OBJECT
     Q_PLUGIN_METADATA(IID "org.qt-project.Qt.QtCreatorPlugin" FILE "ClangCodeModel.json")
 
 public:
-    bool initialize(const QStringList &arguments, QString *errorMessage);
-    void extensionsInitialized();
+    ~ClangCodeModelPlugin() override;
+    bool initialize(const QStringList &arguments, QString *errorMessage) override;
+    void extensionsInitialized() override;
 
 private:
     void maybeHandleBatchFileAndExit() const;
 
 private:
-    ModelManagerSupportProviderClang m_modelManagerSupportProvider;
+    void generateCompilationDB();
+    void createCompilationDBButton();
 
+    ClangModelManagerSupportProvider m_modelManagerSupportProvider;
+    Utils::ParameterAction *m_generateCompilationDBAction = nullptr;
+    QFutureWatcher<void> m_generatorWatcher;
 #ifdef WITH_TESTS
-    QList<QObject *> createTestObjects() const;
+    QList<QObject *> createTestObjects() const override;
 #endif
 };
 

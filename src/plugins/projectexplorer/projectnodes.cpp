@@ -390,15 +390,15 @@ static QList<FileNode *> scanForFilesRecursively(const Utils::FileName &director
 }
 
 QList<FileNode *>
-FileNode::scanForFilesWithVersionControls(const Utils::FileName &directory,
-                                          const std::function<FileNode *(const Utils::FileName &)> factory,
-                                          const QList<Core::IVersionControl *> &versionControls,
-                                          QFutureInterface<QList<FileNode *>> *future)
+FileNode::scanForFiles(const Utils::FileName &directory,
+                       const std::function<FileNode *(const Utils::FileName &)> factory,
+                       QFutureInterface<QList<FileNode *>> *future)
 {
     QSet<QString> visited;
     if (future)
         future->setProgressRange(0, 1000000);
-    return scanForFilesRecursively(directory, factory, visited, future, 0.0, 1000000.0, versionControls);
+    return scanForFilesRecursively(directory, factory, visited, future, 0.0, 1000000.0,
+                                   Core::VcsManager::versionControls());
 }
 
 bool FileNode::supportsAction(ProjectAction action, const Node *node) const
@@ -477,7 +477,7 @@ QList<Node *> FolderNode::findNodes(const std::function<bool(Node *)> &filter)
         if (n->asFileNode() && filter(n.get()))
             result.append(n.get());
         else if (FolderNode *folder = n->asFolderNode())
-            result.append(folder->findNode(filter));
+            result.append(folder->findNodes(filter));
     }
     return result;
 }
@@ -512,6 +512,33 @@ void FolderNode::forEachGenericNode(const std::function<void(Node *)> &genericTa
         if (FolderNode *fn = n->asFolderNode())
             fn->forEachGenericNode(genericTask);
     }
+}
+
+void FolderNode::forEachProjectNode(const std::function<void(const ProjectNode *)> &task) const
+{
+    if (const ProjectNode *projectNode = asProjectNode())
+        task(projectNode);
+
+    for (const std::unique_ptr<Node> &n : m_nodes) {
+        if (FolderNode *fn = n->asFolderNode())
+            fn->forEachProjectNode(task);
+    }
+}
+
+ProjectNode *FolderNode::findProjectNode(const std::function<bool(const ProjectNode *)> &predicate)
+{
+    if (ProjectNode *projectNode = asProjectNode()) {
+        if (predicate(projectNode))
+            return projectNode;
+    }
+
+    for (const std::unique_ptr<Node> &n : m_nodes) {
+        if (FolderNode *fn = n->asFolderNode()) {
+            if (ProjectNode *pn = fn->findProjectNode(predicate))
+                return pn;
+        }
+    }
+    return nullptr;
 }
 
 const QList<Node *> FolderNode::nodes() const
@@ -854,6 +881,19 @@ ProjectNode *ProjectNode::projectNode(const Utils::FileName &file) const
                 return pnode;
     }
     return nullptr;
+}
+
+QVariant ProjectNode::data(Core::Id role) const
+{
+    Q_UNUSED(role);
+    return QVariant();
+}
+
+bool ProjectNode::setData(Core::Id role, const QVariant &value) const
+{
+    Q_UNUSED(role);
+    Q_UNUSED(value);
+    return false;
 }
 
 bool FolderNode::isEmpty() const

@@ -92,10 +92,7 @@ namespace Internal {
 class ParserPrivate
 {
 public:
-    typedef QHash<QString, CPlusPlus::Document::Ptr>::const_iterator CitDocumentList;
-
-    //! Constructor
-    ParserPrivate() : flatMode(false) {}
+    using CitDocumentList = QHash<QString, CPlusPlus::Document::Ptr>::const_iterator;
 
     //! Get document from documentList
     CPlusPlus::Document::Ptr document(const QString &fileName) const;
@@ -142,7 +139,7 @@ public:
     ParserTreeItem::ConstPtr rootItem;
 
     //! Flat mode
-    bool flatMode;
+    bool flatMode = false;
 };
 
 CPlusPlus::Document::Ptr ParserPrivate::document(const QString &fileName) const
@@ -369,9 +366,9 @@ void Parser::addSymbol(const ParserTreeItem::Ptr &item, const CPlusPlus::Symbol 
     if (itemAdd.isNull())
         itemAdd = ParserTreeItem::Ptr(new ParserTreeItem());
 
-    // locations are 1-based in Symbol, start with 0 for the editor
+    // locations have 1-based column in Symbol, use the same here.
     SymbolLocation location(QString::fromUtf8(symbol->fileName() , symbol->fileNameLength()),
-                            symbol->line(), symbol->column() - 1);
+                            symbol->line(), symbol->column());
     itemAdd->addSymbolLocation(location);
 
     // prevent showing a content of the functions

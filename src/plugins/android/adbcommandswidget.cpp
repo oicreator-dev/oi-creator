@@ -25,7 +25,7 @@
 #include "adbcommandswidget.h"
 #include "ui_adbcommandswidget.h"
 
-#include "utils/utilsicons.h"
+#include <utils/utilsicons.h>
 
 #include <QGroupBox>
 #include <QItemSelectionModel>
@@ -77,9 +77,7 @@ AdbCommandsWidget::AdbCommandsWidget(QWidget *parent) :
 {
 }
 
-AdbCommandsWidget::~AdbCommandsWidget()
-{
-}
+AdbCommandsWidget::~AdbCommandsWidget() = default;
 
 QStringList AdbCommandsWidget::commandsList() const
 {

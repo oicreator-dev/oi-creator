@@ -37,13 +37,11 @@ class ClangHoverHandler : public TextEditor::BaseHoverHandler
     Q_DECLARE_TR_FUNCTIONS(ClangHoverHandler)
 
 public:
-    ClangHoverHandler();
     ~ClangHoverHandler() override;
 
     void identifyMatch(TextEditor::TextEditorWidget *editorWidget,
                        int pos,
                        ReportPriority report) override;
-    void decorateToolTip() override;
     void operateTooltip(TextEditor::TextEditorWidget *editorWidget, const QPoint &point) override;
 
 private:

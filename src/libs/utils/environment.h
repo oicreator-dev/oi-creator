@@ -27,6 +27,7 @@
 
 #include "fileutils.h"
 #include "hostosinfo.h"
+#include "optional.h"
 #include "utils_global.h"
 
 #include <QMap>
@@ -82,7 +83,7 @@ QTCREATOR_UTILS_EXPORT QDebug operator<<(QDebug debug, const EnvironmentItem &i)
 class QTCREATOR_UTILS_EXPORT Environment
 {
 public:
-    typedef QMap<QString, QString>::const_iterator const_iterator;
+    using const_iterator = QMap<QString, QString>::const_iterator;
 
     explicit Environment(OsType osType = HostOsInfo::hostOs()) : m_osType(osType) {}
     explicit Environment(const QStringList &env, OsType osType = HostOsInfo::hostOs());
@@ -139,11 +140,25 @@ public:
     bool operator!=(const Environment &other) const;
     bool operator==(const Environment &other) const;
 
+    static void modifySystemEnvironment(const QList<EnvironmentItem> &list); // use with care!!!
+
 private:
     FileName searchInDirectory(const QStringList &execs, const FileName &directory,
                                QSet<FileName> &alreadyChecked) const;
     QMap<QString, QString> m_values;
     OsType m_osType;
+};
+
+class QTCREATOR_UTILS_EXPORT EnvironmentProvider
+{
+public:
+    QByteArray id;
+    QString displayName;
+    std::function<Environment()> environment;
+
+    static void addProvider(EnvironmentProvider &&provider);
+    static const QVector<EnvironmentProvider> providers();
+    static optional<EnvironmentProvider> provider(const QByteArray &id);
 };
 
 } // namespace Utils

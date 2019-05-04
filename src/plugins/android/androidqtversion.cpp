@@ -98,10 +98,12 @@ QList<Abi> AndroidQtVersion::detectQtAbis() const
 
 void AndroidQtVersion::addToEnvironment(const Kit *k, Utils::Environment &env) const
 {
-    Q_UNUSED(k);
+    const AndroidConfig &config =AndroidConfigurations::currentConfig();
     // this env vars are used by qmake mkspecs to generate makefiles (check QTDIR/mkspecs/android-g++/qmake.conf for more info)
-    env.set(QLatin1String("ANDROID_NDK_HOST"), AndroidConfigurations::currentConfig().toolchainHost());
-    env.set(QLatin1String("ANDROID_NDK_ROOT"), AndroidConfigurations::currentConfig().ndkLocation().toUserOutput());
+    env.set(QLatin1String("ANDROID_NDK_HOST"), config.toolchainHost());
+    env.set(QLatin1String("ANDROID_NDK_ROOT"), config.ndkLocation().toUserOutput());
+    env.set(QLatin1String("ANDROID_NDK_PLATFORM"),
+            config.bestNdkPlatformMatch(qMax(AndroidManager::minimumNDK(k), AndroidManager::minimumSDK(k))));
 }
 
 Utils::Environment AndroidQtVersion::qmakeRunEnvironment() const
@@ -123,9 +125,25 @@ QString AndroidQtVersion::targetArch() const
     return m_targetArch;
 }
 
+int AndroidQtVersion::mininmumNDK() const
+{
+    ensureMkSpecParsed();
+    return m_minNdk;
+}
+
 void AndroidQtVersion::parseMkSpec(ProFileEvaluator *evaluator) const
 {
     m_targetArch = evaluator->value(QLatin1String("ANDROID_TARGET_ARCH"));
+    const QString androidPlatform = evaluator->value(QLatin1String("ANDROID_PLATFORM"));
+    if (!androidPlatform.isEmpty()) {
+        const QRegExp regex("android-(\\d+)");
+        if (regex.exactMatch(androidPlatform)) {
+            bool ok = false;
+            int tmp = regex.cap(1).toInt(&ok);
+            if (ok)
+                m_minNdk = tmp;
+        }
+    }
     BaseQtVersion::parseMkSpec(evaluator);
 }
 

@@ -32,6 +32,11 @@
 namespace ClangBackEnd {
 
 ClangCodeModelServerProxy::ClangCodeModelServerProxy(ClangCodeModelClientInterface *client,
+                                                     QLocalSocket *localSocket)
+    : BaseServerProxy(client, localSocket)
+{}
+
+ClangCodeModelServerProxy::ClangCodeModelServerProxy(ClangCodeModelClientInterface *client,
                                                      QIODevice *ioDevice)
     : BaseServerProxy(client, ioDevice)
 {
@@ -53,16 +58,6 @@ void ClangCodeModelServerProxy::documentsChanged(const DocumentsChangedMessage &
 }
 
 void ClangCodeModelServerProxy::documentsClosed(const DocumentsClosedMessage &message)
-{
-    m_writeMessageBlock.write(message);
-}
-
-void ClangCodeModelServerProxy::projectPartsUpdated(const ProjectPartsUpdatedMessage &message)
-{
-    m_writeMessageBlock.write(message);
-}
-
-void ClangCodeModelServerProxy::projectPartsRemoved(const ProjectPartsRemovedMessage &message)
 {
     m_writeMessageBlock.write(message);
 }

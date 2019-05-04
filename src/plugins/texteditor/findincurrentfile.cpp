@@ -39,7 +39,6 @@ using namespace TextEditor;
 using namespace TextEditor::Internal;
 
 FindInCurrentFile::FindInCurrentFile()
-  : m_currentDocument(0)
 {
     connect(Core::EditorManager::instance(), &Core::EditorManager::currentEditorChanged,
             this, &FindInCurrentFile::handleFileChange);
@@ -67,7 +66,7 @@ Utils::FileIterator *FindInCurrentFile::files(const QStringList &nameFilters,
     QTextCodec *codec = openEditorEncodings.value(fileName);
     if (!codec)
         codec = Core::EditorManager::defaultTextCodec();
-    return new Utils::FileListIterator(QStringList(fileName), QList<QTextCodec *>() << codec);
+    return new Utils::FileListIterator({fileName}, {codec});
 }
 
 QVariant FindInCurrentFile::additionalParameters() const
@@ -95,7 +94,7 @@ void FindInCurrentFile::handleFileChange(Core::IEditor *editor)
 {
     if (!editor) {
         if (m_currentDocument) {
-            m_currentDocument = 0;
+            m_currentDocument = nullptr;
             emit enabledChanged(isEnabled());
         }
     } else {

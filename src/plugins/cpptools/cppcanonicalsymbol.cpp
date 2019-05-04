@@ -55,18 +55,17 @@ const LookupContext &CanonicalSymbol::context() const
 Scope *CanonicalSymbol::getScopeAndExpression(const QTextCursor &cursor, QString *code)
 {
     if (!m_document)
-        return 0;
+        return nullptr;
 
     QTextCursor tc = cursor;
     int line, column;
     Utils::Text::convertPosition(cursor.document(), tc.position(), &line, &column);
-    ++column; // 1-based line and 1-based column
 
     int pos = tc.position();
     QTextDocument *textDocument = cursor.document();
     if (!CppTools::isValidIdentifierChar(textDocument->characterAt(pos)))
         if (!(pos > 0 && CppTools::isValidIdentifierChar(textDocument->characterAt(pos - 1))))
-            return 0;
+            return nullptr;
 
     while (CppTools::isValidIdentifierChar(textDocument->characterAt(pos)))
         ++pos;
@@ -74,7 +73,7 @@ Scope *CanonicalSymbol::getScopeAndExpression(const QTextCursor &cursor, QString
 
     ExpressionUnderCursor expressionUnderCursor(m_document->languageFeatures());
     *code = expressionUnderCursor(tc);
-    return m_document->scopeAt(line, column);
+    return m_document->scopeAt(line, column - 1);
 }
 
 Symbol *CanonicalSymbol::operator()(const QTextCursor &cursor)
@@ -84,7 +83,7 @@ Symbol *CanonicalSymbol::operator()(const QTextCursor &cursor)
     if (Scope *scope = getScopeAndExpression(cursor, &code))
         return operator()(scope, code);
 
-    return 0;
+    return nullptr;
 }
 
 Symbol *CanonicalSymbol::operator()(Scope *scope, const QString &code)
@@ -119,14 +118,12 @@ Symbol *CanonicalSymbol::canonicalSymbol(Scope *scope, const QString &code,
         }
     }
 
-    for (int i = 0; i < results.size(); ++i) {
-        const LookupItem &r = results.at(i);
-
-        if (r.declaration())
+    for (const auto &r : results) {
+         if (r.declaration())
             return r.declaration();
     }
 
-    return 0;
+    return nullptr;
 }
 
 } // namespace CppEditor

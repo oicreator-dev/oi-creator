@@ -51,6 +51,12 @@ QmlProfilerViewManager::QmlProfilerViewManager(QObject *parent,
     QTC_ASSERT(m_profilerModelManager, return);
     QTC_ASSERT(m_profilerState, return);
 
+    m_perspective = new Utils::Perspective(Constants::QmlProfilerPerspectiveId, tr("QML Profiler"));
+    m_perspective->setAboutToActivateCallback([this]() { createViews(); });
+}
+
+void QmlProfilerViewManager::createViews()
+{
     m_traceView = new QmlProfilerTraceView(nullptr, this, m_profilerModelManager);
     connect(m_traceView, &QmlProfilerTraceView::gotoSourceLocation,
             this, &QmlProfilerViewManager::gotoSourceLocation);
@@ -60,9 +66,6 @@ QmlProfilerViewManager::QmlProfilerViewManager(QObject *parent,
             m_traceView, &QmlProfilerTraceView::selectByTypeId);
 
     new QmlProfilerStateWidget(m_profilerState, m_profilerModelManager, m_traceView);
-
-    auto perspective = new Utils::Perspective;
-    perspective->setName(tr("QML Profiler"));
 
     auto prepareEventsView = [this](QmlProfilerEventsView *view) {
         connect(view, &QmlProfilerEventsView::typeSelected,
@@ -83,27 +86,33 @@ QmlProfilerViewManager::QmlProfilerViewManager(QObject *parent,
     m_flameGraphView = new FlameGraphView(m_profilerModelManager);
     prepareEventsView(m_flameGraphView);
 
-    QByteArray anchorDockId;
+    QWidget *anchorDock = nullptr;
     if (m_traceView->isUsable()) {
-        anchorDockId = m_traceView->objectName().toLatin1();
-        perspective->addOperation({anchorDockId, m_traceView, {}, Perspective::SplitVertical});
-        perspective->addOperation({m_flameGraphView->objectName().toLatin1(), m_flameGraphView,
-                                   anchorDockId, Perspective::AddToTab});
+        anchorDock = m_traceView;
+        m_perspective->addWindow(m_traceView, Perspective::SplitVertical, nullptr);
+        m_perspective->addWindow(m_flameGraphView, Perspective::AddToTab, m_traceView);
     } else {
-        anchorDockId = m_flameGraphView->objectName().toLatin1();
-        perspective->addOperation({anchorDockId, m_flameGraphView, {},
-                                   Perspective::SplitVertical});
+        anchorDock = m_flameGraphView;
+        m_perspective->addWindow(m_flameGraphView, Perspective::SplitVertical, nullptr);
     }
-    perspective->addOperation({m_statisticsView->objectName().toLatin1(), m_statisticsView,
-                               anchorDockId, Perspective::AddToTab});
-    perspective->addOperation({anchorDockId, nullptr, {}, Perspective::Raise});
+    m_perspective->addWindow(m_statisticsView, Perspective::AddToTab, anchorDock);
+    m_perspective->addWindow(anchorDock, Perspective::Raise, nullptr);
+    m_perspective->setAboutToActivateCallback(Perspective::Callback());
+    emit viewsCreated();
+}
 
-    Debugger::registerPerspective(Constants::QmlProfilerPerspectiveId, perspective);
+QmlProfilerViewManager::~QmlProfilerViewManager()
+{
+    delete m_traceView;
+    delete m_flameGraphView;
+    delete m_statisticsView;
+    delete m_perspective;
 }
 
 void QmlProfilerViewManager::clear()
 {
-    m_traceView->clear();
+    if (m_traceView)
+        m_traceView->clear();
 }
 
 } // namespace Internal

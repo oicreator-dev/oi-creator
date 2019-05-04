@@ -26,13 +26,17 @@
 #include "clangeditordocumentprocessor.h"
 #include "clangfollowsymbol.h"
 
+#include <coreplugin/editormanager/editormanager.h>
 #include <cpptools/cppmodelmanager.h>
+#include <cpptools/cppfollowsymbolundercursor.h>
 #include <texteditor/texteditor.h>
 
 #include <clangsupport/tokeninfocontainer.h>
 
 #include <utils/textutils.h>
 #include <utils/algorithm.h>
+
+#include <memory>
 
 namespace ClangCodeModel {
 namespace Internal {
@@ -85,10 +89,10 @@ static int includePathStartIndex(const QVector<ClangBackEnd::TokenInfoContainer>
 }
 
 static int includePathEndIndex(const QVector<ClangBackEnd::TokenInfoContainer> &marks,
-                                 int currentIndex)
+                               int currentIndex)
 {
     int endIndex = currentIndex + 1;
-    while (isValidIncludePathToken(marks[endIndex]))
+    while (endIndex < marks.size() && isValidIncludePathToken(marks[endIndex]))
         ++endIndex;
     return endIndex - 1;
 }
@@ -135,8 +139,10 @@ static Utils::Link linkAtCursor(const QTextCursor &cursor,
         return token;
     }
 
-    if (mark.extraInfo.identifier || mark.extraInfo.token == "operator")
+    if (mark.extraInfo.identifier || mark.extraInfo.token == "operator"
+            || mark.extraInfo.token == "auto") {
         return token;
+    }
     return Link();
 }
 
@@ -153,6 +159,12 @@ static ::Utils::ProcessLinkCallback extendedCallback(::Utils::ProcessLinkCallbac
     };
 }
 
+static bool isSameInvocationContext(const Utils::FileName &filePath)
+{
+    return TextEditor::BaseTextEditor::currentTextEditor()->editorWidget()->isVisible()
+        && Core::EditorManager::currentDocument()->filePath() == filePath;
+}
+
 void ClangFollowSymbol::findLink(const CppTools::CursorInEditor &data,
                                  ::Utils::ProcessLinkCallback &&processLinkCallback,
                                  bool resolveTarget,
@@ -161,13 +173,10 @@ void ClangFollowSymbol::findLink(const CppTools::CursorInEditor &data,
                                  CppTools::SymbolFinder *symbolFinder,
                                  bool inNextSplit)
 {
-    int lineNumber = 0, positionInBlock = 0;
+    int line = 0;
+    int column = 0;
     QTextCursor cursor = Utils::Text::wordStartCursor(data.cursor());
-    Utils::Text::convertPosition(cursor.document(), cursor.position(), &lineNumber,
-                                 &positionInBlock);
-
-    const uint line = lineNumber;
-    const uint column = positionInBlock + 1;
+    Utils::Text::convertPosition(cursor.document(), cursor.position(), &line, &column);
 
     ClangEditorDocumentProcessor *processor = ClangEditorDocumentProcessor::get(
                 data.filePath().toString());
@@ -175,9 +184,22 @@ void ClangFollowSymbol::findLink(const CppTools::CursorInEditor &data,
         return processLinkCallback(Utils::Link());
 
     if (!resolveTarget) {
-        processLinkCallback(linkAtCursor(cursor, data.filePath().toString(), line, column,
-                                         processor));
-        return;
+        Utils::Link link = linkAtCursor(cursor,
+                                        data.filePath().toString(),
+                                        static_cast<uint>(line),
+                                        static_cast<uint>(column),
+                                        processor);
+        if (link == Utils::Link()) {
+            CppTools::FollowSymbolUnderCursor followSymbol;
+            return followSymbol.findLink(data,
+                                         std::move(processLinkCallback),
+                                         false,
+                                         snapshot,
+                                         documentFromSemanticInfo,
+                                         symbolFinder,
+                                         inNextSplit);
+        }
+        return processLinkCallback(link);
     }
 
     QFuture<CppTools::SymbolInfo> infoFuture
@@ -190,11 +212,11 @@ void ClangFollowSymbol::findLink(const CppTools::CursorInEditor &data,
     if (m_watcher)
         m_watcher->cancel();
 
-    m_watcher.reset(new FutureSymbolWatcher());
+    m_watcher = std::make_unique<FutureSymbolWatcher>();
 
-    QObject::connect(m_watcher.get(), &FutureSymbolWatcher::finished,
-                     [=, callback=std::move(processLinkCallback)]() mutable {
-        if (m_watcher->isCanceled())
+    QObject::connect(m_watcher.get(), &FutureSymbolWatcher::finished, [=, filePath=data.filePath(),
+                     callback=std::move(processLinkCallback)]() mutable {
+        if (m_watcher->isCanceled() || !isSameInvocationContext(filePath))
             return callback(Utils::Link());
         CppTools::SymbolInfo result = m_watcher->result();
         // We did not fail but the result is empty

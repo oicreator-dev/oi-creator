@@ -40,7 +40,6 @@
 #include <coreplugin/editormanager/editormanager.h>
 #include <coreplugin/coreconstants.h>
 #include <qmljseditor/qmljseditorconstants.h>
-#include <qmljseditor/qmljseditordocument.h>
 
 #include <coreplugin/icore.h>
 
@@ -133,9 +132,9 @@ void ShortCutManager::registerActions(const Core::Context &qmlDesignerMainContex
 
     //Save
     Core::ActionManager::registerAction(&m_saveAction, Core::Constants::SAVE, qmlDesignerMainContext);
-    connect(&m_saveAction, &QAction::triggered, em, [em] {
+    connect(&m_saveAction, &QAction::triggered, em, [] {
          QmlDesignerPlugin::instance()->viewManager().reformatFileUsingTextEditorView();
-         em->saveDocument();
+         Core::EditorManager::saveDocument();
     });
 
     Core::Command *command = nullptr;
@@ -365,7 +364,7 @@ DesignDocument *ShortCutManager::currentDesignDocument() const
 
 void ShortCutManager::undoAvailable(bool isAvailable)
 {
-    DesignDocument *documentController = qobject_cast<DesignDocument*>(sender());
+    auto documentController = qobject_cast<DesignDocument*>(sender());
     if (currentDesignDocument() &&
         currentDesignDocument() == documentController) {
         m_undoAction.setEnabled(isAvailable);
@@ -374,7 +373,7 @@ void ShortCutManager::undoAvailable(bool isAvailable)
 
 void ShortCutManager::redoAvailable(bool isAvailable)
 {
-    DesignDocument *documentController = qobject_cast<DesignDocument*>(sender());
+    auto documentController = qobject_cast<DesignDocument*>(sender());
     if (currentDesignDocument() &&
         currentDesignDocument() == documentController) {
         m_redoAction.setEnabled(isAvailable);

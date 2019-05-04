@@ -34,6 +34,11 @@
 
 #include <utils/algorithm.h>
 #include <utils/qtcassert.h>
+#include <utils/runextensions.h>
+
+#include <QFormLayout>
+#include <QFutureWatcher>
+#include <QPointer>
 
 /*!
     \class ProjectExplorer::BuildStep
@@ -125,6 +130,34 @@ BuildStep::BuildStep(BuildStepList *bsl, Core::Id id) :
     expander->registerSubProvider([this] { return projectConfiguration()->macroExpander(); });
 }
 
+void BuildStep::run()
+{
+    m_cancelFlag = false;
+    doRun();
+}
+
+void BuildStep::cancel()
+{
+    m_cancelFlag = true;
+    doCancel();
+}
+
+BuildStepConfigWidget *BuildStep::createConfigWidget()
+{
+    auto widget = new BuildStepConfigWidget(this);
+
+    auto formLayout = new QFormLayout(widget);
+    formLayout->setMargin(0);
+    formLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+
+    for (ProjectConfigurationAspect *aspect : m_aspects) {
+        if (aspect->isVisible())
+            aspect->addToConfigurationLayout(formLayout);
+    }
+
+    return widget;
+}
+
 bool BuildStep::fromMap(const QVariantMap &map)
 {
     m_enabled = map.value(buildStepEnabledKey, true).toBool();
@@ -140,12 +173,20 @@ QVariantMap BuildStep::toMap() const
 
 BuildConfiguration *BuildStep::buildConfiguration() const
 {
-    return qobject_cast<BuildConfiguration *>(parent()->parent());
+    auto config = qobject_cast<BuildConfiguration *>(parent()->parent());
+    if (config)
+        return config;
+    // step is not part of a build configuration, use active build configuration of step's target
+    return target()->activeBuildConfiguration();
 }
 
 DeployConfiguration *BuildStep::deployConfiguration() const
 {
-    return qobject_cast<DeployConfiguration *>(parent()->parent());
+    auto config = qobject_cast<DeployConfiguration *>(parent()->parent());
+    if (config)
+        return config;
+    // step is not part of a deploy configuration, use active deploy configuration of step's target
+    return target()->activeDeployConfiguration();
 }
 
 ProjectConfiguration *BuildStep::projectConfiguration() const
@@ -174,31 +215,50 @@ bool BuildStep::isActive() const
     return projectConfiguration()->isActive();
 }
 
+bool BuildStep::widgetExpandedByDefault() const
+{
+    return m_widgetExpandedByDefault;
+}
+
+void BuildStep::setWidgetExpandedByDefault(bool widgetExpandedByDefault)
+{
+    m_widgetExpandedByDefault = widgetExpandedByDefault;
+}
+
 /*!
+  \fn BuildStep::isImmutable()
+
     If this function returns \c true, the user cannot delete this build step for
     this target and the user is prevented from changing the order in which
     immutable steps are run. The default implementation returns \c false.
 */
 
-bool BuildStep::immutable() const
+void BuildStep::runInThread(const std::function<bool()> &syncImpl)
 {
-    return false;
+    m_runInGuiThread = false;
+    m_cancelFlag = false;
+    auto * const watcher = new QFutureWatcher<bool>(this);
+    connect(watcher, &QFutureWatcher<bool>::finished, this, [this, watcher] {
+        emit finished(watcher->result());
+        watcher->deleteLater();
+    });
+    watcher->setFuture(Utils::runAsync(syncImpl));
 }
 
-bool BuildStep::runInGuiThread() const
+std::function<bool ()> BuildStep::cancelChecker() const
 {
-    return false;
+    return [step = QPointer<const BuildStep>(this)] { return step && step->isCanceled(); };
 }
 
-/*!
-    This function needs to be reimplemented only for build steps that return
-    \c false from runInGuiThread().
-
-    \sa runInGuiThread()
-*/
-void BuildStep::cancel()
+bool BuildStep::isCanceled() const
 {
-    // Do nothing
+    return m_cancelFlag;
+}
+
+void BuildStep::doCancel()
+{
+    QTC_ASSERT(!m_runInGuiThread, qWarning() << "Build step" << displayName()
+               << "neeeds to implement the doCancel() function");
 }
 
 void BuildStep::setEnabled(bool b)
@@ -335,6 +395,40 @@ BuildStep *BuildStepFactory::restore(BuildStepList *parent, const QVariantMap &m
         return nullptr;
     }
     return bs;
+}
+
+// BuildStepConfigWidget
+
+BuildStepConfigWidget::BuildStepConfigWidget(BuildStep *step)
+    : m_step(step)
+{
+    m_displayName = step->displayName();
+    m_summaryText = "<b>" + m_displayName + "</b>";
+    connect(m_step, &ProjectConfiguration::displayNameChanged,
+            this, &BuildStepConfigWidget::updateSummary);
+}
+
+QString BuildStepConfigWidget::summaryText() const
+{
+    return m_summaryText;
+}
+
+QString BuildStepConfigWidget::displayName() const
+{
+    return m_displayName;
+}
+
+void BuildStepConfigWidget::setDisplayName(const QString &displayName)
+{
+    m_displayName = displayName;
+}
+
+void BuildStepConfigWidget::setSummaryText(const QString &summaryText)
+{
+    if (summaryText != m_summaryText) {
+        m_summaryText = summaryText;
+        emit updateSummary();
+    }
 }
 
 } // ProjectExplorer

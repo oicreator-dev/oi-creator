@@ -44,9 +44,7 @@ namespace Internal {
 //
 ////////////////////////////////////////////////////////////////////////
 
-StackFrame::StackFrame()
-  : language(CppLanguage), line(-1), address(0), usable(false)
-{}
+StackFrame::StackFrame() = default;
 
 void StackFrame::clear()
 {
@@ -83,8 +81,8 @@ QString StackFrame::toString() const
 QList<StackFrame> StackFrame::parseFrames(const GdbMi &data, const DebuggerRunParameters &rp)
 {
     StackFrames frames;
-    frames.reserve(data.children().size());
-    foreach (const GdbMi &item, data.children())
+    frames.reserve(data.childCount());
+    for (const GdbMi &item : data)
         frames.append(parseFrame(item, rp));
     return frames;
 }
@@ -100,8 +98,8 @@ StackFrame StackFrame::parseFrame(const GdbMi &frameMi, const DebuggerRunParamet
     frame.address = frameMi["address"].toAddress();
     frame.context = frameMi["context"].data();
     if (frameMi["language"].data() == "js"
-            || frame.file.endsWith(QLatin1String(".js"))
-            || frame.file.endsWith(QLatin1String(".qml"))) {
+            || frame.file.endsWith(".js")
+            || frame.file.endsWith(".qml")) {
         frame.language = QmlLanguage;
         frame.fixQrcFrame(rp);
     }
@@ -153,9 +151,8 @@ QString StackFrame::toToolTip() const
         showDistributionNote = true;
     }
     if (!Utils::HostOsInfo::isWindowsHost() && showDistributionNote) {
-        str << QLatin1Char(' ') <<
-               tr("Note that most distributions ship debug information "
-                  "in separate packages.");
+        str << ' ' << tr("Note that most distributions ship debug information "
+                         "in separate packages.");
     }
 
     str << "</body></html>";
@@ -187,14 +184,14 @@ void StackFrame::fixQrcFrame(const DebuggerRunParameters &rp)
         usable = aFi.isFile();
         return;
     }
-    if (!file.startsWith(QLatin1String("qrc:/")))
+    if (!file.startsWith("qrc:/"))
         return;
 
     QString relativeFile = file.right(file.size() - 5);
-    while (relativeFile.startsWith(QLatin1Char('/')))
+    while (relativeFile.startsWith('/'))
         relativeFile = relativeFile.mid(1);
 
-    QString absFile = findFile(rp.projectSourceDirectory, relativeFile);
+    QString absFile = findFile(rp.projectSourceDirectory.toString(), relativeFile);
     if (absFile.isEmpty())
         absFile = findFile(QDir::currentPath(), relativeFile);
 

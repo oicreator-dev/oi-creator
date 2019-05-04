@@ -45,9 +45,7 @@ QmlJSHighlighter::QmlJSHighlighter(QTextDocument *parent)
     setDefaultTextFormatCategories();
 }
 
-QmlJSHighlighter::~QmlJSHighlighter()
-{
-}
+QmlJSHighlighter::~QmlJSHighlighter() = default;
 
 bool QmlJSHighlighter::isQmlEnabled() const
 {
@@ -131,11 +129,26 @@ void QmlJSHighlighter::highlightBlock(const QString &text)
                             break;
                         }
                     }
+                    if (text.midRef(token.offset, token.length) == QLatin1String("enum")) {
+                        setFormat(token.offset, token.length, formatForCategory(C_KEYWORD));
+                        break;
+                    }
                 } else if (index > 0 && maybeQmlBuiltinType(spell)) {
                     const Token &previousToken = tokens.at(index - 1);
-                    if (previousToken.is(Token::Identifier) && text.at(previousToken.offset) == QLatin1Char('p')
-                        && text.midRef(previousToken.offset, previousToken.length) == QLatin1String("property")) {
+                    if (previousToken.is(Token::Identifier)
+                            && text.at(previousToken.offset) == QLatin1Char('p')
+                            && text.midRef(previousToken.offset, previousToken.length)
+                            == QLatin1String("property")) {
                         setFormat(token.offset, token.length, formatForCategory(C_KEYWORD));
+                        break;
+                    }
+                } else if (index == 1) {
+                    const Token &previousToken = tokens.at(0);
+                    if (previousToken.is(Token::Identifier)
+                            && text.at(previousToken.offset) == QLatin1Char('e')
+                            && text.midRef(previousToken.offset, previousToken.length)
+                            == QLatin1String("enum")) {
+                        setFormat(token.offset, token.length, formatForCategory(C_ENUMERATION));
                         break;
                     }
                 }
@@ -152,8 +165,7 @@ void QmlJSHighlighter::highlightBlock(const QString &text)
     }
 
     int previousTokenEnd = 0;
-    for (int index = 0; index < tokens.size(); ++index) {
-        const Token &token = tokens.at(index);
+    for (const auto &token : tokens) {
         setFormat(previousTokenEnd, token.begin() - previousTokenEnd, formatForCategory(C_VISUAL_WHITESPACE));
 
         switch (token.kind) {
@@ -205,6 +217,8 @@ bool QmlJSHighlighter::maybeQmlKeyword(const QStringRef &text) const
     else if (ch == QLatin1Char('i') && text == QLatin1String("import"))
         return true;
     else if (ch == QLatin1Char('o') && text == QLatin1String("on"))
+        return true;
+    else if (ch == QLatin1Char('e') && text == QLatin1String("enum"))
         return true;
     else
         return false;

@@ -28,6 +28,8 @@
 #include <qmlanchors.h>
 #include <nodeabstractproperty.h>
 #include <variantproperty.h>
+#include <utils/qtcassert.h>
+
 
 #include <QtQml>
 #include <QDebug>
@@ -39,7 +41,7 @@ class NodeState;
 
 const PropertyName auxDataString("anchors_");
 
-static inline void backupPropertyAndRemove(ModelNode node, const PropertyName &propertyName)
+static inline void backupPropertyAndRemove(const ModelNode &node, const PropertyName &propertyName)
 {
     if (node.hasVariantProperty(propertyName)) {
         node.setAuxiliaryData(auxDataString + propertyName, node.variantProperty(propertyName).value());
@@ -70,9 +72,7 @@ QmlAnchorBindingProxy::QmlAnchorBindingProxy(QObject *parent) :
 {
 }
 
-QmlAnchorBindingProxy::~QmlAnchorBindingProxy()
-{
-}
+QmlAnchorBindingProxy::~QmlAnchorBindingProxy() = default;
 
 void QmlAnchorBindingProxy::setup(const QmlItemNode &fxItemNode)
 {
@@ -85,7 +85,7 @@ void QmlAnchorBindingProxy::setup(const QmlItemNode &fxItemNode)
     emit itemNodeChanged();
     emit parentChanged();
 
-    emit emitAnchorSignals();
+    emitAnchorSignals();
 
     if (m_qmlItemNode.hasNodeParent()) {
         emit topTargetChanged();
@@ -110,13 +110,18 @@ void QmlAnchorBindingProxy::invalidate(const QmlItemNode &fxItemNode)
 
     m_ignoreQml = true;
 
+    auto parentModelNode = [](const QmlItemNode &node) {
+        QTC_ASSERT(node.modelNode().hasParentProperty(), return ModelNode());
+        return node.modelNode().parentProperty().parentModelNode();
+    };
+
     m_verticalTarget =
             m_horizontalTarget =
             m_topTarget =
             m_bottomTarget =
             m_leftTarget =
             m_rightTarget =
-            m_qmlItemNode.modelNode().parentProperty().parentModelNode();
+            parentModelNode(m_qmlItemNode);
 
     setupAnchorTargets();
 

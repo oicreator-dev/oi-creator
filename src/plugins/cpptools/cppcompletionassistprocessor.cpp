@@ -41,8 +41,7 @@ using namespace CPlusPlus;
 namespace CppTools {
 
 CppCompletionAssistProcessor::CppCompletionAssistProcessor(int snippetItemOrder)
-    : m_positionForProposal(-1)
-    , m_preprocessorCompletions(
+    : m_preprocessorCompletions(
           QStringList({"define", "error", "include", "line", "pragma", "pragma once",
                        "pragma omp atomic", "pragma omp parallel", "pragma omp for",
                        "pragma omp ordered", "pragma omp parallel for", "pragma omp section",
@@ -50,7 +49,6 @@ CppCompletionAssistProcessor::CppCompletionAssistProcessor(int snippetItemOrder)
                        "pragma omp master", "pragma omp critical", "pragma omp barrier",
                        "pragma omp flush", "pragma omp threadprivate", "undef", "if", "ifdef",
                        "ifndef", "elif", "else", "endif"}))
-    , m_hintProposal(0)
     , m_snippetCollector(QLatin1String(CppEditor::Constants::CPP_SNIPPETS_GROUP_ID),
                          QIcon(QLatin1String(":/texteditor/images/snippet.png")),
                          snippetItemOrder)
@@ -66,6 +64,22 @@ static bool isDoxygenTagCompletionCharacter(const QChar &character)
 {
     return character == QLatin1Char('\\')
         || character == QLatin1Char('@') ;
+}
+
+static bool twoIndentifiersBeforeLBrace(const Tokens &tokens, int tokenIdx)
+{
+    const Token &previousToken = tokens.at(tokenIdx - 1);
+    if (previousToken.kind() != T_IDENTIFIER)
+        return false;
+    for (int index = tokenIdx - 2; index >= 0; index -= 2) {
+        const Token &token = tokens.at(index);
+        if (token.kind() == T_IDENTIFIER)
+            return true;
+
+        if (token.kind() != T_COLON_COLON)
+            return false;
+    }
+    return false;
 }
 
 void CppCompletionAssistProcessor::startOfOperator(QTextDocument *textDocument,
@@ -145,6 +159,14 @@ void CppCompletionAssistProcessor::startOfOperator(QTextDocument *textDocument,
                     *kind = T_EOF_SYMBOL;
                     start = positionInDocument;
                 }
+            } else {
+                *kind = T_EOF_SYMBOL;
+                start = positionInDocument;
+            }
+        } else if (*kind == T_LBRACE) {
+            if (tokenIdx <= 0 || !twoIndentifiersBeforeLBrace(tokens, tokenIdx)) {
+                *kind = T_EOF_SYMBOL;
+                start = positionInDocument;
             }
         }
         // Check for include preprocessor directive

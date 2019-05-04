@@ -86,7 +86,7 @@ FlatModel::FlatModel(QObject *parent)
     connect(sm, &SessionManager::aboutToLoadSession, this, &FlatModel::loadExpandData);
     connect(sm, &SessionManager::aboutToSaveSession, this, &FlatModel::saveExpandData);
     connect(sm, &SessionManager::projectAdded, this, &FlatModel::handleProjectAdded);
-    connect(sm, &SessionManager::startupProjectChanged, this, [this] { layoutChanged(); });
+    connect(sm, &SessionManager::startupProjectChanged, this, [this] { emit layoutChanged(); });
 
     for (Project *project : SessionManager::projects())
         handleProjectAdded(project);
@@ -178,7 +178,7 @@ QVariant FlatModel::data(const QModelIndex &index, int role) const
 Qt::ItemFlags FlatModel::flags(const QModelIndex &index) const
 {
     if (!index.isValid())
-        return 0;
+        return nullptr;
     // We claim that everything is editable
     // That's slightly wrong
     // We control the only view, and that one does the checks
@@ -239,6 +239,10 @@ void FlatModel::addOrRebuildProjectModel(Project *project)
         if (m_trimEmptyDirectories)
             trimEmptyDirectories(container);
     }
+
+    if (project->needsInitialExpansion())
+        m_toExpand.insert(expandDataForNode(container->m_node));
+
     if (container->childCount() == 0) {
         auto projectFileNode = std::make_unique<FileNode>(project->projectFilePath(),
                                                           FileType::Project, false);
@@ -358,6 +362,8 @@ void FlatModel::saveExpandData()
 void FlatModel::addFolderNode(WrapperNode *parent, FolderNode *folderNode, QSet<Node *> *seen)
 {
     for (Node *node : folderNode->nodes()) {
+        if (m_filterGeneratedFiles && node->isGenerated())
+            continue;
         if (FolderNode *subFolderNode = node->asFolderNode()) {
             const bool isHidden = m_filterProjects && !subFolderNode->showInSimpleTree();
             if (!isHidden && !seen->contains(subFolderNode)) {
@@ -370,8 +376,7 @@ void FlatModel::addFolderNode(WrapperNode *parent, FolderNode *folderNode, QSet<
                 addFolderNode(parent, subFolderNode, seen);
             }
         } else if (FileNode *fileNode = node->asFileNode()) {
-            const bool isHidden = m_filterGeneratedFiles && fileNode->isGenerated();
-            if (!isHidden && !seen->contains(fileNode)) {
+            if (!seen->contains(fileNode)) {
                 seen->insert(fileNode);
                 parent->appendChild(new WrapperNode(fileNode));
             }
@@ -394,7 +399,7 @@ bool FlatModel::trimEmptyDirectories(WrapperNode *parent)
 
 Qt::DropActions FlatModel::supportedDragActions() const
 {
-    return Qt::MoveAction;
+    return Qt::CopyAction;
 }
 
 QStringList FlatModel::mimeTypes() const
@@ -470,7 +475,7 @@ Node *FlatModel::nodeForIndex(const QModelIndex &index) const
 
 const QLoggingCategory &FlatModel::logger()
 {
-    static QLoggingCategory logger("qtc.projectexplorer.flatmodel");
+    static QLoggingCategory logger("qtc.projectexplorer.flatmodel", QtWarningMsg);
     return logger;
 }
 

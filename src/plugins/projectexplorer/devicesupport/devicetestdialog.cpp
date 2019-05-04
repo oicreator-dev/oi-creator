@@ -48,9 +48,10 @@ public:
     bool finished;
 };
 
-DeviceTestDialog::DeviceTestDialog(const IDevice::ConstPtr &deviceConfiguration,
+DeviceTestDialog::DeviceTestDialog(const IDevice::Ptr &deviceConfiguration,
                                    QWidget *parent)
-    : QDialog(parent), d(new DeviceTestDialogPrivate(deviceConfiguration->createDeviceTester()))
+    : QDialog(parent)
+    , d(std::make_unique<DeviceTestDialogPrivate>(deviceConfiguration->createDeviceTester()))
 {
     d->ui.setupUi(this);
 
@@ -64,10 +65,7 @@ DeviceTestDialog::DeviceTestDialog(const IDevice::ConstPtr &deviceConfiguration,
     d->deviceTester->testDevice(deviceConfiguration);
 }
 
-DeviceTestDialog::~DeviceTestDialog()
-{
-    delete d;
-}
+DeviceTestDialog::~DeviceTestDialog() = default;
 
 void DeviceTestDialog::reject()
 {

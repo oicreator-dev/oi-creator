@@ -72,9 +72,7 @@ DetailedErrorView::DetailedErrorView(QWidget *parent) :
     addAction(m_copyAction);
 }
 
-DetailedErrorView::~DetailedErrorView()
-{
-}
+DetailedErrorView::~DetailedErrorView() = default;
 
 void DetailedErrorView::contextMenuEvent(QContextMenuEvent *e)
 {
@@ -108,6 +106,13 @@ void DetailedErrorView::goBack()
     QTC_ASSERT(rowCount(), return);
     const int prevRow = currentRow() - 1;
     setCurrentRow(prevRow >= 0 ? prevRow : rowCount() - 1);
+}
+
+void DetailedErrorView::selectIndex(const QModelIndex &index)
+{
+    selectionModel()->setCurrentIndex(index,
+                                      QItemSelectionModel::ClearAndSelect
+                                          | QItemSelectionModel::Rows);
 }
 
 QVariant DetailedErrorView::locationData(int role, const DiagnosticLocation &location)
@@ -160,9 +165,7 @@ int DetailedErrorView::currentRow() const
 
 void DetailedErrorView::setCurrentRow(int row)
 {
-    const QModelIndex index = model()->index(row, 0);
-    selectionModel()->setCurrentIndex(index,
-            QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+    selectIndex(model()->index(row, 0));
 }
 
 } // namespace Debugger

@@ -43,7 +43,58 @@ using ClangBackEnd::Sources::Source;
 class FilePathStorage : public testing::Test
 {
 protected:
-    void SetUp();
+    void SetUp()
+    {
+        ON_CALL(selectDirectoryIdFromDirectoriesByDirectoryPath,
+                valueReturnInt32(_))
+                .WillByDefault(Return(Utils::optional<int>()));
+        ON_CALL(selectDirectoryIdFromDirectoriesByDirectoryPath,
+                valueReturnInt32(Utils::SmallStringView("")))
+                .WillByDefault(Return(Utils::optional<int>(0)));
+        ON_CALL(selectDirectoryIdFromDirectoriesByDirectoryPath,
+                valueReturnInt32(Utils::SmallStringView("/path/to")))
+                .WillByDefault(Return(Utils::optional<int>(5)));
+        ON_CALL(mockDatabase, lastInsertedRowId())
+                .WillByDefault(Return(12));
+        ON_CALL(selectAllDirectories,
+                valuesReturnStdVectorDirectory(_))
+                .WillByDefault(Return(std::vector<Directory>{{1, "/path/to"}, {2, "/other/path"}}));
+        ON_CALL(selectSourceIdFromSourcesByDirectoryIdAndSourceName,
+                valueReturnInt32(_, _))
+                .WillByDefault(Return(Utils::optional<int>()));
+        ON_CALL(selectSourceIdFromSourcesByDirectoryIdAndSourceName,
+                valueReturnInt32(0, Utils::SmallStringView("")))
+                .WillByDefault(Return(Utils::optional<int>(0)));
+        ON_CALL(selectSourceIdFromSourcesByDirectoryIdAndSourceName,
+                valueReturnInt32(5, Utils::SmallStringView("file.h")))
+                .WillByDefault(Return(Utils::optional<int>(42)));
+        ON_CALL(selectAllSources,
+                valuesReturnStdVectorSource(_))
+                .WillByDefault(Return(std::vector<Source>{{1, "file.h"}, {4, "file.cpp"}}));
+        ON_CALL(selectDirectoryPathFromDirectoriesByDirectoryId,
+                valueReturnPathString(5))
+                .WillByDefault(Return(Utils::optional<Utils::PathString>("/path/to")));
+        ON_CALL(selectSourceNameAndDirectoryIdFromSourcesBySourceId,
+                valueReturnSourceNameAndDirectoryId(42))
+                .WillByDefault(Return(Utils::optional<ClangBackEnd::Sources::SourceNameAndDirectoryId>({"file.cpp", 5})));
+
+        EXPECT_CALL(selectDirectoryIdFromDirectoriesByDirectoryPath, valueReturnInt32(_))
+                .Times(AnyNumber());
+        EXPECT_CALL(selectSourceIdFromSourcesByDirectoryIdAndSourceName, valueReturnInt32(_, _))
+                .Times(AnyNumber());
+        EXPECT_CALL(insertIntoDirectories, write(An<Utils::SmallStringView>()))
+                .Times(AnyNumber());
+        EXPECT_CALL(insertIntoSources, write(An<uint>(), A<Utils::SmallStringView>()))
+                .Times(AnyNumber());
+        EXPECT_CALL(selectAllDirectories, valuesReturnStdVectorDirectory(_))
+                .Times(AnyNumber());
+        EXPECT_CALL(selectAllSources, valuesReturnStdVectorSource(_))
+                .Times(AnyNumber());
+        EXPECT_CALL(selectDirectoryPathFromDirectoriesByDirectoryId, valueReturnPathString(An<int>()))
+                .Times(AnyNumber());
+        EXPECT_CALL(selectSourceNameAndDirectoryIdFromSourcesBySourceId, valueReturnSourceNameAndDirectoryId(_))
+                .Times(AnyNumber());
+    }
 
 protected:
     NiceMock<MockSqliteDatabase> mockDatabase;
@@ -51,7 +102,7 @@ protected:
     MockSqliteReadStatement &selectDirectoryIdFromDirectoriesByDirectoryPath = factory.selectDirectoryIdFromDirectoriesByDirectoryPath;
     MockSqliteReadStatement &selectSourceIdFromSourcesByDirectoryIdAndSourceName = factory.selectSourceIdFromSourcesByDirectoryIdAndSourceName;
     MockSqliteReadStatement &selectDirectoryPathFromDirectoriesByDirectoryId = factory.selectDirectoryPathFromDirectoriesByDirectoryId;
-    MockSqliteReadStatement &selectSourceNameFromSourcesBySourceId = factory.selectSourceNameFromSourcesBySourceId;
+    MockSqliteReadStatement &selectSourceNameAndDirectoryIdFromSourcesBySourceId = factory.selectSourceNameAndDirectoryIdFromSourcesBySourceId;
     MockSqliteReadStatement &selectAllDirectories = factory.selectAllDirectories;
     MockSqliteWriteStatement &insertIntoDirectories = factory.insertIntoDirectories;
     MockSqliteWriteStatement &insertIntoSources = factory.insertIntoSources;
@@ -138,7 +189,8 @@ TEST_F(FilePathStorage, CallWriteForWriteDirectory)
 
 TEST_F(FilePathStorage, CallWriteForWriteSource)
 {
-    EXPECT_CALL(insertIntoSources, write(5, TypedEq<Utils::SmallStringView>("unknownfile.h")));
+    EXPECT_CALL(insertIntoSources,
+                write(TypedEq<int>(5), TypedEq<Utils::SmallStringView>("unknownfile.h")));
 
     storage.writeSourceId(5, "unknownfile.h");
 }
@@ -229,13 +281,14 @@ TEST_F(FilePathStorage, CallSelectAndWriteForFetchingSourceIdForUnknownEntry)
     EXPECT_CALL(mockDatabase, deferredBegin());
     EXPECT_CALL(selectSourceIdFromSourcesByDirectoryIdAndSourceName,
                 valueReturnInt32(5, Eq("unknownfile.h")));
-    EXPECT_CALL(insertIntoSources, write(5, TypedEq<Utils::SmallStringView>("unknownfile.h")));
+    EXPECT_CALL(insertIntoSources,
+                write(TypedEq<int>(5), TypedEq<Utils::SmallStringView>("unknownfile.h")));
     EXPECT_CALL(mockDatabase, commit());
 
     storage.fetchSourceId(5, "unknownfile.h");
 }
 
-TEST_F(FilePathStorage, RestartFetchDirectoryIDIfTheDatabaseIsBusyInBeginBecauseTheTableAlreadyChanged)
+TEST_F(FilePathStorage, RestartFetchDirectoryIDIfTheStatementIsBusyInBeginBecauseTheTableAlreadyChanged)
 {
     InSequence s;
 
@@ -250,7 +303,8 @@ TEST_F(FilePathStorage, RestartFetchDirectoryIDIfTheDatabaseIsBusyInBeginBecause
     storage.fetchDirectoryId("/other/unknow/path");
 }
 
-TEST_F(FilePathStorage, CallSelectAndWriteForFetchingDirectoryIdTwoTimesIfTheDatabaseIsBusyInWriteBecauseTheTableAlreadyChanged)
+TEST_F(FilePathStorage,
+       CallSelectAndWriteForFetchingDirectoryIdTwoTimesIfTheStatementIsBusyInWriteBecauseTheTableAlreadyChanged)
 {
     InSequence s;
 
@@ -287,7 +341,7 @@ TEST_F(FilePathStorage, CallSelectAndWriteForFetchingDirectoryIdTwoTimesIfTheInd
     storage.fetchDirectoryId("/other/unknow/path");
 }
 
-TEST_F(FilePathStorage, RestartFetchSourceIdIfTheDatabaseIsBusyInBeginBecauseTheTableAlreadyChanged)
+TEST_F(FilePathStorage, RestartFetchSourceIdIfTheStatementIsBusyInBeginBecauseTheTableAlreadyChanged)
 {
     InSequence s;
 
@@ -296,26 +350,31 @@ TEST_F(FilePathStorage, RestartFetchSourceIdIfTheDatabaseIsBusyInBeginBecauseThe
     EXPECT_CALL(mockDatabase, deferredBegin());
     EXPECT_CALL(selectSourceIdFromSourcesByDirectoryIdAndSourceName,
                 valueReturnInt32(5, Eq("otherunknownfile.h")));
-    EXPECT_CALL(insertIntoSources, write(5, TypedEq<Utils::SmallStringView>("otherunknownfile.h")));
+    EXPECT_CALL(insertIntoSources,
+                write(TypedEq<int>(5), TypedEq<Utils::SmallStringView>("otherunknownfile.h")));
     EXPECT_CALL(mockDatabase, commit());
 
     storage.fetchSourceId(5, "otherunknownfile.h");
 }
 
-TEST_F(FilePathStorage, CallSelectAndWriteForFetchingSourceTwoTimesIfTheDatabaseIsBusyInWriteBecauseTheTableAlreadyChanged)
+TEST_F(FilePathStorage,
+       CallSelectAndWriteForFetchingSourceTwoTimesIfTheStatementIsBusyInWriteBecauseTheTableAlreadyChanged)
 {
     InSequence s;
 
     EXPECT_CALL(mockDatabase, deferredBegin());
     EXPECT_CALL(selectSourceIdFromSourcesByDirectoryIdAndSourceName,
                 valueReturnInt32(5, Eq("otherunknownfile.h")));
-    EXPECT_CALL(insertIntoSources, write(5, TypedEq<Utils::SmallStringView>("otherunknownfile.h")))
-            .WillOnce(Throw(Sqlite::StatementIsBusy("busy")));;
+    EXPECT_CALL(insertIntoSources,
+                write(TypedEq<int>(5), TypedEq<Utils::SmallStringView>("otherunknownfile.h")))
+        .WillOnce(Throw(Sqlite::StatementIsBusy("busy")));
+    ;
     EXPECT_CALL(mockDatabase, rollback());
     EXPECT_CALL(mockDatabase, deferredBegin());
     EXPECT_CALL(selectSourceIdFromSourcesByDirectoryIdAndSourceName,
                 valueReturnInt32(5, Eq("otherunknownfile.h")));
-    EXPECT_CALL(insertIntoSources, write(5, TypedEq<Utils::SmallStringView>("otherunknownfile.h")));
+    EXPECT_CALL(insertIntoSources,
+                write(TypedEq<int>(5), TypedEq<Utils::SmallStringView>("otherunknownfile.h")));
     EXPECT_CALL(mockDatabase, commit());
 
     storage.fetchSourceId(5, "otherunknownfile.h");
@@ -328,12 +387,14 @@ TEST_F(FilePathStorage, CallSelectAndWriteForFetchingSourceTwoTimesIfTheIndexIsC
     EXPECT_CALL(mockDatabase,deferredBegin());
     EXPECT_CALL(selectSourceIdFromSourcesByDirectoryIdAndSourceName,
                 valueReturnInt32(5, Eq("otherunknownfile.h")));
-    EXPECT_CALL(insertIntoSources, write(5, TypedEq<Utils::SmallStringView>("otherunknownfile.h")))
-            .WillOnce(Throw(Sqlite::ConstraintPreventsModification("busy")));;
+    EXPECT_CALL(insertIntoSources,
+                write(TypedEq<int>(5), TypedEq<Utils::SmallStringView>("otherunknownfile.h")))
+        .WillOnce(Throw(Sqlite::ConstraintPreventsModification("busy")));
     EXPECT_CALL(mockDatabase, rollback());
     EXPECT_CALL(mockDatabase,deferredBegin());
     EXPECT_CALL(selectSourceIdFromSourcesByDirectoryIdAndSourceName,
-                valueReturnInt32(5, Eq("otherunknownfile.h")));
+                valueReturnInt32(5, Eq("otherunknownfile.h")))
+        .WillOnce(Return(Utils::optional<int>(42)));
     EXPECT_CALL(mockDatabase, commit());
 
     storage.fetchSourceId(5, "otherunknownfile.h");
@@ -397,25 +458,26 @@ TEST_F(FilePathStorage, ThrowAsFetchingDirectoryPathForNonExistingId)
 TEST_F(FilePathStorage, CallValueForFetchSoureNameForId)
 {
     EXPECT_CALL(mockDatabase, deferredBegin());
-    EXPECT_CALL(selectSourceNameFromSourcesBySourceId, valueReturnSmallString(42));
+    EXPECT_CALL(selectSourceNameAndDirectoryIdFromSourcesBySourceId, valueReturnSourceNameAndDirectoryId(42));
     EXPECT_CALL(mockDatabase, commit());
 
-    storage.fetchSourceName(42);
+    storage.fetchSourceNameAndDirectoryId(42);
 }
 
 TEST_F(FilePathStorage, FetchSoureNameForId)
 {
-    auto path = storage.fetchSourceName(42);
+    auto entry = storage.fetchSourceNameAndDirectoryId(42);
 
-    ASSERT_THAT(path, Eq("file.cpp"));
+    ASSERT_THAT(entry.sourceName, Eq("file.cpp"));
+    ASSERT_THAT(entry.directoryId, 5);
 }
 
 TEST_F(FilePathStorage, ThrowAsFetchingSourceNameForNonExistingId)
 {
-    ASSERT_THROW(storage.fetchSourceName(12), ClangBackEnd::SourceNameIdDoesNotExists);
+    ASSERT_THROW(storage.fetchSourceNameAndDirectoryId(12), ClangBackEnd::SourceNameIdDoesNotExists);
 }
 
-TEST_F(FilePathStorage, RestartFetchSourceNameIfTheDatabaseIsBusyInBegin)
+TEST_F(FilePathStorage, RestartFetchSourceNameIfTheStatementIsBusyInBegin)
 {
     InSequence s;
 
@@ -425,14 +487,14 @@ TEST_F(FilePathStorage, RestartFetchSourceNameIfTheDatabaseIsBusyInBegin)
     EXPECT_CALL(mockDatabase, unlock());
     EXPECT_CALL(mockDatabase, lock());
     EXPECT_CALL(mockDatabase, deferredBegin());
-    EXPECT_CALL(selectSourceNameFromSourcesBySourceId, valueReturnSmallString(42));
+    EXPECT_CALL(selectSourceNameAndDirectoryIdFromSourcesBySourceId, valueReturnSourceNameAndDirectoryId(42));
     EXPECT_CALL(mockDatabase, commit());
     EXPECT_CALL(mockDatabase, unlock());
 
-    storage.fetchSourceName(42);
+    storage.fetchSourceNameAndDirectoryId(42);
 }
 
-TEST_F(FilePathStorage, RestartFetchDirectoryPathIfTheDatabaseIsBusyInBegin)
+TEST_F(FilePathStorage, RestartFetchDirectoryPathIfTheStatementIsBusyInBegin)
 {
     InSequence s;
 
@@ -483,56 +545,4 @@ TEST_F(FilePathStorage, RestartFetchAllSourcesIfBeginIsBusy)
     storage.fetchAllSources();
 }
 
-void FilePathStorage::SetUp()
-{
-    ON_CALL(selectDirectoryIdFromDirectoriesByDirectoryPath,
-            valueReturnInt32(_))
-            .WillByDefault(Return(Utils::optional<int>()));
-    ON_CALL(selectDirectoryIdFromDirectoriesByDirectoryPath,
-            valueReturnInt32(Utils::SmallStringView("")))
-            .WillByDefault(Return(Utils::optional<int>(0)));
-    ON_CALL(selectDirectoryIdFromDirectoriesByDirectoryPath,
-            valueReturnInt32(Utils::SmallStringView("/path/to")))
-            .WillByDefault(Return(Utils::optional<int>(5)));
-    ON_CALL(mockDatabase, lastInsertedRowId())
-            .WillByDefault(Return(12));
-    ON_CALL(selectAllDirectories,
-            valuesReturnStdVectorDirectory(_))
-            .WillByDefault(Return(std::vector<Directory>{{1, "/path/to"}, {2, "/other/path"}}));
-    ON_CALL(selectSourceIdFromSourcesByDirectoryIdAndSourceName,
-            valueReturnInt32(_, _))
-            .WillByDefault(Return(Utils::optional<int>()));
-    ON_CALL(selectSourceIdFromSourcesByDirectoryIdAndSourceName,
-            valueReturnInt32(0, Utils::SmallStringView("")))
-            .WillByDefault(Return(Utils::optional<int>(0)));
-    ON_CALL(selectSourceIdFromSourcesByDirectoryIdAndSourceName,
-            valueReturnInt32(5, Utils::SmallStringView("file.h")))
-            .WillByDefault(Return(Utils::optional<int>(42)));
-    ON_CALL(selectAllSources,
-            valuesReturnStdVectorSource(_))
-            .WillByDefault(Return(std::vector<Source>{{1, "file.h"}, {4, "file.cpp"}}));
-    ON_CALL(selectDirectoryPathFromDirectoriesByDirectoryId,
-            valueReturnPathString(5))
-            .WillByDefault(Return(Utils::optional<Utils::PathString>("/path/to")));
-    ON_CALL(selectSourceNameFromSourcesBySourceId,
-            valueReturnSmallString(42))
-            .WillByDefault(Return(Utils::optional<Utils::SmallString>("file.cpp")));
-
-    EXPECT_CALL(selectDirectoryIdFromDirectoriesByDirectoryPath, valueReturnInt32(_))
-            .Times(AnyNumber());
-    EXPECT_CALL(selectSourceIdFromSourcesByDirectoryIdAndSourceName, valueReturnInt32(_, _))
-            .Times(AnyNumber());
-    EXPECT_CALL(insertIntoDirectories, write(An<Utils::SmallStringView>()))
-            .Times(AnyNumber());
-    EXPECT_CALL(insertIntoSources, write(An<uint>(), A<Utils::SmallStringView>()))
-            .Times(AnyNumber());
-    EXPECT_CALL(selectAllDirectories, valuesReturnStdVectorDirectory(_))
-            .Times(AnyNumber());
-    EXPECT_CALL(selectAllSources, valuesReturnStdVectorSource(_))
-            .Times(AnyNumber());
-    EXPECT_CALL(selectDirectoryPathFromDirectoriesByDirectoryId, valueReturnPathString(_))
-            .Times(AnyNumber());
-    EXPECT_CALL(selectSourceNameFromSourcesBySourceId, valueReturnSmallString(_))
-            .Times(AnyNumber());
-}
 }

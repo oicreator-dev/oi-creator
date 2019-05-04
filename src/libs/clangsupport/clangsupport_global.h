@@ -86,6 +86,7 @@ enum class HighlightingType : quint8
     Preprocessor,
     PreprocessorDefinition,
     PreprocessorExpansion,
+    Punctuation,
     Label,
     Declaration,
     FunctionDefinition,
@@ -148,9 +149,6 @@ enum class MessageType : quint8 {
     UnsavedFilesUpdatedMessage,
     UnsavedFilesRemovedMessage,
 
-    ProjectPartsUpdatedMessage,
-    ProjectPartsRemovedMessage,
-
     RequestAnnotationsMessage,
     AnnotationsMessage,
 
@@ -177,7 +175,10 @@ enum class MessageType : quint8 {
     CancelMessage,
     UpdateProjectPartsMessage,
     RemoveProjectPartsMessage,
-    PrecompiledHeadersUpdatedMessage
+    PrecompiledHeadersUpdatedMessage,
+    UpdateGeneratedFilesMessage,
+    RemoveGeneratedFilesMessage,
+    ProgressMessage
 };
 
 template<MessageType messageEnumeration>
@@ -234,4 +235,5 @@ enum class SymbolTag : uchar
 
 using SymbolTags = Utils::SizedArray<SymbolTag, 7>;
 
-}
+enum class ProgressType { Invalid, PrecompiledHeader, Indexing, DependencyCreation };
+} // namespace ClangBackEnd

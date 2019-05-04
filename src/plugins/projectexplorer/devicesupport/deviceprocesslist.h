@@ -30,6 +30,8 @@
 #include <QAbstractItemModel>
 #include <QList>
 
+#include <memory>
+
 namespace ProjectExplorer {
 
 namespace Internal { class DeviceProcessListPrivate; }
@@ -37,10 +39,9 @@ namespace Internal { class DeviceProcessListPrivate; }
 class PROJECTEXPLORER_EXPORT DeviceProcessItem
 {
 public:
-    DeviceProcessItem() : pid(0) {}
     bool operator<(const DeviceProcessItem &other) const;
 
-    int pid;
+    int pid = 0;
     QString cmdLine;
     QString exe;
 };
@@ -86,7 +87,7 @@ private:
 
     void setFinished();
 
-    Internal::DeviceProcessListPrivate * const d;
+    const std::unique_ptr<Internal::DeviceProcessListPrivate> d;
 };
 
 } // namespace ProjectExplorer

@@ -31,6 +31,7 @@
 #include "../project.h"
 #include "../projectexplorer.h"
 #include "../projectexplorerconstants.h"
+#include "../projecttree.h"
 #include <coreplugin/editormanager/editormanager.h>
 #include <coreplugin/messagemanager.h>
 
@@ -180,7 +181,7 @@ QVariant JsonWizard::value(const QString &n) const
     if (v.isValid())
         return v;
     if (hasField(n))
-        return field(n); // Can not contain macros!
+        return field(n); // Cannot contain macros!
     return QVariant();
 }
 
@@ -290,7 +291,7 @@ void JsonWizard::accept()
     openFiles(m_files);
 
     auto node = static_cast<ProjectExplorer::Node*>(value(ProjectExplorer::Constants::PREFERRED_PROJECT_NODE).value<void*>());
-    if (node) // PREFERRED_PROJECT_NODE is not set for newly created projects
+    if (node && ProjectTree::hasNode(node)) // PREFERRED_PROJECT_NODE is not set for newly created projects
         openProjectForNode(node);
 }
 
@@ -353,6 +354,7 @@ void JsonWizard::openFiles(const JsonWizard::GeneratorFiles &files)
                 }
                 break;
             }
+            result.project()->setNeedsInitialExpansion(true);
             openedSomething = true;
         }
         if (file.attributes() & Core::GeneratedFile::OpenEditorAttribute) {

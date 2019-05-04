@@ -26,23 +26,24 @@
 #pragma once
 
 #include "idpaths.h"
+#include "pchtask.h"
 #include "projectpartpch.h"
+#include "processorinterface.h"
 
 #include <filecontainerv2.h>
-#include <projectpartcontainerv2.h>
+#include <projectpartcontainer.h>
 
 namespace ClangBackEnd {
 
-class PchCreatorInterface
+class PchCreatorInterface : public ProcessorInterface
 {
 public:
     PchCreatorInterface() = default;
     PchCreatorInterface(const PchCreatorInterface &) = delete;
     PchCreatorInterface &operator=(const PchCreatorInterface &) = delete;
 
-    virtual void generatePchs(V2::ProjectPartContainers &&projectsParts) = 0;
-    virtual void setGeneratedFiles(V2::FileContainers &&generatedFiles) = 0;
-    virtual std::vector<IdPaths> takeProjectsIncludes() = 0;
+    virtual void generatePch(PchTask &&pchTask) = 0;
+    virtual const ProjectPartPch &projectPartPch() = 0;
 
 protected:
     ~PchCreatorInterface() = default;

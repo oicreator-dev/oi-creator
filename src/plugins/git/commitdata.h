@@ -90,7 +90,7 @@ class CommitData
 public:
     CommitData(CommitType type = SimpleCommit);
     // A pair of state string/file name ('modified', 'file.cpp').
-    typedef QPair<FileStates, QString> StateFilePair;
+    using StateFilePair = QPair<FileStates, QString>;
 
     void clear();
     // Parse the files and the branch of panelInfo
@@ -105,10 +105,10 @@ public:
 
     CommitType commitType;
     QString amendSHA1;
-    QTextCodec *commitEncoding;
+    QTextCodec *commitEncoding = nullptr;
     GitSubmitEditorPanelInfo panelInfo;
     GitSubmitEditorPanelData panelData;
-    bool enablePush;
+    bool enablePush = false;
 
     QList<StateFilePair> files;
 

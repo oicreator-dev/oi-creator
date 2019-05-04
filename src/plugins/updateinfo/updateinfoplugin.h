@@ -50,11 +50,10 @@ public:
     };
 
     UpdateInfoPlugin();
-    virtual ~UpdateInfoPlugin();
+    ~UpdateInfoPlugin() override;
 
-    bool delayedInitialize();
-    void extensionsInitialized();
-    bool initialize(const QStringList &arguments, QString *errorMessage);
+    void extensionsInitialized() override;
+    bool initialize(const QStringList &arguments, QString *errorMessage) override;
 
     bool isAutomaticCheck() const;
     void setAutomaticCheck(bool on);

@@ -22,6 +22,7 @@ win32: LIBS += -luser32 -lshell32
 win32: LIBS += -liphlpapi -lws2_32
 
 SOURCES += \
+    $$PWD/globalfilechangeblocker.cpp \
     $$PWD/benchmarker.cpp \
     $$PWD/environment.cpp \
     $$PWD/environmentmodel.cpp \
@@ -74,7 +75,7 @@ SOURCES += \
     $$PWD/crumblepath.cpp \
     $$PWD/historycompleter.cpp \
     $$PWD/buildablehelperlibrary.cpp \
-    $$PWD/annotateditemdelegate.cpp \
+    $$PWD/delegates.cpp \
     $$PWD/fileinprojectfinder.cpp \
     $$PWD/statuslabel.cpp \
     $$PWD/outputformatter.cpp \
@@ -121,12 +122,16 @@ SOURCES += \
     $$PWD/url.cpp \
     $$PWD/filecrumblabel.cpp \
     $$PWD/fixedsizeclicklabel.cpp \
-    $$PWD/removefiledialog.cpp
+    $$PWD/removefiledialog.cpp \
+    $$PWD/differ.cpp \
+    $$PWD/jsontreeitem.cpp
+
 
 win32:SOURCES += $$PWD/consoleprocess_win.cpp
 else:SOURCES += $$PWD/consoleprocess_unix.cpp
 
 HEADERS += \
+    $$PWD/globalfilechangeblocker.h \
     $$PWD/benchmarker.h \
     $$PWD/environment.h \
     $$PWD/environmentmodel.h \
@@ -184,7 +189,7 @@ HEADERS += \
     $$PWD/crumblepath.h \
     $$PWD/historycompleter.h \
     $$PWD/buildablehelperlibrary.h \
-    $$PWD/annotateditemdelegate.h \
+    $$PWD/delegates.h \
     $$PWD/fileinprojectfinder.h \
     $$PWD/statuslabel.h \
     $$PWD/outputformatter.h \
@@ -258,7 +263,10 @@ HEADERS += \
     $$PWD/linecolumn.h \
     $$PWD/link.h \
     $$PWD/fixedsizeclicklabel.h \
-    $$PWD/removefiledialog.h
+    $$PWD/removefiledialog.h \
+    $$PWD/differ.h \
+    $$PWD/cpplanguage_details.h \
+    $$PWD/jsontreeitem.h
 
 FORMS += $$PWD/filewizardpage.ui \
     $$PWD/newclasswidget.ui \
@@ -270,11 +278,16 @@ RESOURCES += $$PWD/utils.qrc
 
 osx {
     HEADERS += \
+        $$PWD/theme/theme_mac.h \
         $$PWD/fileutils_mac.h
+
     OBJECTIVE_SOURCES += \
+        $$PWD/theme/theme_mac.mm \
         $$PWD/fileutils_mac.mm \
         $$PWD/processhandle_mac.mm
+
     LIBS += -framework Foundation -framework AppKit
 }
 
+include(touchbar/touchbar.pri)
 include(mimetypes/mimetypes.pri)

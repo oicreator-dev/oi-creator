@@ -27,49 +27,154 @@
 
 #include "clangsupport_global.h"
 
-#include <utf8stringvector.h>
+#include "compilermacro.h"
+#include "filepathid.h"
+#include "includesearchpath.h"
+#include "projectpartartefact.h"
+#include "projectpartid.h"
 
-#include <QDataStream>
+#include <utils/cpplanguage_details.h>
+#include <utils/smallstringio.h>
 
 namespace ClangBackEnd {
 
-class ProjectPartContainer
+class ProjectPartContainer : public ProjectPartArtefact
 {
+    using uchar = unsigned char;
 public:
     ProjectPartContainer() = default;
-    ProjectPartContainer(const Utf8String &projectPartId,
-                         const Utf8StringVector &arguments = Utf8StringVector())
-        : projectPartId(projectPartId),
-          arguments(arguments)
-    {
-    }
+    ProjectPartContainer(ProjectPartId projectPartId,
+                         Utils::SmallStringVector &&toolChainArguments,
+                         CompilerMacros &&compilerMacros,
+                         IncludeSearchPaths &&systemIncludeSearchPaths,
+                         IncludeSearchPaths &&projectIncludeSearchPaths,
+                         FilePathIds &&headerPathIds,
+                         FilePathIds &&sourcePathIds,
+                         Utils::Language language,
+                         Utils::LanguageVersion languageVersion,
+                         Utils::LanguageExtension languageExtension)
+        : ProjectPartArtefact(projectPartId,
+                              std::move(toolChainArguments),
+                              std::move(compilerMacros),
+                              std::move(systemIncludeSearchPaths),
+                              std::move(projectIncludeSearchPaths),
+                              language,
+                              languageVersion,
+                              languageExtension)
+        , headerPathIds(std::move(headerPathIds))
+        , sourcePathIds(std::move(sourcePathIds))
+
+    {}
+
+    ProjectPartContainer(Utils::SmallStringView compilerArgumentsText,
+                         Utils::SmallStringView compilerMacrosText,
+                         Utils::SmallStringView systemIncludeSearchPathsText,
+                         Utils::SmallStringView projectIncludeSearchPathsText,
+                         int projectPartId,
+                         int language,
+                         int languageVersion,
+                         int languageExtension)
+        : ProjectPartArtefact(compilerArgumentsText,
+                              compilerMacrosText,
+                              systemIncludeSearchPathsText,
+                              projectIncludeSearchPathsText,
+                              projectPartId,
+                              language,
+                              languageVersion,
+                              languageExtension)
+    {}
 
     friend QDataStream &operator<<(QDataStream &out, const ProjectPartContainer &container)
     {
         out << container.projectPartId;
-        out << container.arguments;
-
+        out << container.toolChainArguments;
+        out << container.compilerMacros;
+        out << container.systemIncludeSearchPaths;
+        out << container.projectIncludeSearchPaths;
+        out << container.headerPathIds;
+        out << container.sourcePathIds;
+        out << uchar(container.language);
+        out << uchar(container.languageVersion);
+        out << uchar(container.languageExtension);
         return out;
     }
 
     friend QDataStream &operator>>(QDataStream &in, ProjectPartContainer &container)
     {
+        uchar language;
+        uchar languageVersion;
+        uchar languageExtension;
+
         in >> container.projectPartId;
-        in >> container.arguments;
+        in >> container.toolChainArguments;
+        in >> container.compilerMacros;
+        in >> container.systemIncludeSearchPaths;
+        in >> container.projectIncludeSearchPaths;
+        in >> container.headerPathIds;
+        in >> container.sourcePathIds;
+        in >> language;
+        in >> languageVersion;
+        in >> languageExtension;
+
+        container.language = static_cast<Utils::Language>(language);
+        container.languageVersion = static_cast<Utils::LanguageVersion>(languageVersion);
+        container.languageExtension = static_cast<Utils::LanguageExtension>(languageExtension);
 
         return in;
     }
 
     friend bool operator==(const ProjectPartContainer &first, const ProjectPartContainer &second)
     {
-        return first.projectPartId == second.projectPartId;
+        return first.projectPartId == second.projectPartId
+            && first.toolChainArguments == second.toolChainArguments
+            && first.compilerMacros == second.compilerMacros
+            && first.systemIncludeSearchPaths == second.systemIncludeSearchPaths
+            && first.projectIncludeSearchPaths == second.projectIncludeSearchPaths
+            && first.headerPathIds == second.headerPathIds
+            && first.sourcePathIds == second.sourcePathIds&& first.language == second.language
+               && first.languageVersion == second.languageVersion
+               && first.languageExtension == second.languageExtension;
+    }
+
+    friend bool operator<(const ProjectPartContainer &first, const ProjectPartContainer &second)
+    {
+        return std::tie(first.projectPartId,
+                        first.toolChainArguments,
+                        first.compilerMacros,
+                        first.systemIncludeSearchPaths,
+                        first.projectIncludeSearchPaths,
+                        first.headerPathIds,
+                        first.sourcePathIds,
+                        first.language,
+                        first.languageVersion,
+                        first.languageExtension)
+               < std::tie(second.projectPartId,
+                          second.toolChainArguments,
+                          second.compilerMacros,
+                          second.systemIncludeSearchPaths,
+                          second.projectIncludeSearchPaths,
+                          second.headerPathIds,
+                          second.sourcePathIds,
+                          second.language,
+                          second.languageVersion,
+                          second.languageExtension);
+    }
+
+    ProjectPartContainer clone() const
+    {
+        return *this;
     }
 
 public:
-    Utf8String projectPartId;
-    Utf8StringVector arguments;
+    FilePathIds headerPathIds;
+    FilePathIds sourcePathIds;
+    bool updateIsDeferred = false;
 };
 
-QDebug operator<<(QDebug debug, const ProjectPartContainer &container);
+using ProjectPartContainerReference = std::reference_wrapper<ProjectPartContainer>;
+using ProjectPartContainers = std::vector<ProjectPartContainer>;
+using ProjectPartContainerReferences = std::vector<ProjectPartContainerReference>;
+
+CLANGSUPPORT_EXPORT QDebug operator<<(QDebug debug, const ProjectPartContainer &container);
 
 } // namespace ClangBackEnd

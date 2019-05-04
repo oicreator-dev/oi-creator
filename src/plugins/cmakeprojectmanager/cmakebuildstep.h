@@ -55,13 +55,6 @@ public:
     explicit CMakeBuildStep(ProjectExplorer::BuildStepList *bsl);
 
     CMakeBuildConfiguration *cmakeBuildConfiguration() const;
-    CMakeBuildConfiguration *targetsActiveBuildConfiguration() const;
-
-    bool init(QList<const BuildStep *> &earlierSteps) override;
-    void run(QFutureInterface<bool> &fi) override;
-
-    ProjectExplorer::BuildStepConfigWidget *createConfigWidget() override;
-    bool immutable() const override;
 
     QString buildTarget() const;
     bool buildsBuildTarget(const QString &target) const;
@@ -100,10 +93,14 @@ protected:
 private:
     void ctor(ProjectExplorer::BuildStepList *bsl);
 
-    void runImpl(QFutureInterface<bool> &fi);
-    void handleProjectWasParsed(QFutureInterface<bool> &fi, bool success);
+    bool init() override;
+    void doRun() override;
+    ProjectExplorer::BuildStepConfigWidget *createConfigWidget() override;
 
-    void handleBuildTargetChanges();
+    void runImpl();
+    void handleProjectWasParsed(bool success);
+
+    void handleBuildTargetChanges(bool success);
     CMakeRunConfiguration *targetsActiveRunConfiguration() const;
 
     QMetaObject::Connection m_runTrigger;
@@ -114,6 +111,7 @@ private:
     QString m_buildTarget;
     QString m_toolArguments;
     bool m_useNinja = false;
+    bool m_waiting = false;
 };
 
 class CMakeBuildStepConfigWidget : public ProjectExplorer::BuildStepConfigWidget
@@ -121,8 +119,6 @@ class CMakeBuildStepConfigWidget : public ProjectExplorer::BuildStepConfigWidget
     Q_OBJECT
 public:
     CMakeBuildStepConfigWidget(CMakeBuildStep *buildStep);
-    QString displayName() const override;
-    QString summaryText() const override;
 
 private:
     void itemChanged(QListWidgetItem*);
@@ -134,13 +130,10 @@ private:
     CMakeBuildStep *m_buildStep;
     QLineEdit *m_toolArguments;
     QListWidget *m_buildTargetsList;
-    QString m_summaryText;
 };
 
 class CMakeBuildStepFactory : public ProjectExplorer::BuildStepFactory
 {
-    Q_OBJECT
-
 public:
     CMakeBuildStepFactory();
 };

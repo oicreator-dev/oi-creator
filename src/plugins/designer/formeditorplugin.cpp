@@ -96,7 +96,7 @@ bool FormEditorPlugin::initialize(const QStringList &arguments, QString *error)
                     wizard->setDescription(tr("Creates a Qt Designer form along with a matching class (C++ header and source file) "
                     "for implementation purposes. You can add the form and class to an existing Qt Widget Project."));
 
-                    return QList<IWizardFactory *>() << wizard;
+                    return {wizard};
                 });
 #endif
 
@@ -160,8 +160,6 @@ static QString otherFile()
     if (current.isEmpty())
         return QString();
     const Utils::MimeType currentMimeType = Utils::mimeTypeForFile(current);
-    if (!currentMimeType.isValid())
-        return QString();
     // Determine potential suffixes of candidate files
     // 'ui' -> 'cpp', 'cpp/h' -> 'ui'.
     QStringList candidateSuffixes;

@@ -25,6 +25,7 @@
 
 #include "qmlprofilerdetailsrewriter_test.h"
 
+#include <projectexplorer/buildinfo.h>
 #include <projectexplorer/customexecutablerunconfiguration.h>
 #include <projectexplorer/project.h>
 #include <projectexplorer/target.h>
@@ -71,23 +72,18 @@ public:
     bool needsConfiguration() const final { return false; }
 };
 
-class DummyBuildConfigurationFactory : public ProjectExplorer::IBuildConfigurationFactory
+class DummyBuildConfigurationFactory : public ProjectExplorer::BuildConfigurationFactory
 {
 public:
-    QList<ProjectExplorer::BuildInfo *> availableBuilds(const ProjectExplorer::Target *) const final
+    QList<ProjectExplorer::BuildInfo> availableBuilds(const ProjectExplorer::Target *) const final
     {
-        return QList<ProjectExplorer::BuildInfo *>();
+        return {};
     }
 
-    QList<ProjectExplorer::BuildInfo *> availableSetups(const ProjectExplorer::Kit *,
-                                                        const QString &) const final
+    QList<ProjectExplorer::BuildInfo> availableSetups(const ProjectExplorer::Kit *,
+                                                      const QString &) const final
     {
-        return QList<ProjectExplorer::BuildInfo *>();
-    }
-
-    int priority(const ProjectExplorer::Kit *, const QString &) const final
-    {
-        return 0;
+        return {};
     }
 };
 
@@ -213,8 +209,9 @@ void QmlProfilerDetailsRewriterTest::seedRewriter()
 
     QFutureInterface<void> result;
     QmlJS::PathsAndLanguages lPaths;
-    for (auto p : QLibraryInfo::location(QLibraryInfo::Qml2ImportsPath))
-        lPaths.maybeInsert(Utils::FileName::fromString(p), QmlJS::Dialect::Qml);
+    lPaths.maybeInsert(
+                Utils::FileName::fromString(QLibraryInfo::location(QLibraryInfo::Qml2ImportsPath)),
+                QmlJS::Dialect::Qml);
     QmlJS::ModelManagerInterface::importScan(result, QmlJS::ModelManagerInterface::workingCopy(),
                                              lPaths, m_modelManager, false);
 
@@ -228,17 +225,22 @@ void QmlProfilerDetailsRewriterTest::seedRewriter()
     doc->parse();
     QVERIFY(!doc->source().isEmpty());
 
-    ProjectExplorer::Kit *kit = new ProjectExplorer::Kit;
+    auto kit = std::make_unique<ProjectExplorer::Kit>();
     ProjectExplorer::SysRootKitInformation::setSysRoot(
-                kit, Utils::FileName::fromLatin1("/nowhere"));
+                kit.get(), Utils::FileName::fromLatin1("/nowhere"));
 
     DummyProject *project = new DummyProject(Utils::FileName::fromString(filename));
     ProjectExplorer::SessionManager::addProject(project);
-    ProjectExplorer::Target *target = project->createTarget(kit);
 
-    m_rewriter.populateFileFinder(target);
+    {
+        // Make sure the uniqe_ptr gets deleted before the project.
+        // Otherwise we'll get a double free because the target is also parented to the project
+        // and unique_ptr doesn't know anything about QObject parent/child relationships.
+        std::unique_ptr<ProjectExplorer::Target> target = project->createTarget(kit.get());
+        m_rewriter.populateFileFinder(target.get());
+    }
+
     ProjectExplorer::SessionManager::removeProject(project);
-    ProjectExplorer::KitManager::deleteKit(kit);
 }
 
 } // namespace Internal

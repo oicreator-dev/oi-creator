@@ -21,9 +21,7 @@ SOURCES += \
     $$PWD/requestcompletionsmessage.cpp \
     $$PWD/echomessage.cpp \
     $$PWD/endmessage.cpp \
-    $$PWD/projectpartsupdatedmessage.cpp \
     $$PWD/documentsopenedmessage.cpp \
-    $$PWD/projectpartsremovedmessage.cpp \
     $$PWD/documentsclosedmessage.cpp \
     $$PWD/codecompletionchunk.cpp \
     $$PWD/codecompletion.cpp \
@@ -46,8 +44,6 @@ SOURCES += \
     $$PWD/pchmanagerserverinterface.cpp \
     $$PWD/pchmanagerserverproxy.cpp \
     $$PWD/precompiledheadersupdatedmessage.cpp \
-    $$PWD/projectpartcontainer.cpp \
-    $$PWD/projectpartcontainerv2.cpp \
     $$PWD/projectpartpch.cpp \
     $$PWD/readmessageblock.cpp \
     $$PWD/refactoringclientinterface.cpp \
@@ -56,7 +52,6 @@ SOURCES += \
     $$PWD/refactoringserverproxy.cpp \
     $$PWD/referencesmessage.cpp \
     $$PWD/unsavedfilesupdatedmessage.cpp \
-    $$PWD/removeprojectpartsmessage.cpp \
     $$PWD/requestannotationsmessage.cpp \
     $$PWD/requestfollowsymbolmessage.cpp \
     $$PWD/requestreferencesmessage.cpp \
@@ -87,7 +82,12 @@ SOURCES += \
     $$PWD/writemessageblock.cpp \
     $$PWD/filepathcaching.cpp \
     $$PWD/filepathid.cpp \
-    $$PWD/baseserverproxy.cpp
+    $$PWD/baseserverproxy.cpp \
+    $$PWD/updategeneratedfilesmessage.cpp \
+    $$PWD/removegeneratedfilesmessage.cpp \
+    $$PWD/generatedfiles.cpp \
+    $$PWD/projectpartartefact.cpp \
+    $$PWD/projectpartcontainer.cpp
 
 HEADERS += \
     $$PWD/cancelmessage.h \
@@ -107,13 +107,16 @@ HEADERS += \
     $$PWD/clangrefactoringmessages.h \
     $$PWD/clangrefactoringservermessages.h \
     $$PWD/alivemessage.h \
+    $$PWD/clangsupportexceptions.h \
     $$PWD/completionsmessage.h \
+    $$PWD/executeinloop.h \
+    $$PWD/projectpartid.h \
+    $$PWD/projectpartsstorage.h \
+    $$PWD/projectpartsstorageinterface.h \
     $$PWD/requestcompletionsmessage.h \
     $$PWD/echomessage.h \
     $$PWD/endmessage.h \
-    $$PWD/projectpartsupdatedmessage.h \
     $$PWD/documentsopenedmessage.h \
-    $$PWD/projectpartsremovedmessage.h \
     $$PWD/documentsclosedmessage.h \
     $$PWD/codecompletionchunk.h \
     $$PWD/codecompletion.h \
@@ -140,8 +143,6 @@ HEADERS += \
     $$PWD/pchmanagerserverinterface.h \
     $$PWD/pchmanagerserverproxy.h \
     $$PWD/precompiledheadersupdatedmessage.h \
-    $$PWD/projectpartcontainer.h \
-    $$PWD/projectpartcontainerv2.h \
     $$PWD/projectpartpch.h \
     $$PWD/readmessageblock.h \
     $$PWD/refactoringclientinterface.h \
@@ -202,6 +203,16 @@ HEADERS += \
     $$PWD/nativefilepath.h \
     $$PWD/filepathview.h \
     $$PWD/compilermacro.h \
-    $$PWD/projectpartpchproviderinterface.h
+    $$PWD/projectpartpchproviderinterface.h \
+    $$PWD/updategeneratedfilesmessage.h \
+    $$PWD/removegeneratedfilesmessage.h \
+    $$PWD/generatedfiles.h \
+    $$PWD/generatedfilesinterface.h \
+    $$PWD/progressmessage.h \
+    $$PWD/progresscounter.h \
+    $$PWD/includesearchpath.h \
+    $$PWD/commandlinebuilder.h \
+    $$PWD/projectpartartefact.h \
+    $$PWD/projectpartcontainer.h
 
 contains(QT_CONFIG, reduce_exports):CONFIG += hide_symbols

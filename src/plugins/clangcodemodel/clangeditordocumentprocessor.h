@@ -83,12 +83,12 @@ public:
     extraRefactoringOperations(const TextEditor::AssistInterface &assistInterface) override;
 
     void invalidateDiagnostics() override;
-    bool hasDiagnosticsAt(uint line, uint column) const override;
-    void addDiagnosticToolTipToLayout(uint line, uint column, QLayout *target) const override;
+
+    TextEditor::TextMarks diagnosticTextMarksAt(uint line, uint column) const;
 
     void editorDocumentTimerRestarted() override;
 
-    void setParserConfig(const CppTools::BaseEditorDocumentParser::Configuration config) override;
+    void setParserConfig(const CppTools::BaseEditorDocumentParser::Configuration &config) override;
 
     QFuture<CppTools::CursorInfo> cursorInfo(const CppTools::CursorInfoParams &params) override;
     QFuture<CppTools::CursorInfo> requestLocalReferences(const QTextCursor &cursor) override;
@@ -118,14 +118,15 @@ private:
     void updateBackendProjectPartAndDocument();
     void updateBackendDocument(CppTools::ProjectPart &projectPart);
     void updateBackendDocumentIfProjectPartExists();
-    void requestAnnotationsFromBackend(const QString &projectpartId);
+    void requestAnnotationsFromBackend();
 
     HeaderErrorDiagnosticWidgetCreator creatorForHeaderErrorDiagnosticWidget(
             const ClangBackEnd::DiagnosticContainer &firstHeaderErrorDiagnostic);
     ClangBackEnd::FileContainer simpleFileContainer(const QByteArray &codecName = QByteArray()) const;
     ClangBackEnd::FileContainer fileContainerWithOptionsAndDocumentContent(
-        CppTools::ProjectPart &projectPart, const QStringList &fileOptions) const;
-    ClangBackEnd::FileContainer fileContainerWithDocumentContent(const QString &projectpartId) const;
+        const QStringList &compilationArguments,
+        const ProjectExplorer::HeaderPaths headerPaths) const;
+    ClangBackEnd::FileContainer fileContainerWithDocumentContent() const;
 
 private:
     TextEditor::TextDocument &m_document;

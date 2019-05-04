@@ -1,4 +1,6 @@
 import qbs 1.0
+import qbs.FileInfo
+import qbs.Environment
 
 Project {
     name: "TextEditor"
@@ -9,10 +11,14 @@ Project {
         Depends { name: "Qt"; submodules: ["widgets", "xml", "network", "printsupport"] }
         Depends { name: "Aggregation" }
         Depends { name: "Utils" }
+        Depends { name: "KSyntaxHighlighting" }
+
+        Export {
+            Depends { name: "KSyntaxHighlighting" }
+        }
 
         Depends { name: "Core" }
 
-        cpp.includePaths: base.concat([path]) // Needed for the highlighterengine autotest.
         cpp.enableExceptions: true
 
         files: [
@@ -51,6 +57,8 @@ Project {
             "colorschemeedit.cpp",
             "colorschemeedit.h",
             "colorschemeedit.ui",
+            "command.cpp",
+            "command.h",
             "commentssettings.cpp",
             "commentssettings.h",
             "completionsettings.cpp",
@@ -76,15 +84,19 @@ Project {
             "fontsettingspage.cpp",
             "fontsettingspage.h",
             "fontsettingspage.ui",
-            "helpitem.cpp",
-            "helpitem.h",
-            "highlighterutils.cpp",
-            "highlighterutils.h",
+            "formattexteditor.cpp",
+            "formattexteditor.h",
+            "highlighter.cpp",
+            "highlighter.h",
+            "highlightersettings.cpp",
+            "highlightersettings.h",
+            "highlightersettingspage.cpp",
+            "highlightersettingspage.h",
+            "highlightersettingspage.ui",
             "icodestylepreferences.cpp",
             "icodestylepreferences.h",
             "icodestylepreferencesfactory.cpp",
             "icodestylepreferencesfactory.h",
-            "indenter.cpp",
             "indenter.h",
             "ioutlinewidget.h",
             "linenumberfilter.cpp",
@@ -139,6 +151,8 @@ Project {
             "texteditorplugin.h",
             "texteditorsettings.cpp",
             "texteditorsettings.h",
+            "textindenter.cpp",
+            "textindenter.h",
             "textmark.cpp",
             "textmark.h",
             "textstyles.h",
@@ -191,50 +205,6 @@ Project {
                 "textdocumentmanipulator.cpp",
                 "textdocumentmanipulator.h",
                 "textdocumentmanipulatorinterface.h",
-            ]
-        }
-
-        Group {
-            name: "GenericHighlighter"
-            prefix: "generichighlighter/"
-            files: [
-                "context.cpp",
-                "context.h",
-                "definitiondownloader.cpp",
-                "definitiondownloader.h",
-                "dynamicrule.cpp",
-                "dynamicrule.h",
-                "highlightdefinition.cpp",
-                "highlightdefinition.h",
-                "highlightdefinitionhandler.cpp",
-                "highlightdefinitionhandler.h",
-                "highlightdefinitionmetadata.h",
-                "highlighter.cpp",
-                "highlighter.h",
-                "highlighterexception.h",
-                "highlightersettings.cpp",
-                "highlightersettings.h",
-                "highlightersettingspage.cpp",
-                "highlightersettingspage.h",
-                "highlightersettingspage.ui",
-                "includerulesinstruction.cpp",
-                "includerulesinstruction.h",
-                "itemdata.cpp",
-                "itemdata.h",
-                "keywordlist.cpp",
-                "keywordlist.h",
-                "managedefinitionsdialog.cpp",
-                "managedefinitionsdialog.h",
-                "managedefinitionsdialog.ui",
-                "manager.cpp",
-                "manager.h",
-                "progressdata.cpp",
-                "progressdata.h",
-                "reuse.h",
-                "rule.cpp",
-                "rule.h",
-                "specificrules.cpp",
-                "specificrules.h",
             ]
         }
 

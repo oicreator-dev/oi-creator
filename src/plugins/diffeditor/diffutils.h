@@ -36,9 +36,9 @@ QT_END_NAMESPACE
 
 namespace TextEditor { class FontSettings; }
 
-namespace DiffEditor {
+namespace Utils { class Diff; }
 
-class Diff;
+namespace DiffEditor {
 
 class DIFFEDITOR_EXPORT DiffFileInfo {
 public:
@@ -47,7 +47,7 @@ public:
         PatchEditor
     };
 
-    DiffFileInfo() {}
+    DiffFileInfo() = default;
     DiffFileInfo(const QString &file) : fileName(file) {}
     DiffFileInfo(const QString &file, const QString &type)
         : fileName(file), typeInfo(type) {}
@@ -128,8 +128,8 @@ public:
         GitFormat = AddLevel | 0x2, // Add line 'diff ..' as git does
     };
 
-    static ChunkData calculateOriginalData(const QList<Diff> &leftDiffList,
-                                           const QList<Diff> &rightDiffList);
+    static ChunkData calculateOriginalData(const QList<Utils::Diff> &leftDiffList,
+                                           const QList<Utils::Diff> &rightDiffList);
     static FileData calculateContextData(const ChunkData &originalData,
                                          int contextLineCount,
                                          int joinChunkThreshold = 1);

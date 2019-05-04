@@ -27,7 +27,7 @@
 #include "gtestresult.h"
 #include "../testtreemodel.h"
 #include "../testtreeitem.h"
-#include "utils/hostosinfo.h"
+#include <utils/hostosinfo.h>
 
 #include <QDir>
 #include <QFileInfo>
@@ -62,7 +62,7 @@ GTestOutputReader::GTestOutputReader(const QFutureInterface<TestResultPtr> &futu
     }
 }
 
-void GTestOutputReader::processOutput(const QByteArray &outputLine)
+void GTestOutputReader::processOutputLine(const QByteArray &outputLineWithNewLine)
 {
     static QRegExp newTestStarts("^\\[-{10}\\] \\d+ tests? from (.*)$");
     static QRegExp testEnds("^\\[-{10}\\] \\d+ tests? from (.*) \\((.*)\\)$");
@@ -74,7 +74,7 @@ void GTestOutputReader::processOutput(const QByteArray &outputLine)
     static QRegExp errorLocation("^(.*)\\((\\d+)\\): error:.*$");
     static QRegExp iterations("^Repeating all tests \\(iteration (\\d+)\\) \\. \\. \\.$");
 
-    const QString line = QString::fromLatin1(outputLine);
+    const QString line = QString::fromLatin1(chopLineBreak(outputLineWithNewLine));
     if (line.trimmed().isEmpty())
         return;
 
@@ -87,16 +87,16 @@ void GTestOutputReader::processOutput(const QByteArray &outputLine)
             m_description = line;
             if (m_iteration > 1)
                 m_description.append(' ' + tr("(iteration %1)").arg(m_iteration));
-            TestResultPtr testResult = TestResultPtr(new GTestResult(m_projectFile));
+            TestResultPtr testResult = TestResultPtr(new GTestResult(id(), m_projectFile, QString()));
             testResult->setResult(Result::MessageInternal);
             testResult->setDescription(m_description);
             reportResult(testResult);
             m_description.clear();
         } else if (disabledTests.exactMatch(line)) {
-            TestResultPtr testResult = TestResultPtr(new GTestResult(m_projectFile));
+            TestResultPtr testResult = TestResultPtr(new GTestResult(id(), m_projectFile, QString()));
             testResult->setResult(Result::MessageDisabledTests);
             int disabled = disabledTests.cap(1).toInt();
-            testResult->setDescription(tr("You have %n disabled test(s).", 0, disabled));
+            testResult->setDescription(tr("You have %n disabled test(s).", nullptr, disabled));
             testResult->setLine(disabled); // misuse line property to hold number of disabled
             reportResult(testResult);
             m_description.clear();
@@ -144,7 +144,7 @@ void GTestOutputReader::processOutput(const QByteArray &outputLine)
         TestResultPtr testResult = createDefaultResult();
         testResult->setResult(Result::Fail);
         m_description.chop(1);
-        testResult->setDescription(m_description);
+        QStringList resultDescription;
 
         for (const QString &output : m_description.split('\n')) {
             QRegExp *match = nullptr;
@@ -152,17 +152,23 @@ void GTestOutputReader::processOutput(const QByteArray &outputLine)
                 match = &failureLocation;
             else if (errorLocation.exactMatch(output))
                 match = &errorLocation;
-
-            if (match) {
-                testResult->setLine(match->cap(2).toInt());
-
-                QString file = constructSourceFilePath(m_buildDir, match->cap(1));
-                if (!file.isEmpty())
-                    testResult->setFileName(file);
-
-                break;
+            if (!match) {
+                resultDescription << output;
+                continue;
             }
+            testResult->setDescription(resultDescription.join('\n'));
+            reportResult(testResult);
+            resultDescription.clear();
+
+            testResult = createDefaultResult();
+            testResult->setResult(Result::MessageLocation);
+            testResult->setLine(match->cap(2).toInt());
+            QString file = constructSourceFilePath(m_buildDir, match->cap(1));
+            if (!file.isEmpty())
+                testResult->setFileName(file);
+            resultDescription << output;
         }
+        testResult->setDescription(resultDescription.join('\n'));
         reportResult(testResult);
         m_description.clear();
         testResult = createDefaultResult();

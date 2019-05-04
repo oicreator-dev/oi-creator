@@ -48,6 +48,7 @@
 #include <utils/utilsicons.h>
 
 #include <QHeaderView>
+#include <QTimer>
 
 
 static inline void setScenePos(const QmlDesigner::ModelNode &modelNode,const QPointF &pos)
@@ -75,7 +76,7 @@ NavigatorView::NavigatorView(QObject* parent) :
     m_treeModel(new NavigatorTreeModel(this))
 {
 #ifndef QMLDESIGNER_TEST
-    Internal::NavigatorContext *navigatorContext = new Internal::NavigatorContext(m_widget.data());
+    auto navigatorContext = new Internal::NavigatorContext(m_widget.data());
     Core::ICore::addContextObject(navigatorContext);
 #endif
 
@@ -92,7 +93,7 @@ NavigatorView::NavigatorView(QObject* parent) :
     connect(m_widget.data(), &NavigatorWidget::filterToggled, this, &NavigatorView::filterToggled);
 
 #ifndef QMLDESIGNER_TEST
-    NameItemDelegate *idDelegate = new NameItemDelegate(this);
+    auto idDelegate = new NameItemDelegate(this);
     IconCheckboxItemDelegate *showDelegate =
             new IconCheckboxItemDelegate(this,
                                          Utils::Icons::EYE_OPEN_TOOLBAR.icon(),
@@ -147,15 +148,21 @@ void NavigatorView::modelAttached(Model *model)
 {
     AbstractView::modelAttached(model);
 
-    m_currentModelInterface->setFilter(
-                DesignerSettings::getValue(DesignerSettingsKey::NAVIGATOR_SHOW_ONLY_VISIBLE_ITEMS).toBool());
-
     QTreeView *treeView = treeWidget();
-    treeView->expandAll();
 
     treeView->header()->setSectionResizeMode(0, QHeaderView::Stretch);
     treeView->header()->resizeSection(1,26);
     treeView->setIndentation(20);
+
+    m_currentModelInterface->setFilter(false);
+
+
+    QTimer::singleShot(0, this, [this, treeView]() {
+        m_currentModelInterface->setFilter(
+                    DesignerSettings::getValue(DesignerSettingsKey::NAVIGATOR_SHOW_ONLY_VISIBLE_ITEMS).toBool());
+        treeView->expandAll();
+    });
+
 #ifdef _LOCK_ITEMS_
     treeView->header()->resizeSection(2,20);
 #endif
@@ -479,7 +486,7 @@ QTreeView *NavigatorView::treeWidget() const
 {
     if (m_widget)
         return m_widget->treeView();
-    return 0;
+    return nullptr;
 }
 
 NavigatorTreeModel *NavigatorView::treeModel()

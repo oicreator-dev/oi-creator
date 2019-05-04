@@ -138,20 +138,22 @@ class PlainDumper:
             printer = self.printer.invoke(value.nativeValue)
         lister = getattr(printer, 'children', None)
         children = [] if lister is None else list(lister())
-        d.putType(self.printer.name)
+        d.putType(value.nativeValue.type.name)
         val = printer.to_string()
         if isinstance(val, str):
-            d.putValue(val)
+            # encode and avoid extra quotes ('"') at beginning and end
+            d.putValue(d.hexencode(val), 'utf8:1:0')
         elif sys.version_info[0] <= 2 and isinstance(val, unicode):
             d.putValue(val)
         else: # Assuming LazyString
-            d.putCharArrayHelper(val.address, val.length, val.type)
+            d.putCharArrayValue(val.address, val.length,
+                                val.type.target().sizeof)
 
         d.putNumChild(len(children))
         if d.isExpanded():
             with Children(d):
                 for child in children:
-                    d.putSubItem(child[0], child[1])
+                    d.putSubItem(child[0], d.fromNativeValue(child[1]))
 
 def importPlainDumpers(args):
     if args == 'off':
@@ -245,17 +247,19 @@ class Dumper(DumperBase):
             #warn('TARGET TYPE: %s' % targetType)
             if targetType.code == gdb.TYPE_CODE_ARRAY:
                 val = self.Value(self)
-                val.laddress = toInteger(nativeValue.address)
-                val.nativeValue = nativeValue
             else:
-                # Cast may fail (e.g for arrays, see test for Bug5799)
-                val = self.fromNativeValue(nativeValue.cast(targetType))
-            val.type = self.fromNativeType(nativeType)
-            val.nativeValue = nativeValue
+                try:
+                    # Cast may fail for arrays, for typedefs to __uint128_t with
+                    # gdb.error: That operation is not available on integers
+                    # of more than 8 bytes.
+                    # See test for Bug5799, QTCREATORBUG-18450.
+                    val = self.fromNativeValue(nativeValue.cast(targetType))
+                except:
+                    val = self.Value(self)
             #warn('CREATED TYPEDEF: %s' % val)
-            return val
+        else:
+            val = self.Value(self)
 
-        val = self.Value(self)
         val.nativeValue = nativeValue
         if not nativeValue.address is None:
             val.laddress = toInteger(nativeValue.address)
@@ -305,6 +309,12 @@ class Dumper(DumperBase):
             #warn('REF')
             targetType = self.fromNativeType(nativeType.target().unqualified())
             return self.createReferenceType(targetType)
+
+        if hasattr(gdb, "TYPE_CODE_RVALUE_REF"):
+            if code == gdb.TYPE_CODE_RVALUE_REF:
+                #warn('RVALUEREF')
+                targetType = self.fromNativeType(nativeType.target())
+                return self.createRValueReferenceType(targetType)
 
         if code == gdb.TYPE_CODE_ARRAY:
             #warn('ARRAY')
@@ -407,8 +417,8 @@ class Dumper(DumperBase):
                     found = True
             if not found or v != 0:
                 # Leftover value
-                flags.append('unknown:%d' % v)
-            return " | ".join(flags) + ' (' + (form % intval) + ')'
+                flags.append('unknown: %d' % v)
+            return '(' + " | ".join(flags) + ') (' + (form % intval) + ')'
         except:
             pass
         return form % intval
@@ -707,14 +717,18 @@ class Dumper(DumperBase):
         self.reportResult(self.output)
 
     def parseAndEvaluate(self, exp):
+        val = self.nativeParseAndEvaluate(exp)
+        return None if val is None else self.fromNativeValue(val)
+
+    def nativeParseAndEvaluate(self, exp):
         #warn('EVALUATE "%s"' % exp)
         try:
             val = gdb.parse_and_eval(exp)
+            return val
         except RuntimeError as error:
             if self.passExceptions:
                 warn("Cannot evaluate '%s': %s" % (exp, error))
             return None
-        return self.fromNativeValue(val)
 
     def callHelper(self, rettype, value, function, args):
         # args is a tuple.
@@ -878,16 +892,33 @@ class Dumper(DumperBase):
     def createSpecialBreakpoints(self, args):
         self.specialBreakpoints = []
         def newSpecial(spec):
-            class SpecialBreakpoint(gdb.Breakpoint):
+            # GDB < 8.1 does not have the 'qualified' parameter here,
+            # GDB >= 8.1 applies some generous pattern matching, hitting
+            # e.g. also Foo::abort() when asking for '::abort'
+            class Pre81SpecialBreakpoint(gdb.Breakpoint):
                 def __init__(self, spec):
-                    super(SpecialBreakpoint, self).\
-                        __init__(spec, gdb.BP_BREAKPOINT, internal=True)
+                    super(Pre81SpecialBreakpoint, self).__init__(spec,
+                        gdb.BP_BREAKPOINT, internal=True)
                     self.spec = spec
 
                 def stop(self):
                     print("Breakpoint on '%s' hit." % self.spec)
                     return True
-            return SpecialBreakpoint(spec)
+
+            class SpecialBreakpoint(gdb.Breakpoint):
+                def __init__(self, spec):
+                    super(SpecialBreakpoint, self).__init__(spec,
+                        gdb.BP_BREAKPOINT, internal=True, qualified=True)
+                    self.spec = spec
+
+                def stop(self):
+                    print("Breakpoint on '%s' hit." % self.spec)
+                    return True
+
+            try:
+                return SpecialBreakpoint(spec)
+            except:
+                return Pre81SpecialBreakpoint(spec)
 
         # FIXME: ns is accessed too early. gdb.Breakpoint() has no
         # 'rbreak' replacement, and breakpoints created with
@@ -993,7 +1024,20 @@ class Dumper(DumperBase):
             qtCoreMatch = re.match('.*/libQt5?Core[^/.]*\.so', name)
 
         if qtCoreMatch is not None:
+            self.addDebugLibs(objfile)
             self.handleQtCoreLoaded(objfile)
+
+    def addDebugLibs(self, objfile):
+        # The directory where separate debug symbols are searched for
+        # is "/usr/lib/debug".
+        try:
+            cooked = gdb.execute('show debug-file-directory', to_string=True)
+            clean = cooked.split('"')[1]
+            newdir = '/'.join(objfile.filename.split('/')[:-1])
+            gdb.execute('set debug-file-directory %s:%s' % (clean, newdir))
+        except:
+            pass
+
 
     def handleQtCoreLoaded(self, objfile):
         fd, tmppath = tempfile.mkstemp()
@@ -1252,7 +1296,7 @@ class Dumper(DumperBase):
             frame = gdb.newest_frame()
             ns = self.qtNamespace()
             needle = self.qtNamespace() + 'QV4::ExecutionEngine'
-            pat = '%sqt_v4StackTrace(((%sQV4::ExecutionEngine *)0x%x)->currentContext)'
+            pat = '%sqt_v4StackTrace(((%sQV4::ExecutionEngine *)0x%x)->currentContext())'
             done = False
             while i < limit and frame and not done:
                 block = None

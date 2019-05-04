@@ -40,9 +40,11 @@
 namespace ClangBackEnd {
 
 RefactoringServer::RefactoringServer(SymbolIndexingInterface &symbolIndexing,
-                                     FilePathCachingInterface &filePathCache)
+                                     FilePathCachingInterface &filePathCache,
+                                     GeneratedFiles &generatedFiles)
     : m_symbolIndexing(symbolIndexing),
-      m_filePathCache(filePathCache)
+      m_filePathCache(filePathCache),
+      m_generatedFiles(generatedFiles)
 {
     m_pollTimer.setInterval(100);
 
@@ -60,10 +62,9 @@ void RefactoringServer::requestSourceLocationsForRenamingMessage(RequestSourceLo
 {
     SymbolFinder symbolFinder(message.line, message.column, m_filePathCache);
 
-    symbolFinder.addFile(std::string(message.filePath.directory()),
-                         std::string(message.filePath.name()),
-                         std::string(message.unsavedContent),
-                         std::vector<std::string>(message.commandLine));
+    symbolFinder.addFile(std::move(message.filePath),
+                         std::move(message.unsavedContent),
+                         std::move(message.commandLine));
 
     symbolFinder.findSymbol();
 
@@ -77,10 +78,9 @@ void RefactoringServer::requestSourceRangesAndDiagnosticsForQueryMessage(
 {
     ClangQuery clangQuery(m_filePathCache, message.takeQuery());
 
-    clangQuery.addFile(std::string(message.source.filePath.directory()),
-                       std::string(message.source.filePath.name()),
-                       std::string(message.source.unsavedFileContent),
-                       std::vector<std::string>(message.source.commandLineArguments));
+    clangQuery.addFile(std::move(message.source.filePath),
+                       std::move(message.source.unsavedFileContent),
+                       std::move(message.source.commandLineArguments));
 
     clangQuery.findLocations();
 
@@ -97,12 +97,22 @@ void RefactoringServer::requestSourceRangesForQueryMessage(RequestSourceRangesFo
 
 void RefactoringServer::updateProjectParts(UpdateProjectPartsMessage &&message)
 {
-    m_symbolIndexing.updateProjectParts(message.takeProjectsParts(), message.takeGeneratedFiles());
+    m_symbolIndexing.updateProjectParts(message.takeProjectsParts());
+}
+
+void RefactoringServer::updateGeneratedFiles(UpdateGeneratedFilesMessage &&message)
+{
+    m_generatedFiles.update(message.takeGeneratedFiles());
 }
 
 void RefactoringServer::removeProjectParts(RemoveProjectPartsMessage &&)
 {
+    // TODO
+}
 
+void RefactoringServer::removeGeneratedFiles(RemoveGeneratedFilesMessage &&message)
+{
+    m_generatedFiles.remove(message.generatedFiles);
 }
 
 void RefactoringServer::cancel()
@@ -144,6 +154,11 @@ bool RefactoringServer::pollTimerIsActive() const
 void RefactoringServer::setGathererProcessingSlotCount(uint count)
 {
     m_gatherer.setProcessingSlotCount(count);
+}
+
+void RefactoringServer::setProgress(int progress, int total)
+{
+    client()->progress({ProgressType::Indexing, progress, total});
 }
 
 void RefactoringServer::gatherSourceRangesForQueryMessages(

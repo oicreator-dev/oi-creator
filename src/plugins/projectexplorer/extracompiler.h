@@ -39,6 +39,7 @@
 #include <QList>
 
 #include <functional>
+#include <memory>
 
 QT_FORWARD_DECLARE_CLASS(QProcess);
 QT_FORWARD_DECLARE_CLASS(QThreadPool);
@@ -89,7 +90,7 @@ private:
     virtual void run(const QByteArray &sourceContent) = 0;
     virtual void run(const Utils::FileName &file) = 0;
 
-    ExtraCompilerPrivate *const d;
+    const std::unique_ptr<ExtraCompilerPrivate> d;
 };
 
 class PROJECTEXPLORER_EXPORT ProcessExtraCompiler : public ExtraCompiler
@@ -136,6 +137,20 @@ private:
     QFutureWatcher<FileNameToContentsHash> *m_watcher = nullptr;
 };
 
+class PROJECTEXPLORER_EXPORT ExtraCompilerFactoryObserver
+{
+    friend class ExtraCompilerFactory;
+
+protected:
+    ExtraCompilerFactoryObserver();
+    ~ExtraCompilerFactoryObserver();
+
+    virtual void newExtraCompiler(const Project *project,
+                                  const Utils::FileName &source,
+                                  const Utils::FileNameList &targets)
+        = 0;
+};
+
 class PROJECTEXPLORER_EXPORT ExtraCompilerFactory : public QObject
 {
     Q_OBJECT
@@ -146,8 +161,14 @@ public:
     virtual FileType sourceType() const = 0;
     virtual QString sourceTag() const = 0;
 
-    virtual ExtraCompiler *create(const Project *project, const Utils::FileName &source,
-                                  const Utils::FileNameList &targets) = 0;
+    virtual ExtraCompiler *create(const Project *project,
+                                  const Utils::FileName &source,
+                                  const Utils::FileNameList &targets)
+        = 0;
+
+    void annouceCreation(const Project *project,
+                         const Utils::FileName &source,
+                         const Utils::FileNameList &targets);
 
     static QList<ExtraCompilerFactory *> extraCompilerFactories();
 };

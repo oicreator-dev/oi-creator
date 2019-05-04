@@ -107,9 +107,7 @@ ImageView::ImageView(ImageViewerFile *file)
     setBackgroundBrush(tilePixmap);
 }
 
-ImageView::~ImageView()
-{
-}
+ImageView::~ImageView() = default;
 
 void ImageView::reset()
 {
@@ -164,7 +162,7 @@ QImage ImageView::renderSvg(const QSize &imageSize) const
     QPainter painter;
     painter.begin(&image);
 #ifndef QT_NO_SVG
-    QGraphicsSvgItem *svgItem = qgraphicsitem_cast<QGraphicsSvgItem *>(m_imageItem);
+    auto svgItem = qgraphicsitem_cast<QGraphicsSvgItem *>(m_imageItem);
     QTC_ASSERT(svgItem, return image);
     svgItem->renderer()->render(&painter, QRectF(QPointF(), QSizeF(imageSize)));
 #endif
@@ -209,7 +207,7 @@ QSize ImageView::svgSize() const
 void ImageView::exportImage()
 {
 #ifndef QT_NO_SVG
-    QGraphicsSvgItem *svgItem = qgraphicsitem_cast<QGraphicsSvgItem *>(m_imageItem);
+    auto svgItem = qgraphicsitem_cast<QGraphicsSvgItem *>(m_imageItem);
     QTC_ASSERT(svgItem, return);
 
     const QFileInfo origFi = m_file->filePath().toFileInfo();
@@ -230,7 +228,7 @@ void ImageView::exportMultiImages()
     const QFileInfo origFi = m_file->filePath().toFileInfo();
     const QSize size = svgSize();
     const QString title =
-        tr("Export a Series of Images from %1 (%2x%3")
+        tr("Export a Series of Images from %1 (%2x%3)")
           .arg(origFi.fileName()).arg(size.width()).arg(size.height());
     MultiExportDialog multiExportDialog;
     multiExportDialog.setWindowTitle(title);
@@ -280,7 +278,7 @@ void ImageView::doScale(qreal factor)
 
     scale(actualFactor, actualFactor);
     emitScaleFactor();
-    if (QGraphicsPixmapItem *pixmapItem = dynamic_cast<QGraphicsPixmapItem *>(m_imageItem))
+    if (auto pixmapItem = dynamic_cast<QGraphicsPixmapItem *>(m_imageItem))
         pixmapItem->setTransformationMode(
                     transform().m11() < 1 ? Qt::SmoothTransformation : Qt::FastTransformation);
 }

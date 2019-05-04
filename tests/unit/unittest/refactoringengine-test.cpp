@@ -149,10 +149,9 @@ void RefactoringEngine::SetUp()
     projectPart = CppTools::ProjectPart::Ptr(new CppTools::ProjectPart);
     projectPart->files.push_back(projectFile);
 
-    CompilerOptionsBuilder optionsBuilder(*projectPart, CLANG_VERSION, CLANG_RESOURCE_DIR);
-    commandLine = Utils::SmallStringVector(optionsBuilder.build(
-                                               projectFile.kind,
-                                               CompilerOptionsBuilder::PchUsage::None));
+    CompilerOptionsBuilder optionsBuilder(*projectPart);
+    commandLine = Utils::SmallStringVector(
+        optionsBuilder.build(projectFile.kind, CppTools::UsePrecompiledHeaders::No));
     commandLine.push_back(qStringFilePath);
 }
 

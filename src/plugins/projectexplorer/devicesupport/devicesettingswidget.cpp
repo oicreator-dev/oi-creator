@@ -58,14 +58,14 @@ const char LastDeviceIndexKey[] = "LastDisplayedMaemoDeviceConfig";
 class NameValidator : public QValidator
 {
 public:
-    NameValidator(const DeviceManager *deviceManager, QWidget *parent = 0)
+    NameValidator(const DeviceManager *deviceManager, QWidget *parent = nullptr)
         : QValidator(parent), m_deviceManager(deviceManager)
     {
     }
 
     void setDisplayName(const QString &name) { m_oldName = name; }
 
-    virtual State validate(QString &input, int & /* pos */) const
+    State validate(QString &input, int & /* pos */) const override
     {
         if (input.trimmed().isEmpty()
                 || (input != m_oldName && m_deviceManager->hasDevice(input)))
@@ -73,7 +73,7 @@ public:
         return Acceptable;
     }
 
-    virtual void fixup(QString &input) const
+    void fixup(QString &input) const override
     {
         int dummy = 0;
         if (validate(input, dummy) != Acceptable)
@@ -91,7 +91,7 @@ DeviceSettingsWidget::DeviceSettingsWidget(QWidget *parent)
       m_deviceManager(DeviceManager::cloneInstance()),
       m_deviceManagerModel(new DeviceManagerModel(m_deviceManager, this)),
       m_nameValidator(new NameValidator(m_deviceManager, this)),
-      m_configWidget(0)
+      m_configWidget(nullptr)
 {
     initGui();
     connect(m_deviceManager, &DeviceManager::deviceUpdated,
@@ -147,7 +147,7 @@ void DeviceSettingsWidget::addDevice()
     IDeviceFactory *factory = IDeviceFactory::find(toCreate);
     if (!factory)
         return;
-    IDevice::Ptr device = factory->create(toCreate);
+    IDevice::Ptr device = factory->create();
     if (device.isNull())
         return;
 
@@ -156,6 +156,7 @@ void DeviceSettingsWidget::addDevice()
     m_ui->configurationComboBox->setCurrentIndex(m_deviceManagerModel->indexOf(device));
     if (device->hasDeviceTester())
         testDevice();
+    saveSettings();
 }
 
 void DeviceSettingsWidget::removeDevice()
@@ -255,7 +256,7 @@ void DeviceSettingsWidget::testDevice()
 {
     const IDevice::ConstPtr &device = currentDevice();
     QTC_ASSERT(device && device->hasDeviceTester(), return);
-    DeviceTestDialog dlg(device, this);
+    DeviceTestDialog dlg(m_deviceManager->mutableDevice(device->id()), this);
     dlg.exec();
 }
 
@@ -270,7 +271,7 @@ void DeviceSettingsWidget::currentDeviceChanged(int index)
 {
     qDeleteAll(m_additionalActionButtons);
     delete m_configWidget;
-    m_configWidget = 0;
+    m_configWidget = nullptr;
     m_additionalActionButtons.clear();
     const IDevice::ConstPtr device = m_deviceManagerModel->device(index);
     if (device.isNull()) {
@@ -298,11 +299,19 @@ void DeviceSettingsWidget::currentDeviceChanged(int index)
         m_ui->buttonsLayout->insertWidget(m_ui->buttonsLayout->count() - 1, button);
     }
 
-    foreach (Id actionId, device->actionIds()) {
-        QPushButton * const button = new QPushButton(device->displayNameForActionId(actionId));
+    for (const IDevice::DeviceAction &deviceAction : device->deviceActions()) {
+        QPushButton * const button = new QPushButton(deviceAction.display);
         m_additionalActionButtons << button;
-        connect(button, &QAbstractButton::clicked, this,
-                [this, actionId] { handleAdditionalActionRequest(actionId); });
+        connect(button, &QAbstractButton::clicked, this, [this, deviceAction] {
+            const IDevice::Ptr device = m_deviceManager->mutableDevice(currentDevice()->id());
+            QTC_ASSERT(device, return);
+            updateDeviceFromUi();
+            deviceAction.execute(device, this);
+            // Widget must be set up from scratch, because the action could have
+            // changed random attributes.
+            currentDeviceChanged(currentIndex());
+        });
+
         m_ui->buttonsLayout->insertWidget(m_ui->buttonsLayout->count() - 1, button);
     }
 
@@ -319,17 +328,6 @@ void DeviceSettingsWidget::clearDetails()
     m_ui->nameLineEdit->clear();
     m_ui->osTypeValueLabel->clear();
     m_ui->autoDetectionValueLabel->clear();
-}
-
-void DeviceSettingsWidget::handleAdditionalActionRequest(Id actionId)
-{
-    const IDevice::Ptr device = m_deviceManager->mutableDevice(currentDevice()->id());
-    QTC_ASSERT(device, return);
-    updateDeviceFromUi();
-    device->executeAction(actionId, this);
-
-    // Widget must be set up from scratch, because the action could have changed random attributes.
-    currentDeviceChanged(currentIndex());
 }
 
 void DeviceSettingsWidget::handleProcessListRequested()

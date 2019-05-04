@@ -35,12 +35,12 @@ namespace CppTools {
 
 void ProjectPart::updateLanguageFeatures()
 {
-    const bool hasCxx = languageVersion >= CXX98;
+    const bool hasCxx = languageVersion >= Utils::LanguageVersion::CXX98;
     const bool hasQt = hasCxx && qtVersion != NoQt;
-    languageFeatures.cxx11Enabled = languageVersion >= CXX11;
+    languageFeatures.cxx11Enabled = languageVersion >= Utils::LanguageVersion::CXX11;
     languageFeatures.cxxEnabled = hasCxx;
-    languageFeatures.c99Enabled = languageVersion >= C99;
-    languageFeatures.objCEnabled = languageExtensions.testFlag(ObjectiveCExtensions);
+    languageFeatures.c99Enabled = languageVersion >= Utils::LanguageVersion::C99;
+    languageFeatures.objCEnabled = languageExtensions.testFlag(Utils::LanguageExtension::ObjectiveC);
     languageFeatures.qtEnabled = hasQt;
     languageFeatures.qtMocRunEnabled = hasQt;
     if (!hasQt) {

@@ -29,6 +29,7 @@
 #include "clangtidyclazytool.h"
 #include "clangtoolsutils.h"
 
+#include <coreplugin/icore.h>
 #include <cpptools/compileroptionsbuilder.h>
 #include <cpptools/projectinfo.h>
 #include <projectexplorer/kitinformation.h>
@@ -168,7 +169,7 @@ static QList<Target *> validTargets(Project *project)
         const ToolChain * const toolchain = ToolChainKitInformation::toolChain(kit, ProjectExplorer::Constants::CXX_LANGUAGE_ID);
         QTC_ASSERT(toolchain, return false);
 
-        if (CppTools::clangExecutable(CLANG_BINDIR).isEmpty()) {
+        if (Core::ICore::clangExecutable(CLANG_BINDIR).isEmpty()) {
             qWarning("Project \"%s\": Skipping target \"%s\" since no suitable clang was found for the toolchain.",
                      qPrintable(projectFileName),
                      qPrintable(target->displayName()));
@@ -222,7 +223,7 @@ bool PreconfiguredSessionTests::switchToProjectAndTarget(Project *project,
         SessionManager::setActiveTarget(project, target, ProjectExplorer::SetActive::NoCascade);
         QTC_ASSERT(spyFinishedParsing.wait(30000), return false);
 
-        const QVariant projectArgument = spyFinishedParsing.takeFirst().takeFirst();
+        const QVariant projectArgument = spyFinishedParsing.takeFirst().constFirst();
         QTC_ASSERT(projectArgument.canConvert<ProjectExplorer::Project *>(), return false);
 
         return projectArgument.value<ProjectExplorer::Project *>() == project;

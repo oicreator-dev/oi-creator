@@ -33,7 +33,7 @@
 #include <QTextLayout>
 
 #include <functional>
-#include <limits.h>
+#include <climits>
 
 QT_BEGIN_NAMESPACE
 class QTextDocument;
@@ -69,6 +69,7 @@ public:
 
     // Don't call in constructors of derived classes
     virtual void setFontSettings(const TextEditor::FontSettings &fontSettings);
+    TextEditor::FontSettings fontSettings() const;
 
     void setNoAutomaticHighlighting(bool noAutomatic);
 

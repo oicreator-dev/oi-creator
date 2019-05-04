@@ -25,7 +25,7 @@
 
 #pragma once
 
-#include "coreplugin/id.h"
+#include "../id.h"
 
 #include <utils/dropsupport.h>
 
@@ -142,7 +142,7 @@ private:
 
     QList<EditLocation> m_navigationHistory;
     QList<EditLocation> m_editorHistory;
-    int m_currentNavigationHistoryPosition;
+    int m_currentNavigationHistoryPosition = 0;
     void updateCurrentPositionInNavigationHistory();
 
 public:

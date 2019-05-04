@@ -36,7 +36,7 @@
 #include <QPointer>
 #include <qtimer.h>
 
-#include <math.h>
+#include <cmath>
 
 namespace TextEditor {
 
@@ -66,6 +66,7 @@ public:
     void applyFormatChanges(int from, int charsRemoved, int charsAdded);
     void updateFormats(const FontSettings &fontSettings);
 
+    FontSettings fontSettings;
     QVector<QTextCharFormat> formatChanges;
     QTextBlock currentBlock;
     bool rehighlightPending = false;
@@ -293,7 +294,7 @@ SyntaxHighlighter::SyntaxHighlighter(QTextEdit *parent)
 */
 SyntaxHighlighter::~SyntaxHighlighter()
 {
-    setDocument(0);
+    setDocument(nullptr);
 }
 
 /*!
@@ -640,7 +641,7 @@ QTextBlockUserData *SyntaxHighlighter::currentBlockUserData() const
 {
     Q_D(const SyntaxHighlighter);
     if (!d->currentBlock.isValid())
-        return 0;
+        return nullptr;
 
     return d->currentBlock.userData();
 }
@@ -678,7 +679,7 @@ void SyntaxHighlighter::setExtraFormats(const QTextBlock &block,
     Q_D(SyntaxHighlighter);
 
     const int blockLength = block.length();
-    if (block.layout() == 0 || blockLength == 0)
+    if (block.layout() == nullptr || blockLength == 0)
         return;
 
     Utils::sort(formats, byStartOfRange);
@@ -689,8 +690,8 @@ void SyntaxHighlighter::setExtraFormats(const QTextBlock &block,
     previousSemanticFormats.reserve(all.size());
     formatsToApply.reserve(all.size() + formats.size());
 
-    for (int i = 0, ei = formats.size(); i < ei; ++i)
-        formats[i].format.setProperty(QTextFormat::UserProperty, true);
+    for (auto &format : formats)
+        format.format.setProperty(QTextFormat::UserProperty, true);
 
     foreach (const QTextLayout::FormatRange &r, all) {
         if (r.format.hasProperty(QTextFormat::UserProperty))
@@ -735,7 +736,7 @@ QList<QColor> SyntaxHighlighter::generateColors(int n, const QColor &background)
     // Assign a color gradient. Generate a sufficient number of colors
     // by using ceil and looping from 0..step.
     const double oneThird = 1.0 / 3.0;
-    const int step = qRound(ceil(pow(double(n), oneThird)));
+    const int step = qRound(std::ceil(std::pow(double(n), oneThird)));
     result.reserve(step * step * step);
     const int factor = 255 / step;
     const int half = factor / 2;
@@ -764,6 +765,12 @@ void SyntaxHighlighter::setFontSettings(const FontSettings &fontSettings)
 {
     Q_D(SyntaxHighlighter);
     d->updateFormats(fontSettings);
+}
+
+FontSettings SyntaxHighlighter::fontSettings() const
+{
+    Q_D(const SyntaxHighlighter);
+    return d->fontSettings;
 }
 /*!
     The syntax highlighter is not anymore reacting to the text document if \a noAutmatic is
@@ -836,8 +843,13 @@ void SyntaxHighlighter::highlightBlock(const QString &text)
 
 void SyntaxHighlighterPrivate::updateFormats(const FontSettings &fontSettings)
 {
-    for (const auto &pair : qAsConst(formatCategories))
-        formats[pair.first] = fontSettings.toTextCharFormat(pair.second);
+    this->fontSettings = fontSettings;
+    // C_TEXT is handled by text editor's foreground and background color,
+    // so use empty format for that
+    for (const auto &pair : qAsConst(formatCategories)) {
+        formats[pair.first] = pair.second == C_TEXT ? QTextCharFormat()
+                                                    : fontSettings.toTextCharFormat(pair.second);
+    }
     whitespaceFormat = fontSettings.toTextCharFormat(C_VISUAL_WHITESPACE);
 }
 

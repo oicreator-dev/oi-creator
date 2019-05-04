@@ -24,8 +24,9 @@
 ****************************************************************************/
 #pragma once
 
-#include "utils/fileutils.h"
 #include "androidsdkpackage.h"
+
+#include <utils/fileutils.h>
 
 #include <QObject>
 #include <QFuture>
@@ -62,7 +63,7 @@ public:
     };
 
     AndroidSdkManager(const AndroidConfig &config, QObject *parent = nullptr);
-    ~AndroidSdkManager();
+    ~AndroidSdkManager() override;
 
     SdkPlatformList installedSdkPlatforms();
     const AndroidSdkPackageList &allSdkPackages();

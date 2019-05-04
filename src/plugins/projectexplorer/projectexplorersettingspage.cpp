@@ -34,6 +34,7 @@
 #include <utils/hostosinfo.h>
 
 #include <QCoreApplication>
+#include <QWidget>
 
 namespace ProjectExplorer {
 namespace Internal {
@@ -56,13 +57,13 @@ public:
     bool useProjectsDirectory();
     void setUseProjectsDirectory(bool v);
 
-    QString buildDirectory() const;
-    void setBuildDirectory(const QString &bd);
+    QString buildDirectoryTemplate() const;
+    void setBuildDirectoryTemplate(const QString &bd);
 
 private:
     void slotDirectoryButtonGroupChanged();
-    void resetDefaultBuildDirectory();
-    void updateResetButton();
+    void resetBuildDirectoryTemplate();
+    void updateBuildDirectoryResetButton();
 
     void setJomVisible(bool);
 
@@ -80,10 +81,10 @@ ProjectExplorerSettingsWidget::ProjectExplorerSettingsWidget(QWidget *parent) :
 
     connect(m_ui.directoryButtonGroup, static_cast<void (QButtonGroup::*)(int)>(&QButtonGroup::buttonClicked),
             this, &ProjectExplorerSettingsWidget::slotDirectoryButtonGroupChanged);
-    connect(m_ui.resetButton, &QAbstractButton::clicked,
-            this, &ProjectExplorerSettingsWidget::resetDefaultBuildDirectory);
+    connect(m_ui.buildDirectoryResetButton, &QAbstractButton::clicked,
+            this, &ProjectExplorerSettingsWidget::resetBuildDirectoryTemplate);
     connect(m_ui.buildDirectoryEdit, &QLineEdit::textChanged,
-            this, &ProjectExplorerSettingsWidget::updateResetButton);
+            this, &ProjectExplorerSettingsWidget::updateBuildDirectoryResetButton);
 
     auto chooser = new Core::VariableChooser(this);
     chooser->addSupportedWidget(m_ui.buildDirectoryEdit);
@@ -109,8 +110,9 @@ ProjectExplorerSettings ProjectExplorerSettingsWidget::settings() const
     m_settings.useJom = m_ui.jomCheckbox->isChecked();
     m_settings.addLibraryPathsToRunEnv = m_ui.addLibraryPathsToRunEnvCheckBox->isChecked();
     m_settings.prompToStopRunControl = m_ui.promptToStopRunControlCheckBox->isChecked();
-    m_settings.maxAppOutputLines = m_ui.maxAppOutputBox->value();
-    m_settings.maxBuildOutputLines = m_ui.maxBuildOutputBox->value();
+    m_settings.automaticallyCreateRunConfigurations = m_ui.automaticallyCreateRunConfiguration->isChecked();
+    m_settings.maxAppOutputChars = m_ui.maxAppOutputBox->value();
+    m_settings.maxBuildOutputChars = m_ui.maxBuildOutputBox->value();
     m_settings.stopBeforeBuild = static_cast<ProjectExplorerSettings::StopBeforeBuild>(m_ui.stopBeforeBuildComboBox->currentIndex());
     return m_settings;
 }
@@ -130,8 +132,9 @@ void ProjectExplorerSettingsWidget::setSettings(const ProjectExplorerSettings  &
     m_ui.jomCheckbox->setChecked(m_settings.useJom);
     m_ui.addLibraryPathsToRunEnvCheckBox->setChecked(m_settings.addLibraryPathsToRunEnv);
     m_ui.promptToStopRunControlCheckBox->setChecked(m_settings.prompToStopRunControl);
-    m_ui.maxAppOutputBox->setValue(m_settings.maxAppOutputLines);
-    m_ui.maxBuildOutputBox->setValue(m_settings.maxBuildOutputLines);
+    m_ui.automaticallyCreateRunConfiguration->setChecked(m_settings.automaticallyCreateRunConfigurations);
+    m_ui.maxAppOutputBox->setValue(m_settings.maxAppOutputChars);
+    m_ui.maxBuildOutputBox->setValue(m_settings.maxBuildOutputChars);
     m_ui.stopBeforeBuildComboBox->setCurrentIndex(static_cast<int>(m_settings.stopBeforeBuild));
 }
 
@@ -158,12 +161,12 @@ void ProjectExplorerSettingsWidget::setUseProjectsDirectory(bool b)
     }
 }
 
-QString ProjectExplorerSettingsWidget::buildDirectory() const
+QString ProjectExplorerSettingsWidget::buildDirectoryTemplate() const
 {
     return m_ui.buildDirectoryEdit->text();
 }
 
-void ProjectExplorerSettingsWidget::setBuildDirectory(const QString &bd)
+void ProjectExplorerSettingsWidget::setBuildDirectoryTemplate(const QString &bd)
 {
     m_ui.buildDirectoryEdit->setText(bd);
 }
@@ -174,14 +177,14 @@ void ProjectExplorerSettingsWidget::slotDirectoryButtonGroupChanged()
     m_ui.projectsDirectoryPathChooser->setEnabled(enable);
 }
 
-void ProjectExplorerSettingsWidget::resetDefaultBuildDirectory()
+void ProjectExplorerSettingsWidget::resetBuildDirectoryTemplate()
 {
-    setBuildDirectory(QLatin1String(Core::Constants::DEFAULT_BUILD_DIRECTORY));
+    setBuildDirectoryTemplate(ProjectExplorerPlugin::defaultBuildDirectoryTemplate());
 }
 
-void ProjectExplorerSettingsWidget::updateResetButton()
+void ProjectExplorerSettingsWidget::updateBuildDirectoryResetButton()
 {
-    m_ui.resetButton->setEnabled(buildDirectory() != QLatin1String(Core::Constants::DEFAULT_BUILD_DIRECTORY));
+    m_ui.buildDirectoryResetButton->setEnabled(buildDirectoryTemplate() != ProjectExplorerPlugin::defaultBuildDirectoryTemplate());
 }
 
 // ------------------ ProjectExplorerSettingsPage
@@ -202,7 +205,7 @@ QWidget *ProjectExplorerSettingsPage::widget()
         m_widget->setSettings(ProjectExplorerPlugin::projectExplorerSettings());
         m_widget->setProjectsDirectory(Core::DocumentManager::projectsDirectory().toString());
         m_widget->setUseProjectsDirectory(Core::DocumentManager::useProjectsDirectory());
-        m_widget->setBuildDirectory(Core::DocumentManager::buildDirectory());
+        m_widget->setBuildDirectoryTemplate(ProjectExplorerPlugin::buildDirectoryTemplate());
     }
     return m_widget;
 }
@@ -214,7 +217,7 @@ void ProjectExplorerSettingsPage::apply()
         Core::DocumentManager::setProjectsDirectory(
             Utils::FileName::fromString(m_widget->projectsDirectory()));
         Core::DocumentManager::setUseProjectsDirectory(m_widget->useProjectsDirectory());
-        Core::DocumentManager::setBuildDirectory(m_widget->buildDirectory());
+        ProjectExplorerPlugin::setBuildDirectoryTemplate(m_widget->buildDirectoryTemplate());
     }
 }
 

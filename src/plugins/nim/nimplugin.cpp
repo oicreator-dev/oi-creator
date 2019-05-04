@@ -36,7 +36,9 @@
 #include "project/nimtoolchainfactory.h"
 #include "settings/nimcodestylepreferencesfactory.h"
 #include "settings/nimcodestylesettingspage.h"
+#include "settings/nimtoolssettingspage.h"
 #include "settings/nimsettings.h"
+#include "suggest/nimsuggestcache.h"
 
 #include <coreplugin/fileiconprovider.h>
 #include <projectexplorer/projectmanager.h>
@@ -51,6 +53,15 @@ namespace Nim {
 class NimPluginPrivate
 {
 public:
+    NimPluginPrivate()
+        : toolsSettingsPage(&settings)
+    {
+        Suggest::NimSuggestCache::instance().setExecutablePath(settings.nimSuggestPath());
+        QObject::connect(&settings, &NimSettings::nimSuggestPathChanged,
+                         &Suggest::NimSuggestCache::instance(),
+                         &Suggest::NimSuggestCache::setExecutablePath);
+    }
+
     NimSettings settings;
     NimEditorFactory editorFactory;
     NimBuildConfigurationFactory buildConfigFactory;
@@ -58,6 +69,7 @@ public:
     NimCompilerBuildStepFactory buildStepFactory;
     NimCompilerCleanStepFactory cleanStepFactory;
     NimCodeStyleSettingsPage codeStyleSettingsPage;
+    NimToolsSettingsPage toolsSettingsPage;
     NimCodeStylePreferencesFactory codeStylePreferencesPage;
     NimToolChainFactory toolChainFactory;
 };
@@ -76,9 +88,6 @@ bool NimPlugin::initialize(const QStringList &arguments, QString *errorMessage)
 
     ToolChainManager::registerLanguage(Constants::C_NIMLANGUAGE_ID, Constants::C_NIMLANGUAGE_NAME);
 
-    RunControl::registerWorker<NimRunConfiguration, SimpleTargetRunner>
-            (ProjectExplorer::Constants::NORMAL_RUN_MODE);
-
     TextEditor::SnippetProvider::registerGroup(Constants::C_NIMSNIPPETSGROUP_ID,
                                                tr("Nim", "SnippetProvider"),
                                                &NimEditorFactory::decorateEditor);
@@ -92,7 +101,8 @@ void NimPlugin::extensionsInitialized()
 {
     // Add MIME overlay icons (these icons displayed at Project dock panel)
     const QIcon icon = Utils::Icon({{":/nim/images/settingscategory_nim.png",
-                                     Utils::Theme::PanelTextColorDark}}, Utils::Icon::Tint).icon();
+            Utils::Theme::PanelTextColorDark
+        }}, Utils::Icon::Tint).icon();
     if (!icon.isNull()) {
         Core::FileIconProvider::registerIconOverlayForMimeType(icon, Constants::C_NIM_MIMETYPE);
         Core::FileIconProvider::registerIconOverlayForMimeType(icon, Constants::C_NIM_SCRIPT_MIMETYPE);

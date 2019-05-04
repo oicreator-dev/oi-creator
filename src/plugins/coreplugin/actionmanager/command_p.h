@@ -38,6 +38,8 @@
 #include <QMap>
 #include <QKeySequence>
 
+#include <memory>
+
 namespace Core {
 namespace Internal {
 
@@ -77,6 +79,12 @@ public:
     void removeAttribute(CommandAttribute attr) override;
     bool hasAttribute(CommandAttribute attr) const override;
 
+    void setTouchBarText(const QString &text) override;
+    QString touchBarText() const override;
+    void setTouchBarIcon(const QIcon &icon) override;
+    QIcon touchBarIcon() const override;
+    QAction *touchBarAction() const override;
+
 private:
     void updateActiveState();
     void setActive(bool state);
@@ -86,15 +94,18 @@ private:
     Id m_id;
     QKeySequence m_defaultKey;
     QString m_defaultText;
-    bool m_isKeyInitialized;
+    QString m_touchBarText;
+    QIcon m_touchBarIcon;
+    bool m_isKeyInitialized = false;
 
-    Utils::ProxyAction *m_action;
+    Utils::ProxyAction *m_action = nullptr;
+    mutable std::unique_ptr<Utils::ProxyAction> m_touchBarAction;
     QString m_toolTip;
 
     QMap<Id, QPointer<QAction> > m_contextActionMap;
     QMap<QAction*, bool> m_scriptableMap;
-    bool m_active;
-    bool m_contextInitialized;
+    bool m_active = false;
+    bool m_contextInitialized = false;
 };
 
 } // namespace Internal

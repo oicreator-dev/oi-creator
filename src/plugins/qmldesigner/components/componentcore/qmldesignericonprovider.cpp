@@ -70,13 +70,11 @@ QPixmap QmlDesignerIconProvider::getPixmap(const QString &id)
         result = Utils::Icons::PLUS_TOOLBAR.pixmap();
     else if (id == "expression")
         result = Icon({
-                { iconPath() + QLatin1String("expression.png"), Theme::IconsBaseColor}}, Icon::Tint).pixmap();
+                { iconPath() + QLatin1String("expression.png"), Theme::QmlDesigner_HighlightColor}}).pixmap();
     else if (id == "placeholder")
-        result = Icon({
-                { iconPath() + QLatin1String("placeholder.png"), Theme::IconsBaseColor}}, Icon::Tint).pixmap();
+        result = Icon(iconPath() + "placeholder.png").pixmap();
     else if (id == "submenu")
-        result = Icon({
-                { iconPath() + QLatin1String("submenu.png"), Theme::IconsBaseColor}}, Icon::Tint).pixmap();
+        result = Icon(iconPath() + "submenu.png").pixmap();
     else if (id == "up-arrow")
         result = Icon({
                 { iconPath() + QLatin1String("up-arrow.png"), Theme::IconsBaseColor}}, Icon::Tint).pixmap();

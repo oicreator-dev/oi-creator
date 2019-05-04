@@ -61,7 +61,7 @@ using namespace ClangCodeModel;
 using namespace ClangCodeModel::Internal;
 using namespace ProjectExplorer;
 
-static Q_LOGGING_CATEGORY(debug, "qtc.clangcodemodel.batch");
+static Q_LOGGING_CATEGORY(debug, "qtc.clangcodemodel.batch", QtWarningMsg);
 
 static int timeOutFromEnvironmentVariable()
 {
@@ -130,7 +130,7 @@ const QChar *BatchFileLineTokenizer::advanceToTokenBegin()
 
     forever {
         if (atEnd())
-            return 0;
+            return nullptr;
 
         if (atQuotationMark()) {
             m_isWithinQuotation = true;
@@ -151,7 +151,7 @@ const QChar *BatchFileLineTokenizer::advanceToTokenEnd()
         if (m_isWithinQuotation) {
             if (atEnd()) {
                 qWarning("ClangBatchFileProcessor: error: unfinished quotation.");
-                return 0;
+                return nullptr;
             }
 
             if (atQuotationMark())
@@ -194,7 +194,7 @@ public:
 
 public:
     Command(const CommandContext &context) : m_commandContext(context) {}
-    virtual ~Command() {}
+    virtual ~Command() = default;
 
     const CommandContext &context() const { return m_commandContext; }
     virtual bool run() { return true; }

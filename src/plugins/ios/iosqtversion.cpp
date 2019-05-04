@@ -40,10 +40,7 @@
 using namespace Ios::Internal;
 using namespace ProjectExplorer;
 
-IosQtVersion::IosQtVersion()
-    : QtSupport::BaseQtVersion()
-{
-}
+IosQtVersion::IosQtVersion() = default;
 
 IosQtVersion::IosQtVersion(const Utils::FileName &path, bool isAutodetected,
                            const QString &autodetectionSource)
@@ -85,7 +82,7 @@ QList<Abi> IosQtVersion::detectQtAbis() const
     for (int i = 0; i < abis.count(); ++i) {
         abis[i] = Abi(abis.at(i).architecture(),
                       abis.at(i).os(),
-                      Abi::GenericDarwinFlavor,
+                      Abi::GenericFlavor,
                       abis.at(i).binaryFormat(),
                       abis.at(i).wordWidth());
     }

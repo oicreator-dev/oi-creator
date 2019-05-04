@@ -27,10 +27,11 @@
 
 #include "cpptools_global.h"
 
+#include "cppmodelmanagerinterface.h"
 #include "refactoringengineinterface.h"
 #include "projectinfo.h"
 #include "projectpart.h"
-#include "projectpartheaderpath.h"
+#include <projectexplorer/headerpath.h>
 
 #include <cplusplus/cppmodelmanagerbase.h>
 #include <coreplugin/find/ifindfilter.h>
@@ -82,12 +83,13 @@ enum class RefactoringEngineType : int
 };
 
 class CPPTOOLS_EXPORT CppModelManager final : public CPlusPlus::CppModelManagerBase,
-        public RefactoringEngineInterface
+        public RefactoringEngineInterface,
+        public CppModelManagerInterface
 {
     Q_OBJECT
 
 public:
-    typedef CPlusPlus::Document Document;
+    using Document = CPlusPlus::Document;
 
 public:
     CppModelManager();
@@ -113,12 +115,11 @@ public:
 
     QList<ProjectInfo> projectInfos() const;
     ProjectInfo projectInfo(ProjectExplorer::Project *project) const;
-    QFuture<void> updateProjectInfo(const ProjectInfo &newProjectInfo);
     QFuture<void> updateProjectInfo(QFutureInterface<void> &futureInterface,
                                     const ProjectInfo &newProjectInfo);
 
     /// \return The project part with the given project file
-    ProjectPart::Ptr projectPartForId(const QString &projectPartId) const;
+    ProjectPart::Ptr projectPartForId(const QString &projectPartId) const override;
     /// \return All project parts that mention the given file name as one of the sources/headers.
     QList<ProjectPart::Ptr> projectPart(const Utils::FileName &fileName) const;
     QList<ProjectPart::Ptr> projectPart(const QString &fileName) const
@@ -134,8 +135,9 @@ public:
     Document::Ptr document(const QString &fileName) const;
     bool replaceDocument(Document::Ptr newDoc);
 
-    void emitDocumentUpdated(CPlusPlus::Document::Ptr doc);
+    void emitDocumentUpdated(Document::Ptr doc);
     void emitAbstractEditorSupportContentsUpdated(const QString &filePath,
+                                                  const QString &sourcePath,
                                                   const QByteArray &contents);
     void emitAbstractEditorSupportRemoved(const QString &filePath);
 
@@ -163,7 +165,7 @@ public:
     void globalFollowSymbol(const CursorInEditor &data,
                             Utils::ProcessLinkCallback &&processLinkCallback,
                             const CPlusPlus::Snapshot &snapshot,
-                            const CPlusPlus::Document::Ptr &documentFromSemanticInfo,
+                            const Document::Ptr &documentFromSemanticInfo,
                             SymbolFinder *symbolFinder,
                             bool inNextSplit) const final;
 
@@ -189,10 +191,10 @@ public:
 
     QStringList projectFiles();
 
-    ProjectPartHeaderPaths headerPaths();
+    ProjectExplorer::HeaderPaths headerPaths();
 
     // Use this *only* for auto tests
-    void setHeaderPaths(const ProjectPartHeaderPaths &headerPaths);
+    void setHeaderPaths(const ProjectExplorer::HeaderPaths &headerPaths);
 
     ProjectExplorer::Macros definedMacros();
 
@@ -242,7 +244,9 @@ signals:
 
     void gcFinished(); // Needed for tests.
 
-    void abstractEditorSupportContentsUpdated(const QString &filePath, const QByteArray &contents);
+    void abstractEditorSupportContentsUpdated(const QString &filePath,
+                                              const QString &sourcePath,
+                                              const QByteArray &contents);
     void abstractEditorSupportRemoved(const QString &filePath);
 
 public slots:
@@ -274,7 +278,7 @@ private:
 
     void ensureUpdated();
     QStringList internalProjectFiles() const;
-    ProjectPartHeaderPaths internalHeaderPaths() const;
+    ProjectExplorer::HeaderPaths internalHeaderPaths() const;
     ProjectExplorer::Macros internalDefinedMacros() const;
 
     void dumpModelManagerConfiguration(const QString &logFileId);

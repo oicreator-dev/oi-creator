@@ -27,6 +27,7 @@
 
 #include <gmock/gmock.h>
 
+
 using testing::_;
 using testing::A;
 using testing::AllOf;
@@ -34,16 +35,22 @@ using testing::An;
 using testing::AnyNumber;
 using testing::AnyOf;
 using testing::Assign;
+using testing::ByMove;
+using testing::ByRef;
 using testing::Contains;
+using testing::ContainerEq;
 using testing::ElementsAre;
 using testing::Field;
 using testing::HasSubstr;
 using testing::InSequence;
+using testing::Invoke;
 using testing::IsEmpty;
+using testing::IsNull;
 using testing::Matcher;
 using testing::Mock;
 using testing::MockFunction;
 using testing::NiceMock;
+using testing::NotNull;
 using testing::Not;
 using testing::Pair;
 using testing::PrintToString;

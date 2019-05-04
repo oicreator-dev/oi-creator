@@ -39,10 +39,10 @@ public:
     RemoteLinuxRunConfiguration(ProjectExplorer::Target *target, Core::Id id);
     static const char *IdPrefix;
 
-private:
-    void doAdditionalSetup(const ProjectExplorer::RunConfigurationCreationInfo &) override;
+protected:
+    ProjectExplorer::Runnable runnable() const override;
 
-    QString defaultDisplayName() const;
+private:
     void updateTargetInformation();
 };
 

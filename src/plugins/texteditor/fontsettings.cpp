@@ -143,6 +143,14 @@ uint qHash(const TextStyle &textStyle)
     return ::qHash(quint8(textStyle));
 }
 
+static bool isOverlayCategory(TextStyle category)
+{
+    return category == C_OCCURRENCES
+           || category == C_OCCURRENCES_RENAME
+           || category == C_SEARCH_RESULT
+           || category == C_PARENTHESES_MISMATCH;
+}
+
 /**
  * Returns the QTextCharFormat of the given format category.
  */
@@ -166,18 +174,18 @@ QTextCharFormat FontSettings::toTextCharFormat(TextStyle category) const
                                                   "Unused variable"));
     }
 
-    if (f.foreground().isValid()
-            && category != C_OCCURRENCES
-            && category != C_OCCURRENCES_RENAME
-            && category != C_SEARCH_RESULT
-            && category != C_PARENTHESES_MISMATCH)
+    if (f.foreground().isValid() && !isOverlayCategory(category))
         tf.setForeground(f.foreground());
-    if (f.background().isValid() && (category == C_TEXT || f.background() != m_scheme.formatFor(C_TEXT).background()))
-        tf.setBackground(f.background());
-
-    // underline does not need to fill without having background color
-    if (f.underlineStyle() != QTextCharFormat::NoUnderline && !f.background().isValid())
-        tf.setBackground(QBrush(Qt::BrushStyle::NoBrush));
+    if (f.background().isValid()) {
+        if (category == C_TEXT || f.background() != m_scheme.formatFor(C_TEXT).background())
+            tf.setBackground(f.background());
+    } else if (isOverlayCategory(category)) {
+        // overlays without a background schouldn't get painted
+        tf.setBackground(QColor());
+    } else if (f.underlineStyle() != QTextCharFormat::NoUnderline) {
+        // underline does not need to fill without having background color
+        tf.setBackground(Qt::BrushStyle::NoBrush);
+    }
 
     tf.setFontWeight(f.bold() ? QFont::Bold : QFont::Normal);
     tf.setFontItalic(f.italic());
@@ -228,21 +236,23 @@ void FontSettings::addMixinStyle(QTextCharFormat &textCharFormat,
     for (TextStyle mixinStyle : mixinStyles) {
         const Format &format = m_scheme.formatFor(mixinStyle);
 
-        if (textCharFormat.hasProperty(QTextFormat::ForegroundBrush)) {
-            if (format.foreground().isValid())
-                textCharFormat.setForeground(format.foreground());
-            else
+        if (format.foreground().isValid()) {
+            textCharFormat.setForeground(format.foreground());
+        } else {
+            if (textCharFormat.hasProperty(QTextFormat::ForegroundBrush)) {
                 textCharFormat.setForeground(mixBrush(textCharFormat.foreground(),
                                                       format.relativeForegroundSaturation(),
                                                       format.relativeForegroundLightness()));
+            }
         }
-        if (textCharFormat.hasProperty(QTextFormat::BackgroundBrush)) {
-            if (format.background().isValid())
-                textCharFormat.setBackground(format.background());
-            else
+        if (format.background().isValid()) {
+            textCharFormat.setBackground(format.background());
+        } else {
+            if (textCharFormat.hasProperty(QTextFormat::BackgroundBrush)) {
                 textCharFormat.setBackground(mixBrush(textCharFormat.background(),
                                                       format.relativeBackgroundSaturation(),
                                                       format.relativeBackgroundLightness()));
+            }
         }
         if (!textCharFormat.fontItalic())
             textCharFormat.setFontItalic(format.italic());
@@ -404,12 +414,9 @@ bool FontSettings::loadColorScheme(const QString &fileName,
         if (!m_scheme.contains(id)) {
             Format format;
             const Format &descFormat = desc.format();
-            if (descFormat == format && m_scheme.contains(C_TEXT)) {
-                // Default format -> Text
-                const Format textFormat = m_scheme.formatFor(C_TEXT);
-                format.setForeground(textFormat.foreground());
-                format.setBackground(textFormat.background());
-            } else {
+            // Default fallback for background and foreground is C_TEXT, which is set through
+            // the editor's palette, i.e. we leave these as invalid colors in that case
+            if (descFormat != format || !m_scheme.contains(C_TEXT)) {
                 format.setForeground(descFormat.foreground());
                 format.setBackground(descFormat.background());
             }

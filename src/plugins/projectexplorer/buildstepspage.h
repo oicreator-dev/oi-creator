@@ -52,8 +52,8 @@ class ToolWidget : public Utils::FadingPanel
 public:
     explicit ToolWidget(QWidget *parent = nullptr);
 
-    void fadeTo(qreal value);
-    void setOpacity(qreal value);
+    void fadeTo(qreal value) override;
+    void setOpacity(qreal value) override;
 
     void setBuildStepEnabled(bool b);
     void setUpEnabled(bool b);
@@ -77,7 +77,7 @@ private:
     bool m_buildStepEnabled = true;
     Utils::FadingWidget *m_firstWidget;
     Utils::FadingWidget *m_secondWidget;
-    qreal m_targetOpacity;
+    qreal m_targetOpacity = .999;
 };
 
 class BuildStepsWidgetData
@@ -98,7 +98,7 @@ class BuildStepListWidget : public NamedWidget
 
 public:
     BuildStepListWidget(QWidget *parent = nullptr);
-    virtual ~BuildStepListWidget();
+    ~BuildStepListWidget() override;
 
     void init(BuildStepList *bsl);
 
@@ -106,14 +106,12 @@ private:
     void updateAddBuildStepMenu();
     void addBuildStep(int pos);
     void updateSummary();
-    void updateAdditionalSummary();
     void updateEnabledState();
     void stepMoved(int from, int to);
     void removeBuildStep(int pos);
 
     void setupUi();
     void updateBuildStepButtonsState();
-    void addBuildStepWidget(int pos, BuildStep *step);
 
     BuildStepList *m_buildStepList = nullptr;
 

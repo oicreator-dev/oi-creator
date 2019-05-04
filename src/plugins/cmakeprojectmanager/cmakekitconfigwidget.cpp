@@ -63,6 +63,7 @@ CMakeKitConfigWidget::CMakeKitConfigWidget(Kit *kit,
     m_comboBox(new QComboBox),
     m_manageButton(new QPushButton(KitConfigWidget::msgManage()))
 {
+    m_comboBox->setSizePolicy(QSizePolicy::Ignored, m_comboBox->sizePolicy().verticalPolicy());
     m_comboBox->setEnabled(false);
     m_comboBox->setToolTip(toolTip());
 
@@ -96,7 +97,7 @@ CMakeKitConfigWidget::~CMakeKitConfigWidget()
 
 QString CMakeKitConfigWidget::displayName() const
 {
-    return tr("CMake Tool:");
+    return tr("CMake Tool");
 }
 
 void CMakeKitConfigWidget::makeReadOnly()
@@ -107,7 +108,7 @@ void CMakeKitConfigWidget::makeReadOnly()
 void CMakeKitConfigWidget::refresh()
 {
     CMakeTool *tool = CMakeKitInformation::cmakeTool(m_kit);
-    m_comboBox->setCurrentIndex(tool == 0 ? -1 : indexOf(tool->id()));
+    m_comboBox->setCurrentIndex(tool ? indexOf(tool->id()) : -1);
 }
 
 QWidget *CMakeKitConfigWidget::mainWidget() const
@@ -229,7 +230,7 @@ CMakeGeneratorKitConfigWidget::~CMakeGeneratorKitConfigWidget()
 
 QString CMakeGeneratorKitConfigWidget::displayName() const
 {
-    return tr("CMake generator:");
+    return tr("CMake generator");
 }
 
 void CMakeGeneratorKitConfigWidget::makeReadOnly()

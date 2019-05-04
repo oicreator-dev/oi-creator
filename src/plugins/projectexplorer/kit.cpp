@@ -132,14 +132,14 @@ public:
 // -------------------------------------------------------------------------
 
 Kit::Kit(Id id) :
-    d(new Internal::KitPrivate(id, this))
+    d(std::make_unique<Internal::KitPrivate>(id, this))
 {
     foreach (KitInformation *sti, KitManager::kitInformation())
         d->m_data.insert(sti->id(), sti->defaultValue(this));
 }
 
 Kit::Kit(const QVariantMap &data) :
-    d(new Internal::KitPrivate(Id(), this))
+    d(std::make_unique<Internal::KitPrivate>(Id(), this))
 {
     d->m_id = Id::fromSetting(data.value(QLatin1String(ID_KEY)));
 
@@ -174,10 +174,7 @@ Kit::Kit(const QVariantMap &data) :
         d->m_sticky.insert(Id::fromString(stickyInfo));
 }
 
-Kit::~Kit()
-{
-    delete d;
-}
+Kit::~Kit() = default;
 
 void Kit::blockNotification()
 {
@@ -272,11 +269,9 @@ void Kit::fix()
 void Kit::setup()
 {
     KitGuard g(this);
-    // Process the KitInfos in reverse order: They may only be based on other information lower in
-    // the stack.
-    QList<KitInformation *> info = KitManager::kitInformation();
-    for (int i = info.count() - 1; i >= 0; --i)
-        info.at(i)->setup(this);
+    const QList<KitInformation *> info = KitManager::kitInformation();
+    for (KitInformation * const ki : info)
+        ki->setup(this);
 }
 
 void Kit::upgrade()
@@ -359,9 +354,9 @@ static QIcon iconForDeviceType(Core::Id deviceType)
 {
     const IDeviceFactory *factory = Utils::findOrDefault(IDeviceFactory::allDeviceFactories(),
         [&deviceType](const IDeviceFactory *factory) {
-            return factory->availableCreationIds().contains(deviceType);
+            return factory->deviceType() == deviceType;
         });
-    return factory ? factory->iconForId(deviceType) : QIcon();
+    return factory ? factory->icon() : QIcon();
 }
 
 QIcon Kit::icon() const
@@ -472,7 +467,7 @@ bool Kit::isEqual(const Kit *other) const
 
 QVariantMap Kit::toMap() const
 {
-    typedef QHash<Id, QVariant>::ConstIterator IdVariantConstIt;
+    using IdVariantConstIt = QHash<Id, QVariant>::ConstIterator;
 
     QVariantMap data;
     data.insert(QLatin1String(ID_KEY), QString::fromLatin1(d->m_id.name()));

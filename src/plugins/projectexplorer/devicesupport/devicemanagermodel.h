@@ -30,6 +30,8 @@
 
 #include <QAbstractListModel>
 
+#include <memory>
+
 namespace ProjectExplorer {
 namespace Internal { class DeviceManagerModelPrivate; }
 class IDevice;
@@ -39,7 +41,7 @@ class PROJECTEXPLORER_EXPORT DeviceManagerModel : public QAbstractListModel
 {
     Q_OBJECT
 public:
-    explicit DeviceManagerModel(const DeviceManager *deviceManager, QObject *parent = 0);
+    explicit DeviceManagerModel(const DeviceManager *deviceManager, QObject *parent = nullptr);
     ~DeviceManagerModel() override;
 
     void setFilter(const QList<Core::Id> &filter);
@@ -62,7 +64,7 @@ private:
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     bool matchesTypeFilter(const IDevice::ConstPtr &dev) const;
 
-    Internal::DeviceManagerModelPrivate * const d;
+    const std::unique_ptr<Internal::DeviceManagerModelPrivate> d;
 };
 
 } // namespace ProjectExplorer

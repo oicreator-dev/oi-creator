@@ -40,7 +40,7 @@ def main():
         return
     qmlProjFile = os.path.join(qmlProjDir, projName)
     # start Creator by passing a .qmlproject file
-    startApplication('qtcreator' + SettingsPath + ' "%s"' % qmlProjFile)
+    startQC(['"%s"' % qmlProjFile])
     if not startedWithoutPluginError():
         return
     waitFor('object.exists(":Qt Creator_Utils::NavigationTreeView")', 10000)
@@ -56,7 +56,7 @@ def main():
         earlyExit("Something went wrong opening Qml project - probably missing Qt5.")
         return
     switchViewTo(ViewConstants.PROJECTS)
-    switchToBuildOrRunSettingsFor(1, 0, ProjectSettings.RUN)
+    switchToBuildOrRunSettingsFor(Targets.getDefaultKit(), ProjectSettings.RUN)
     ensureChecked("{container=':Qt Creator.scrollArea_QScrollArea' text='Enable QML' "
                   "type='QCheckBox' unnamed='1' visible='1'}")
     switchViewTo(ViewConstants.EDIT)
@@ -71,6 +71,10 @@ def main():
         earlyExit("Could not find expected Inspector tree inside Locals and Expressions.")
         return
     # reduce items to outer Rectangle object
+    items = items.getChild("QQmlEngine")
+    if items == None:
+        earlyExit("Could not find expected QQmlEngine tree inside Locals and Expressions.")
+        return
     items = items.getChild("Rectangle")
     if items == None:
         earlyExit("Could not find expected Rectangle tree inside Locals and Expressions.")
@@ -91,12 +95,13 @@ def main():
     invokeMenuItem("File", "Exit")
 
 def __unfoldTree__():
-    rootIndex = getQModelIndexStr("text='Rectangle'",
+    rootIndex = getQModelIndexStr("text='QQmlEngine'",
                                   ':Locals and Expressions_Debugger::Internal::WatchTreeView')
-    unfoldQModelIndexIncludingProperties(rootIndex)
+    mainRect = getQModelIndexStr("text='Rectangle'", rootIndex)
+    unfoldQModelIndexIncludingProperties(mainRect)
     subItems = ["text='Rectangle'", "text='Rectangle' occurrence='2'", "text='Text'"]
     for item in subItems:
-        unfoldQModelIndexIncludingProperties(getQModelIndexStr(item, rootIndex))
+        unfoldQModelIndexIncludingProperties(getQModelIndexStr(item, mainRect))
 
 def unfoldQModelIndexIncludingProperties(indexStr):
     tv = waitForObject(':Locals and Expressions_Debugger::Internal::WatchTreeView')
@@ -117,7 +122,7 @@ def fetchItems(index, valIndex, treeView):
             tree.setName(name)
             tree.setValue(value)
     for row in range(model.rowCount(index)):
-         tree.addChild(fetchItems(model.index(row, 0, index), model.index(row, 1, index), treeView))
+        tree.addChild(fetchItems(model.index(row, 0, index), model.index(row, 1, index), treeView))
     return tree
 
 def checkForEmptyRows(items, isRootCheck=True):

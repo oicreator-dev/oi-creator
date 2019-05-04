@@ -27,7 +27,7 @@
 
 template <>
 SourceLocations
-MockSqliteReadStatement::values<SourceLocation, 4>(std::size_t reserveSize,
+MockSqliteReadStatement::values<SourceLocation, 3>(std::size_t reserveSize,
                                                    const int &sourceId,
                                                    const int &line,
                                                    const int &column)
@@ -82,6 +82,22 @@ MockSqliteReadStatement::values<Symbol, 3>(
 }
 
 template <>
+UsedMacros
+MockSqliteReadStatement::values<ClangBackEnd::UsedMacro, 2>(
+        std::size_t reserveSize,
+        const int &sourceId)
+{
+    return valuesReturnUsedMacros(reserveSize, sourceId);
+}
+
+template<>
+FilePathIds MockSqliteReadStatement::values<ClangBackEnd::FilePathId>(std::size_t reserveSize,
+                                                                      const int &projectPartId)
+{
+    return valuesReturnFilePathIds(reserveSize, projectPartId);
+}
+
+template <>
 std::vector<Sources::Directory> MockSqliteReadStatement::values<Sources::Directory, 2>(std::size_t reserveSize)
 {
     return valuesReturnStdVectorDirectory(reserveSize);
@@ -107,6 +123,13 @@ MockSqliteReadStatement::value<int>(const Utils::PathString &text)
     return valueReturnInt32(text);
 }
 
+template<>
+Utils::optional<ClangBackEnd::ProjectPartId> MockSqliteReadStatement::value<ClangBackEnd::ProjectPartId>(
+    const Utils::SmallStringView &text)
+{
+    return valueReturnProjectPartId(text);
+}
+
 template <>
 Utils::optional<int>
 MockSqliteReadStatement::value<int>(const int &directoryId, const Utils::SmallStringView &text)
@@ -129,22 +152,50 @@ MockSqliteReadStatement::value<Utils::PathString>(const int &directoryId)
 }
 
 template <>
+Utils::optional<Utils::PathString>
+MockSqliteReadStatement::value<Utils::PathString>(const Utils::SmallStringView &path)
+{
+    return valueReturnPathString(path);
+}
+
+template<>
+Utils::optional<ClangBackEnd::FilePath> MockSqliteReadStatement::value<ClangBackEnd::FilePath>(
+    const int &path)
+{
+    return valueReturnFilePath(path);
+}
+
+template <>
 Utils::optional<ClangBackEnd::ProjectPartArtefact>
-MockSqliteReadStatement::value<ClangBackEnd::ProjectPartArtefact, 4>(const int& sourceId)
+MockSqliteReadStatement::value<ClangBackEnd::ProjectPartArtefact, 8>(const int& sourceId)
 {
     return valueReturnProjectPartArtefact(sourceId);
 }
 
 template <>
 Utils::optional<ClangBackEnd::ProjectPartArtefact>
-MockSqliteReadStatement::value<ClangBackEnd::ProjectPartArtefact, 4>(const Utils::SmallStringView &projectPartName)
+MockSqliteReadStatement::value<ClangBackEnd::ProjectPartArtefact, 8>(const Utils::SmallStringView &projectPartName)
 {
     return valueReturnProjectPartArtefact(projectPartName);
 }
 
-template <>
+template<>
+Utils::optional<ClangBackEnd::ProjectPartContainer>
+MockSqliteReadStatement::value<ClangBackEnd::ProjectPartContainer, 8>(const int &id)
+{
+    return valueReturnProjectPartContainer(id);
+}
+
+template<>
+ClangBackEnd::ProjectPartContainers MockSqliteReadStatement::values<ClangBackEnd::ProjectPartContainer,
+                                                                    8>(std::size_t reserveSize)
+{
+    return valuesReturnProjectPartContainers(reserveSize);
+}
+
+template<>
 Utils::optional<ClangBackEnd::ProjectPartPch>
-MockSqliteReadStatement::value<ClangBackEnd::ProjectPartPch, 2>(const int &projectPartId)
+MockSqliteReadStatement::value<ClangBackEnd::ProjectPartPch, 3>(const int &projectPartId)
 {
     return valueReturnProjectPartPch(projectPartId);
 }
@@ -158,7 +209,22 @@ MockSqliteReadStatement::value<Utils::SmallString>(const int &sourceId)
 
 template <>
 Utils::optional<SourceLocation>
-MockSqliteReadStatement::value<SourceLocation, 4>(const long long &symbolId, const int &locationKind)
+MockSqliteReadStatement::value<SourceLocation, 3>(const long long &symbolId, const int &locationKind)
 {
     return valueReturnSourceLocation(symbolId, locationKind);
+}
+
+template<>
+SourceEntries MockSqliteReadStatement::values<SourceEntry, 4>(std::size_t reserveSize,
+                                                              const int &filePathId,
+                                                              const int &projectPartId)
+{
+    return valuesReturnSourceEntries(reserveSize, filePathId, projectPartId);
+}
+
+template <>
+Utils::optional<Sources::SourceNameAndDirectoryId>
+MockSqliteReadStatement::value<Sources::SourceNameAndDirectoryId, 2>(const int &id)
+{
+    return valueReturnSourceNameAndDirectoryId(id);
 }

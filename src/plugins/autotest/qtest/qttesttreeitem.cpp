@@ -167,7 +167,6 @@ static void fillTestConfigurationsFromCheckState(const TestTreeItem *item,
         testConfigurations << testConfig;
         return;
     case Qt::PartiallyChecked:
-    default:
         QStringList testCases;
         item->forFirstLevelChildren([&testCases](TestTreeItem *grandChild) {
             if (grandChild->checked() == Qt::Checked) {
@@ -344,6 +343,11 @@ TestTreeItem *QtTestTreeItem::createParentGroupNode() const
     const QFileInfo fileInfo(filePath());
     const QFileInfo base(fileInfo.absolutePath());
     return new QtTestTreeItem(base.baseName(), fileInfo.absolutePath(), TestTreeItem::GroupNode);
+}
+
+bool QtTestTreeItem::isGroupable() const
+{
+    return type() == TestCase;
 }
 
 TestTreeItem *QtTestTreeItem::findChildByNameAndInheritance(const QString &name, bool inherited) const

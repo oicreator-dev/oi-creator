@@ -74,24 +74,24 @@ StartRemoteDialog::StartRemoteDialog(QWidget *parent)
     d->buttonBox->setOrientation(Qt::Horizontal);
     d->buttonBox->setStandardButtons(QDialogButtonBox::Cancel|QDialogButtonBox::Ok);
 
-    QFormLayout *formLayout = new QFormLayout;
+    auto formLayout = new QFormLayout;
     formLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
     formLayout->addRow(tr("Kit:"), d->kitChooser);
     formLayout->addRow(tr("Executable:"), d->executable);
     formLayout->addRow(tr("Arguments:"), d->arguments);
     formLayout->addRow(tr("Working directory:"), d->workingDirectory);
 
-    QVBoxLayout *verticalLayout = new QVBoxLayout(this);
+    auto verticalLayout = new QVBoxLayout(this);
     verticalLayout->addLayout(formLayout);
     verticalLayout->addWidget(d->buttonBox);
 
     QSettings *settings = Core::ICore::settings();
-    settings->beginGroup(QLatin1String("AnalyzerStartRemoteDialog"));
+    settings->beginGroup("AnalyzerStartRemoteDialog");
     d->kitChooser->populate();
-    d->kitChooser->setCurrentKitId(Core::Id::fromSetting(settings->value(QLatin1String("profile"))));
-    d->executable->setText(settings->value(QLatin1String("executable")).toString());
-    d->workingDirectory->setText(settings->value(QLatin1String("workingDirectory")).toString());
-    d->arguments->setText(settings->value(QLatin1String("arguments")).toString());
+    d->kitChooser->setCurrentKitId(Core::Id::fromSetting(settings->value("profile")));
+    d->executable->setText(settings->value("executable").toString());
+    d->workingDirectory->setText(settings->value("workingDirectory").toString());
+    d->arguments->setText(settings->value("arguments").toString());
     settings->endGroup();
 
     connect(d->kitChooser, &KitChooser::activated, this, &StartRemoteDialog::validate);
@@ -112,11 +112,11 @@ StartRemoteDialog::~StartRemoteDialog()
 void StartRemoteDialog::accept()
 {
     QSettings *settings = Core::ICore::settings();
-    settings->beginGroup(QLatin1String("AnalyzerStartRemoteDialog"));
-    settings->setValue(QLatin1String("profile"), d->kitChooser->currentKitId().toString());
-    settings->setValue(QLatin1String("executable"), d->executable->text());
-    settings->setValue(QLatin1String("workingDirectory"), d->workingDirectory->text());
-    settings->setValue(QLatin1String("arguments"), d->arguments->text());
+    settings->beginGroup("AnalyzerStartRemoteDialog");
+    settings->setValue("profile", d->kitChooser->currentKitId().toString());
+    settings->setValue("executable", d->executable->text());
+    settings->setValue("workingDirectory", d->workingDirectory->text());
+    settings->setValue("arguments", d->arguments->text());
     settings->endGroup();
 
     QDialog::accept();

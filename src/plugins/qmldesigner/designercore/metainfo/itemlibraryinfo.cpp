@@ -37,15 +37,15 @@ namespace Internal {
 class ItemLibraryEntryData : public QSharedData
 {
 public:
-    ItemLibraryEntryData() : majorVersion(-1), minorVersion(-1)
-    { }
+    ItemLibraryEntryData()
+    {}
     QString name;
     TypeName typeName;
     QString category;
-    int majorVersion;
-    int minorVersion;
+    int majorVersion{-1};
+    int minorVersion{-1};
     QString libraryEntryIconPath;
-    QIcon typeIcon;
+    QIcon typeIcon = QIcon(":/ItemLibrary/images/item-default-icon.png");
     QList<PropertyContainer> properties;
     QString qml;
     QString qmlSource;
@@ -59,10 +59,7 @@ public:
 // ItemLibraryEntry
 //
 
-ItemLibraryEntry::ItemLibraryEntry(const ItemLibraryEntry &other)
-    : m_data(other.m_data)
-{
-}
+ItemLibraryEntry::ItemLibraryEntry(const ItemLibraryEntry &other) = default;
 
 ItemLibraryEntry& ItemLibraryEntry::operator=(const ItemLibraryEntry &other)
 {
@@ -97,9 +94,7 @@ ItemLibraryEntry::ItemLibraryEntry() : m_data(new Internal::ItemLibraryEntryData
     m_data->name.clear();
 }
 
-ItemLibraryEntry::~ItemLibraryEntry()
-{
-}
+ItemLibraryEntry::~ItemLibraryEntry() = default;
 
 QString ItemLibraryEntry::name() const
 {

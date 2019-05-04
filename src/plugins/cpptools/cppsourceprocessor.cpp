@@ -56,9 +56,9 @@ using namespace CPlusPlus;
 using namespace CppTools;
 using namespace CppTools::Internal;
 
-typedef Document::DiagnosticMessage Message;
+using Message = Document::DiagnosticMessage;
 
-static Q_LOGGING_CATEGORY(log, "qtc.cpptools.sourceprocessor")
+static Q_LOGGING_CATEGORY(log, "qtc.cpptools.sourceprocessor", QtWarningMsg)
 
 namespace {
 
@@ -119,8 +119,7 @@ CppSourceProcessor::CppSourceProcessor(const Snapshot &snapshot, DocumentCallbac
     m_preprocess.setKeepComments(true);
 }
 
-CppSourceProcessor::~CppSourceProcessor()
-{ }
+CppSourceProcessor::~CppSourceProcessor() = default;
 
 void CppSourceProcessor::setCancelChecker(const CppSourceProcessor::CancelChecker &cancelChecker)
 {
@@ -130,17 +129,16 @@ void CppSourceProcessor::setCancelChecker(const CppSourceProcessor::CancelChecke
 void CppSourceProcessor::setWorkingCopy(const WorkingCopy &workingCopy)
 { m_workingCopy = workingCopy; }
 
-void CppSourceProcessor::setHeaderPaths(const ProjectPartHeaderPaths &headerPaths)
+void CppSourceProcessor::setHeaderPaths(const ProjectExplorer::HeaderPaths &headerPaths)
 {
+    using ProjectExplorer::HeaderPathType;
     m_headerPaths.clear();
 
-    for (int i = 0, ei = headerPaths.size(); i < ei; ++i) {
-        const ProjectPartHeaderPath &path = headerPaths.at(i);
-
-        if (path.type == ProjectPartHeaderPath::IncludePath)
-            m_headerPaths.append(ProjectPartHeaderPath(cleanPath(path.path), path.type));
-        else
+    for (const auto &path : headerPaths) {
+         if (path.type == HeaderPathType::Framework )
             addFrameworkPath(path);
+        else
+            m_headerPaths.append({cleanPath(path.path), path.type});
     }
 }
 
@@ -156,15 +154,15 @@ void CppSourceProcessor::setLanguageFeatures(const LanguageFeatures languageFeat
 // has private frameworks in:
 //  <framework-path>/ApplicationServices.framework/Frameworks
 // if the "Frameworks" folder exists inside the top level framework.
-void CppSourceProcessor::addFrameworkPath(const ProjectPartHeaderPath &frameworkPath)
+void CppSourceProcessor::addFrameworkPath(const ProjectExplorer::HeaderPath &frameworkPath)
 {
-    QTC_ASSERT(frameworkPath.isFrameworkPath(), return);
+    QTC_ASSERT(frameworkPath.type == ProjectExplorer::HeaderPathType::Framework, return);
 
     // The algorithm below is a bit too eager, but that's because we're not getting
     // in the frameworks we're linking against. If we would have that, then we could
     // add only those private frameworks.
-    const ProjectPartHeaderPath cleanFrameworkPath(cleanPath(frameworkPath.path),
-                                                   frameworkPath.type);
+    const ProjectExplorer::HeaderPath cleanFrameworkPath(cleanPath(frameworkPath.path),
+                                                         ProjectExplorer::HeaderPathType::Framework);
     if (!m_headerPaths.contains(cleanFrameworkPath))
         m_headerPaths.append(cleanFrameworkPath);
 
@@ -176,8 +174,8 @@ void CppSourceProcessor::addFrameworkPath(const ProjectPartHeaderPath &framework
         const QFileInfo privateFrameworks(framework.absoluteFilePath(),
                                           QLatin1String("Frameworks"));
         if (privateFrameworks.exists() && privateFrameworks.isDir())
-            addFrameworkPath(ProjectPartHeaderPath(privateFrameworks.absoluteFilePath(),
-                                                   frameworkPath.type));
+            addFrameworkPath({privateFrameworks.absoluteFilePath(),
+                              ProjectExplorer::HeaderPathType::Framework});
     }
 }
 
@@ -295,14 +293,14 @@ QString CppSourceProcessor::resolveFile(const QString &fileName, IncludeType typ
 }
 
 QString CppSourceProcessor::resolveFile_helper(const QString &fileName,
-                                               ProjectPartHeaderPaths::Iterator headerPathsIt)
+                                               ProjectExplorer::HeaderPaths::Iterator headerPathsIt)
 {
     auto headerPathsEnd = m_headerPaths.end();
     const int index = fileName.indexOf(QLatin1Char('/'));
     for (; headerPathsIt != headerPathsEnd; ++headerPathsIt) {
-        if (headerPathsIt->isValid()) {
+        if (!headerPathsIt->path.isNull()) {
             QString path;
-            if (headerPathsIt->isFrameworkPath()) {
+            if (headerPathsIt->type == ProjectExplorer::HeaderPathType::Framework) {
                 if (index == -1)
                     continue;
                 path = headerPathsIt->path + fileName.left(index)

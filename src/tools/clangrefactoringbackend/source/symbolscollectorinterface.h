@@ -31,7 +31,7 @@
 #include "sourcelocationentry.h"
 #include "usedmacro.h"
 
-#include <filecontainerv2.h>
+#include <processorinterface.h>
 
 #include <utils/smallstringvector.h>
 
@@ -40,21 +40,11 @@
 
 namespace ClangBackEnd {
 
-class SymbolsCollectorInterface
+class SymbolsCollectorInterface : public ProcessorInterface
 {
 public:
-    SymbolsCollectorInterface() = default;
-    SymbolsCollectorInterface(const SymbolsCollectorInterface &) = delete;
-    SymbolsCollectorInterface &operator=(const SymbolsCollectorInterface &) = delete;
-
-    virtual void addFiles(const FilePathIds &filePathIds,
-                          const Utils::SmallStringVector &arguments) = 0;
-
-    virtual void addUnsavedFiles(const V2::FileContainers &unsavedFiles) = 0;
-
-    virtual void clear() = 0;
-
-    virtual void collectSymbols() = 0;
+    virtual void setFile(FilePathId filePathId, const Utils::SmallStringVector &arguments) = 0;
+    virtual bool collectSymbols() = 0;
 
     virtual const SymbolEntries &symbols() const = 0;
     virtual const SourceLocationEntries &sourceLocations() const = 0;
@@ -62,9 +52,6 @@ public:
     virtual const UsedMacros &usedMacros() const = 0;
     virtual const FileStatuses &fileStatuses() const = 0;
     virtual const SourceDependencies &sourceDependencies() const = 0;
-
-protected:
-    ~SymbolsCollectorInterface() = default;
 };
 
 } // namespace ClangBackEnd

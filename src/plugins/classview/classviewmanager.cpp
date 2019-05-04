@@ -52,7 +52,7 @@ namespace Internal {
 ///////////////////////////////// ManagerPrivate //////////////////////////////////
 
 // static variable initialization
-static Manager *managerInstance = 0;
+static Manager *managerInstance = nullptr;
 
 /*!
     \class ClassView::Internal::Manager
@@ -141,8 +141,6 @@ static Manager *managerInstance = 0;
 class ManagerPrivate
 {
 public:
-    ManagerPrivate() : state(false), disableCodeParser(false) {}
-
     //! State mutex
     QMutex mutexState;
 
@@ -153,10 +151,10 @@ public:
     QThread parserThread;
 
     //! Internal manager state. \sa Manager::state
-    bool state;
+    bool state = false;
 
     //! there is some massive operation ongoing so temporary we should wait
-    bool disableCodeParser;
+    bool disableCodeParser = false;
 };
 
 ///////////////////////////////// Manager //////////////////////////////////
@@ -185,7 +183,7 @@ Manager::~Manager()
     d->parserThread.quit();
     d->parserThread.wait();
     delete d;
-    managerInstance = 0;
+    managerInstance = nullptr;
 }
 
 Manager *Manager::instance()
@@ -356,7 +354,7 @@ void Manager::onProjectListChanged()
         return;
 
     // update to the latest state
-    requestTreeDataUpdate();
+    emit requestTreeDataUpdate();
 }
 
 /*!
@@ -423,7 +421,7 @@ void Manager::onDocumentUpdated(CPlusPlus::Document::Ptr doc)
 
 /*!
     Opens the text editor for the file \a fileName on \a line (1-based) and
-    \a column (1-based).
+    \a column (0-based).
 */
 
 void Manager::gotoLocation(const QString &fileName, int line, int column)
@@ -468,7 +466,8 @@ void Manager::gotoLocations(const QList<QVariant> &list)
             }
         }
     }
-    gotoLocation(loc.fileName(), loc.line(), loc.column());
+    // line is 1-based, column is 0-based
+    gotoLocation(loc.fileName(), loc.line(), loc.column() - 1);
 }
 
 /*!

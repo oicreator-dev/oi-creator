@@ -31,7 +31,6 @@
 #include "commonsettingspage.h"
 #include "nicknamedialog.h"
 #include "vcsoutputwindow.h"
-#include "vcsprojectcache.h"
 #include "wizard/vcscommandpage.h"
 #include "wizard/vcsconfigurationpage.h"
 #include "wizard/vcsjsextension.h"
@@ -72,7 +71,6 @@ VcsPlugin::VcsPlugin()
 
 VcsPlugin::~VcsPlugin()
 {
-    VcsProjectCache::destroy();
     VcsOutputWindow::destroy();
     m_instance = nullptr;
 }
@@ -106,7 +104,7 @@ bool VcsPlugin::initialize(const QStringList &arguments, QString *errorMessage)
     expander->registerVariable(Constants::VAR_VCS_NAME,
         tr("Name of the version control system in use by the current project."),
         []() -> QString {
-            IVersionControl *vc = 0;
+            IVersionControl *vc = nullptr;
             if (Project *project = ProjectTree::currentProject())
                 vc = VcsManager::findVersionControlForDirectory(project->projectDirectory().toString());
             return vc ? vc->displayName() : QString();
@@ -115,7 +113,7 @@ bool VcsPlugin::initialize(const QStringList &arguments, QString *errorMessage)
     expander->registerVariable(Constants::VAR_VCS_TOPIC,
         tr("The current version control topic (branch or tag) identification of the current project."),
         []() -> QString {
-            IVersionControl *vc = 0;
+            IVersionControl *vc = nullptr;
             QString topLevel;
             if (Project *project = ProjectTree::currentProject())
                 vc = VcsManager::findVersionControlForDirectory(project->projectDirectory().toString(), &topLevel);
@@ -138,7 +136,6 @@ bool VcsPlugin::initialize(const QStringList &arguments, QString *errorMessage)
 
 void VcsPlugin::extensionsInitialized()
 {
-    VcsProjectCache::create();
 }
 
 VcsPlugin *VcsPlugin::instance()

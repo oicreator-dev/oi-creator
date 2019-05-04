@@ -43,8 +43,7 @@ GenericProposal::GenericProposal(int cursorPos, const QList<AssistProposalItemIn
     m_model->loadContent(items);
 }
 
-GenericProposal::~GenericProposal()
-{}
+GenericProposal::~GenericProposal() = default;
 
 GenericProposal *GenericProposal::createProposal(const AssistInterface *interface, const QuickFixOperations &quickFixes)
 {
@@ -55,7 +54,7 @@ GenericProposal *GenericProposal::createProposal(const AssistInterface *interfac
     foreach (const QuickFixOperation::Ptr &op, quickFixes) {
         QVariant v;
         v.setValue(op);
-        AssistProposalItem *item = new AssistProposalItem;
+        auto item = new AssistProposalItem;
         item->setText(op->description());
         item->setData(v);
         item->setOrder(op->priority());

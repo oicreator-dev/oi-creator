@@ -27,9 +27,7 @@
 
 namespace Debugger {
 
-DiagnosticLocation::DiagnosticLocation() : line(0), column(0)
-{
-}
+DiagnosticLocation::DiagnosticLocation() = default;
 
 DiagnosticLocation::DiagnosticLocation(const QString &filePath, int line, int column)
     : filePath(filePath), line(line), column(column)
@@ -46,6 +44,12 @@ bool operator==(const DiagnosticLocation &first, const DiagnosticLocation &secon
     return first.filePath == second.filePath
             && first.line == second.line
             && first.column == second.column;
+}
+
+bool operator<(const DiagnosticLocation &first, const DiagnosticLocation &second)
+{
+    return std::tie(first.filePath, first.line, first.column)
+           < std::tie(second.filePath, second.line, second.column);
 }
 
 QDebug operator<<(QDebug dbg, const DiagnosticLocation &location)

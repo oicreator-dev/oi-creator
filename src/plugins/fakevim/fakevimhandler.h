@@ -47,7 +47,7 @@ enum RangeMode
 
 struct Range
 {
-    Range() {}
+    Range() = default;
     Range(int b, int e, RangeMode m = RangeCharMode);
     QString toString() const;
     bool isValid() const;
@@ -59,7 +59,7 @@ struct Range
 
 struct ExCommand
 {
-    ExCommand() {}
+    ExCommand() = default;
     ExCommand(const QString &cmd, const QString &args = QString(),
         const Range &range = Range());
 
@@ -107,8 +107,8 @@ class FakeVimHandler : public QObject
     Q_OBJECT
 
 public:
-    explicit FakeVimHandler(QWidget *widget, QObject *parent = 0);
-    ~FakeVimHandler();
+    explicit FakeVimHandler(QWidget *widget, QObject *parent = nullptr);
+    ~FakeVimHandler() override;
 
     QWidget *widget();
 
@@ -151,14 +151,13 @@ public:
 
     bool jumpToLocalMark(QChar mark, bool backTickMode);
 
-    bool eventFilter(QObject *ob, QEvent *ev);
+    bool eventFilter(QObject *ob, QEvent *ev) override;
 
     Signal<void(const QString &msg, int cursorPos, int anchorPos, int messageLevel)> commandBufferChanged;
     Signal<void(const QString &msg)> statusDataChanged;
     Signal<void(const QString &msg)> extraInformationChanged;
     Signal<void(const QList<QTextEdit::ExtraSelection> &selection)> selectionChanged;
     Signal<void(const QString &needle)>  highlightMatches;
-    Signal<void(QString *error)> writeAllRequested;
     Signal<void(bool *moved, bool *forward, QTextCursor *cursor)> moveToMatchingParenthesis;
     Signal<void(bool *result, QChar c)> checkForElectricCharacter;
     Signal<void(int beginLine, int endLine, QChar typedChar)> indentRegion;

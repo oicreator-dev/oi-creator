@@ -62,15 +62,13 @@ public:
 public:
     QPointer<BaseTextEditor> editor;
     QPointer<DebuggerEngine> engine;
-    TextMark *locationMark;
+    TextMark *locationMark = nullptr;
     QString path;
     QString producer;
 };
 
 SourceAgentPrivate::SourceAgentPrivate()
-  : editor(0)
-  , locationMark(nullptr)
-  , producer(QLatin1String("remote"))
+  : producer("remote")
 {
 }
 
@@ -78,7 +76,7 @@ SourceAgentPrivate::~SourceAgentPrivate()
 {
     if (editor)
         EditorManager::closeDocument(editor->document());
-    editor = 0;
+    editor = nullptr;
     delete locationMark;
 }
 
@@ -105,7 +103,7 @@ void SourceAgent::setContent(const QString &filePath, const QString &content)
     d->path = filePath;
 
     if (!d->editor) {
-        QString titlePattern = d->producer + QLatin1String(": ")
+        QString titlePattern = d->producer + ": "
             + Utils::FileName::fromString(filePath).fileName();
         d->editor = qobject_cast<BaseTextEditor *>(
             EditorManager::openEditorWithContents(
@@ -135,7 +133,7 @@ void SourceAgent::updateLocationMarker()
     if (d->locationMark)
         d->editor->textDocument()->removeMark(d->locationMark);
     delete d->locationMark;
-    d->locationMark = 0;
+    d->locationMark = nullptr;
     if (d->engine->stackHandler()->currentFrame().file == d->path) {
         int lineNumber = d->engine->stackHandler()->currentFrame().line;
 

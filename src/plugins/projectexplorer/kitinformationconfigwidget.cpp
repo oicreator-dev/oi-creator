@@ -82,7 +82,7 @@ SysRootInformationConfigWidget::~SysRootInformationConfigWidget()
 
 QString SysRootInformationConfigWidget::displayName() const
 {
-    return tr("Sysroot:");
+    return tr("Sysroot");
 }
 
 QString SysRootInformationConfigWidget::toolTip() const
@@ -150,6 +150,7 @@ ToolChainInformationConfigWidget::ToolChainInformationConfigWidget(Kit *k, const
     foreach (Core::Id l, languageList) {
         layout->addWidget(new QLabel(ToolChainManager::displayNameOfLanguageId(l) + ':'), row, 0);
         auto cb = new QComboBox;
+        cb->setSizePolicy(QSizePolicy::Ignored, cb->sizePolicy().verticalPolicy());
         cb->setToolTip(toolTip());
 
         m_languageComboboxMap.insert(l, cb);
@@ -176,7 +177,7 @@ ToolChainInformationConfigWidget::~ToolChainInformationConfigWidget()
 
 QString ToolChainInformationConfigWidget::displayName() const
 {
-    return tr("Compiler:");
+    return tr("Compiler");
 }
 
 QString ToolChainInformationConfigWidget::toolTip() const
@@ -262,10 +263,8 @@ int ToolChainInformationConfigWidget::indexOf(QComboBox *cb, const ToolChain *tc
 DeviceTypeInformationConfigWidget::DeviceTypeInformationConfigWidget(Kit *workingCopy, const KitInformation *ki) :
     KitConfigWidget(workingCopy, ki), m_comboBox(new QComboBox)
 {
-    for (IDeviceFactory *factory : IDeviceFactory::allDeviceFactories()) {
-        foreach (Id id, factory->availableCreationIds())
-            m_comboBox->addItem(factory->displayNameForId(id), id.toSetting());
-    }
+    for (IDeviceFactory *factory : IDeviceFactory::allDeviceFactories())
+        m_comboBox->addItem(factory->displayName(), factory->deviceType().toSetting());
 
     m_comboBox->setToolTip(toolTip());
 
@@ -286,7 +285,7 @@ QWidget *DeviceTypeInformationConfigWidget::mainWidget() const
 
 QString DeviceTypeInformationConfigWidget::displayName() const
 {
-    return tr("Device type:");
+    return tr("Device type");
 }
 
 QString DeviceTypeInformationConfigWidget::toolTip() const
@@ -327,6 +326,7 @@ DeviceInformationConfigWidget::DeviceInformationConfigWidget(Kit *workingCopy, c
     m_comboBox(new QComboBox),
     m_model(new DeviceManagerModel(DeviceManager::instance()))
 {
+    m_comboBox->setSizePolicy(QSizePolicy::Ignored, m_comboBox->sizePolicy().verticalPolicy());
     m_comboBox->setModel(m_model);
 
     m_manageButton = new QPushButton(KitConfigWidget::msgManage());
@@ -358,7 +358,7 @@ QWidget *DeviceInformationConfigWidget::mainWidget() const
 
 QString DeviceInformationConfigWidget::displayName() const
 {
-    return tr("Device:");
+    return tr("Device");
 }
 
 QString DeviceInformationConfigWidget::toolTip() const
@@ -417,6 +417,7 @@ KitEnvironmentConfigWidget::KitEnvironmentConfigWidget(Kit *workingCopy, const K
     m_mainWidget(new QWidget)
 {
     auto *layout = new QVBoxLayout;
+    layout->setContentsMargins(0, 0, 0, 0);
     layout->addWidget(m_summaryLabel);
     if (Utils::HostOsInfo::isWindowsHost())
         initMSVCOutputSwitch(layout);
@@ -436,7 +437,7 @@ QWidget *KitEnvironmentConfigWidget::mainWidget() const
 
 QString KitEnvironmentConfigWidget::displayName() const
 {
-    return tr("Environment:");
+    return tr("Environment");
 }
 
 QString KitEnvironmentConfigWidget::toolTip() const

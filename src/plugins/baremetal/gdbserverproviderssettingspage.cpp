@@ -61,19 +61,10 @@ public:
     GdbServerProviderNode(GdbServerProvider *provider, bool changed = false)
         : provider(provider), changed(changed)
     {
-        widget = provider ? provider->configurationWidget() : 0;
-    }
-
-    Qt::ItemFlags flags(int) const override
-    {
-        return provider ? Qt::ItemIsEnabled|Qt::ItemIsSelectable : Qt::ItemIsEnabled;
     }
 
     QVariant data(int column, int role) const override
     {
-        if (!provider)
-            return QVariant();
-
         if (role == Qt::FontRole) {
             QFont f = QApplication::font();
             if (changed)
@@ -89,14 +80,12 @@ public:
         return QVariant();
     }
 
-    GdbServerProvider *provider;
-    GdbServerProviderConfigWidget *widget;
-    bool changed;
+    GdbServerProvider *provider = nullptr;
+    GdbServerProviderConfigWidget *widget = nullptr;
+    bool changed = false;
 };
 
-
-GdbServerProviderModel::GdbServerProviderModel(QObject *parent)
-    : TreeModel<>(parent)
+GdbServerProviderModel::GdbServerProviderModel()
 {
     setHeader({tr("Name"), tr("Type")});
 
@@ -116,13 +105,13 @@ GdbServerProvider *GdbServerProviderModel::provider(const QModelIndex &index) co
     if (GdbServerProviderNode *node = nodeForIndex(index))
         return node->provider;
 
-    return 0;
+    return nullptr;
 }
 
 GdbServerProviderNode *GdbServerProviderModel::nodeForIndex(const QModelIndex &index) const
 {
     if (!index.isValid())
-        return 0;
+        return nullptr;
 
     return static_cast<GdbServerProviderNode *>(itemForIndex(index));
 }
@@ -206,19 +195,13 @@ void GdbServerProviderModel::markForAddition(GdbServerProvider *provider)
 GdbServerProviderNode *GdbServerProviderModel::createNode(
         GdbServerProvider *provider, bool changed)
 {
-    auto n = new GdbServerProviderNode(provider, changed);
-    if (n->widget) {
-        connect(n->widget, &GdbServerProviderConfigWidget::dirty, this, [this, n] {
-            for (TreeItem *item : *rootItem()) {
-                auto nn = static_cast<GdbServerProviderNode *>(item);
-                if (nn->widget == n->widget) {
-                    nn->changed = true;
-                    nn->update();
-                }
-            }
-        });
-    }
-    return n;
+    auto node = new GdbServerProviderNode(provider, changed);
+    node->widget = provider->configurationWidget();
+    connect(node->widget, &GdbServerProviderConfigWidget::dirty, this, [node] {
+        node->changed = true;
+        node->update();
+    });
+    return node;
 }
 
 void GdbServerProviderModel::addProvider(GdbServerProvider *provider)
@@ -333,7 +316,7 @@ GdbServerProvidersSettingsWidget::GdbServerProvidersSettingsWidget
         addMenu->addAction(action);
     }
 
-    connect(m_cloneButton, &QAbstractButton::clicked, this, [this] { createProvider(0); });
+    connect(m_cloneButton, &QAbstractButton::clicked, this, [this] { createProvider(nullptr); });
 
     m_addButton->setMenu(addMenu);
 
@@ -353,15 +336,15 @@ void GdbServerProvidersSettingsWidget::providerSelectionChanged()
         w->setVisible(false);
 
     GdbServerProviderNode *node = m_model.nodeForIndex(current);
-    w = node ? node->widget : 0;
+    w = node ? node->widget : nullptr;
     m_container->setWidget(w);
-    m_container->setVisible(w != 0);
+    m_container->setVisible(w != nullptr);
     updateState();
 }
 
 void GdbServerProvidersSettingsWidget::createProvider(GdbServerProviderFactory *f)
 {
-    GdbServerProvider *provider = 0;
+    GdbServerProvider *provider = nullptr;
     if (!f) {
         GdbServerProvider *old = m_model.provider(currentIndex());
         if (!old)
@@ -444,7 +427,7 @@ void GdbServerProvidersSettingsPage::finish()
                    m_configWidget, &GdbServerProvidersSettingsWidget::providerSelectionChanged);
 
     delete m_configWidget;
-    m_configWidget = 0;
+    m_configWidget = nullptr;
 }
 
 } // namespace Internal

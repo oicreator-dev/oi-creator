@@ -40,6 +40,7 @@
 #include <QDesktopWidget>
 #include <QKeyEvent>
 #include <QPointer>
+#include <QScreen>
 
 namespace TextEditor {
 
@@ -269,7 +270,7 @@ bool FunctionHintProposalWidget::eventFilter(QObject *obj, QEvent *e)
         }
         QTC_CHECK(d->m_model);
         if (d->m_model && d->m_model->size() > 1) {
-            QKeyEvent *ke = static_cast<QKeyEvent*>(e);
+            auto ke = static_cast<QKeyEvent*>(e);
             if (ke->key() == Qt::Key_Up) {
                 previousPage();
                 return true;
@@ -281,7 +282,7 @@ bool FunctionHintProposalWidget::eventFilter(QObject *obj, QEvent *e)
         }
         break;
     case QEvent::KeyRelease: {
-            QKeyEvent *ke = static_cast<QKeyEvent*>(e);
+            auto ke = static_cast<QKeyEvent*>(e);
             if (ke->key() == Qt::Key_Escape && d->m_escapePressed) {
                 abort();
                 emit explicitlyAborted();
@@ -366,9 +367,10 @@ void FunctionHintProposalWidget::updateContent()
 void FunctionHintProposalWidget::updatePosition()
 {
     const QDesktopWidget *desktop = QApplication::desktop();
+    const int screenNumber = desktop->screenNumber(d->m_underlyingWidget);
+    auto widgetScreen = QGuiApplication::screens().value(screenNumber, QGuiApplication::primaryScreen());
     const QRect &screen = Utils::HostOsInfo::isMacHost()
-            ? desktop->availableGeometry(desktop->screenNumber(d->m_underlyingWidget))
-            : desktop->screenGeometry(desktop->screenNumber(d->m_underlyingWidget));
+        ? widgetScreen->availableGeometry() : widgetScreen->geometry();
 
     d->m_pager->setFixedWidth(d->m_pager->minimumSizeHint().width());
 

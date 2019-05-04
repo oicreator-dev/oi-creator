@@ -44,15 +44,15 @@ class TextEditorWidget;
 class RefactoringChanges;
 class RefactoringFile;
 class RefactoringChangesData;
-typedef QSharedPointer<RefactoringFile> RefactoringFilePtr;
-typedef QVector<QPair<QTextCursor, QTextCursor> > RefactoringSelections;
+using RefactoringFilePtr = QSharedPointer<RefactoringFile>;
+using RefactoringSelections = QVector<QPair<QTextCursor, QTextCursor>>;
 
 // ### listen to the m_editor::destroyed signal?
 class TEXTEDITOR_EXPORT RefactoringFile
 {
     Q_DISABLE_COPY(RefactoringFile)
 public:
-    typedef Utils::ChangeSet::Range Range;
+    using Range = Utils::ChangeSet::Range;
 
 public:
     virtual ~RefactoringFile();
@@ -102,15 +102,15 @@ protected:
     QString m_fileName;
     QSharedPointer<RefactoringChangesData> m_data;
     mutable Utils::TextFileFormat m_textFileFormat;
-    mutable QTextDocument *m_document;
-    TextEditorWidget *m_editor;
+    mutable QTextDocument *m_document = nullptr;
+    TextEditorWidget *m_editor = nullptr;
     Utils::ChangeSet m_changes;
     QList<Range> m_indentRanges;
     QList<Range> m_reindentRanges;
-    bool m_openEditor;
-    bool m_activateEditor;
-    int m_editorCursorPosition;
-    bool m_appliedOnce;
+    bool m_openEditor = false;
+    bool m_activateEditor = false;
+    int m_editorCursorPosition = -1;
+    bool m_appliedOnce = false;
 
     friend class RefactoringChanges; // access to constructor
 };
@@ -122,7 +122,7 @@ protected:
 class TEXTEDITOR_EXPORT RefactoringChanges
 {
 public:
-    typedef Utils::ChangeSet::Range Range;
+    using Range = Utils::ChangeSet::Range;
 
 public:
     RefactoringChanges();
@@ -150,7 +150,7 @@ class TEXTEDITOR_EXPORT RefactoringChangesData
     Q_DISABLE_COPY(RefactoringChangesData)
 
 public:
-    RefactoringChangesData() {}
+    RefactoringChangesData() = default;
     virtual ~RefactoringChangesData();
 
     virtual void indentSelection(const QTextCursor &selection,

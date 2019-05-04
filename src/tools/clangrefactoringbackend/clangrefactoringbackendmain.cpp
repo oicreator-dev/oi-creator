@@ -30,7 +30,9 @@
 #include <QDir>
 
 #include <connectionserver.h>
+#include <executeinloop.h>
 #include <filepathcaching.h>
+#include <generatedfiles.h>
 #include <refactoringserver.h>
 #include <refactoringclientproxy.h>
 #include <symbolindexing.h>
@@ -38,10 +40,12 @@
 #include <sqliteexception.h>
 
 #include <chrono>
+#include <iostream>
 
 using namespace std::chrono_literals;
 
 using ClangBackEnd::FilePathCaching;
+using ClangBackEnd::GeneratedFiles;
 using ClangBackEnd::RefactoringClientProxy;
 using ClangBackEnd::RefactoringServer;
 using ClangBackEnd::RefactoringDatabaseInitializer;
@@ -81,11 +85,42 @@ public:
     }
 };
 
+struct Data // because we have a cycle dependency
+{
+    Data(const QString &databasePath)
+        : database{Utils::PathString{databasePath}, 100000ms}
+    {}
+
+    Sqlite::Database database;
+    RefactoringDatabaseInitializer<Sqlite::Database> databaseInitializer{database};
+    FilePathCaching filePathCache{database};
+    GeneratedFiles generatedFiles;
+    RefactoringServer clangCodeModelServer{symbolIndexing, filePathCache, generatedFiles};
+    SymbolIndexing symbolIndexing{database,
+                                  filePathCache,
+                                  generatedFiles,
+                                  [&](int progress, int total) {
+                                      executeInLoop([&] {
+                                          clangCodeModelServer.setProgress(progress, total);
+                                      });
+                                  }};
+};
+
+#ifdef Q_OS_WIN
+static void messageOutput(QtMsgType type, const QMessageLogContext &, const QString &msg)
+{
+    std::wcout << msg.toStdWString() << std::endl;
+    if (type == QtFatalMsg)
+        abort();
+}
+#endif
+
 int main(int argc, char *argv[])
 {
+#ifdef Q_OS_WIN
+    qInstallMessageHandler(messageOutput);
+#endif
     try {
-        //QLoggingCategory::setFilterRules(QStringLiteral("*.debug=false"));
-
         QCoreApplication::setOrganizationName(QStringLiteral("QtProject"));
         QCoreApplication::setOrganizationDomain(QStringLiteral("qt-project.org"));
         QCoreApplication::setApplicationName(QStringLiteral("ClangRefactoringBackend"));
@@ -97,13 +132,10 @@ int main(int argc, char *argv[])
         const QString connectionName = arguments[0];
         const QString databasePath = arguments[1];
 
-        Sqlite::Database database{Utils::PathString{databasePath}, 100000ms};
-        RefactoringDatabaseInitializer<Sqlite::Database> databaseInitializer{database};
-        FilePathCaching filePathCache{database};
-        SymbolIndexing symbolIndexing{database, filePathCache};
-        RefactoringServer clangCodeModelServer{symbolIndexing, filePathCache};
+        Data data{databasePath};
+
         ConnectionServer<RefactoringServer, RefactoringClientProxy> connectionServer;
-        connectionServer.setServer(&clangCodeModelServer);
+        connectionServer.setServer(&data.clangCodeModelServer);
         connectionServer.start(connectionName);
 
         return application.exec();

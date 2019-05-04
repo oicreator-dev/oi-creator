@@ -77,10 +77,11 @@ private:
     Type(CXType cxType);
 
 private:
-    CXType cxType;
+    CXType m_cxType;
 };
 
 bool operator==(Type first, Type second);
+bool operator!=(Type first, Type second);
 
 std::ostream &operator<<(std::ostream &os, CXTypeKind typeKind);
 std::ostream &operator<<(std::ostream &os, const Type &type);

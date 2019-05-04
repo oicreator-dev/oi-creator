@@ -29,7 +29,6 @@
 #include "diffeditorcontroller.h"
 #include "diffeditordocument.h"
 #include "diffeditorfactory.h"
-#include "differ.h"
 
 #include <QAction>
 #include <QFileDialog>
@@ -50,10 +49,12 @@
 #include <texteditor/texteditor.h>
 
 #include <utils/algorithm.h>
+#include <utils/differ.h>
 #include <utils/mapreduce.h>
 #include <utils/qtcassert.h>
 
 using namespace Core;
+using namespace Utils;
 
 namespace DiffEditor {
 namespace Internal {
@@ -128,7 +129,7 @@ class DiffFilesController : public DiffEditorController
     Q_OBJECT
 public:
     DiffFilesController(IDocument *document);
-    ~DiffFilesController();
+    ~DiffFilesController() override;
 
 protected:
     void reload() final;
@@ -202,7 +203,7 @@ QList<ReloadInput> DiffCurrentFileController::reloadInputList() const
 {
     QList<ReloadInput> result;
 
-    TextEditor::TextDocument *textDocument = qobject_cast<TextEditor::TextDocument *>(
+    auto textDocument = qobject_cast<TextEditor::TextDocument *>(
                 DocumentModel::documentForFilePath(m_fileName));
 
     if (textDocument && textDocument->isModified()) {
@@ -258,7 +259,7 @@ QList<ReloadInput> DiffOpenFilesController::reloadInputList() const
     const QList<IDocument *> openedDocuments = DocumentModel::openedDocuments();
 
     for (IDocument *doc : openedDocuments) {
-        TextEditor::TextDocument *textDocument = qobject_cast<TextEditor::TextDocument *>(doc);
+        auto textDocument = qobject_cast<TextEditor::TextDocument *>(doc);
 
         if (textDocument && textDocument->isModified()) {
             QString errorString;
@@ -316,7 +317,7 @@ QList<ReloadInput> DiffModifiedFilesController::reloadInputList() const
     QList<ReloadInput> result;
 
     for (const QString &fileName : m_fileNames) {
-        TextEditor::TextDocument *textDocument = qobject_cast<TextEditor::TextDocument *>(
+        auto textDocument = qobject_cast<TextEditor::TextDocument *>(
                     DocumentModel::documentForFilePath(fileName));
 
         if (textDocument && textDocument->isModified()) {

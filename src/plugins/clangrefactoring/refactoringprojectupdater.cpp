@@ -25,14 +25,25 @@
 
 #include "refactoringprojectupdater.h"
 
+#include <cpptools/cppmodelmanager.h>
+#include <projectpartsstorageinterface.h>
+
 namespace ClangRefactoring {
 
-RefactoringProjectUpdater::RefactoringProjectUpdater(ClangBackEnd::ProjectManagementServerInterface &server,
-                                                     RefactoringClient &,
-                                                     ClangBackEnd::FilePathCachingInterface &filePathCache)
-    : ClangPchManager::ProjectUpdater(server, filePathCache)
+void RefactoringProjectUpdater::precompiledHeaderUpdated(ClangBackEnd::ProjectPartId projectPartId,
+                                                         const QString &,
+                                                         long long)
 {
+    const QString projectPartName = fetchProjectPartName(projectPartId);
 
+    auto projectPart = m_cppModelManager.projectPartForId(projectPartName);
+    if (projectPart)
+        updateProjectParts({projectPart.data()}, {});
+}
+
+void RefactoringProjectUpdater::precompiledHeaderRemoved(ClangBackEnd::ProjectPartId projectPartId)
+{
+    removeProjectParts({projectPartId});
 }
 
 } // namespace ClangRefactoring

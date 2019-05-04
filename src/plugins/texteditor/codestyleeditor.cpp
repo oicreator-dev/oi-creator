@@ -43,12 +43,12 @@ using namespace TextEditor;
 
 CodeStyleEditor::CodeStyleEditor(ICodeStylePreferencesFactory *factory,
                                  ICodeStylePreferences *codeStyle, QWidget *parent)
-    : QWidget(parent),
+    : CodeStyleEditorWidget(parent),
       m_factory(factory),
       m_codeStyle(codeStyle)
 {
     m_layout = new QVBoxLayout(this);
-    CodeStyleSelectorWidget *selector = new CodeStyleSelectorWidget(factory, this);
+    auto selector = new CodeStyleSelectorWidget(factory, this);
     selector->setCodeStyle(codeStyle);
     m_preview = new SnippetEditorWidget(this);
     DisplaySettings displaySettings = m_preview->displaySettings();
@@ -79,23 +79,19 @@ CodeStyleEditor::CodeStyleEditor(ICodeStylePreferencesFactory *factory,
     updatePreview();
 }
 
-void CodeStyleEditor::clearMargins()
-{
-    m_layout->setContentsMargins(QMargins());
-}
-
 void CodeStyleEditor::updatePreview()
 {
     QTextDocument *doc = m_preview->document();
 
-    m_preview->textDocument()->indenter()->invalidateCache(doc);
+    m_preview->textDocument()->indenter()->invalidateCache();
 
     QTextBlock block = doc->firstBlock();
     QTextCursor tc = m_preview->textCursor();
     tc.beginEditBlock();
     while (block.isValid()) {
-        m_preview->textDocument()->indenter()
-                ->indentBlock(doc, block, QChar::Null, m_codeStyle->currentTabSettings());
+        m_preview->textDocument()->indenter()->indentBlock(block,
+                                                           QChar::Null,
+                                                           m_codeStyle->currentTabSettings());
         block = block.next();
     }
     tc.endEditBlock();

@@ -36,6 +36,7 @@
 
 #include "qmt/diagram/dobject.h"
 #include "qmt/diagram/drelation.h"
+#include "qmt/diagram/dswimlane.h"
 #include "qmt/diagram_controller/diagramcontroller.h"
 #include "qmt/diagram_controller/dselection.h"
 #include "qmt/diagram_scene/items/objectitem.h"
@@ -97,6 +98,7 @@ public:
     QSet<QGraphicsItem *> m_selectedItems;
     QSet<QGraphicsItem *> m_secondarySelectedItems;
     QGraphicsItem *m_focusItem = nullptr;
+    IEditable *m_editItem = nullptr;
     bool m_exportSelectedElements = false;
     QRectF m_sceneBoundingRect;
 };
@@ -390,8 +392,8 @@ void DiagramSceneModel::copyToClipboard()
 
     auto mimeData = new QMimeData();
     // Create the image with the size of the shrunk scene
-    const int scaleFactor = 4;
-    const int border = 4;
+    const int scaleFactor = 1;
+    const int border = 5;
     const int baseDpi = 75;
     const int dotsPerMeter = 10000 * baseDpi / 254;
     QSize imageSize = status.m_sceneBoundingRect.size().toSize();
@@ -763,6 +765,7 @@ void DiagramSceneModel::onEndUpdateElement(int row, const MDiagram *diagram)
     if (diagram == m_diagram) {
         QGraphicsItem *item = m_graphicsItems.at(row);
         updateGraphicsItem(item, diagram->diagramElements().at(row));
+        // TODO update all relations and their other end's (e.g. class name may have changed)
         recalcSceneRectSize();
     }
     m_busyState = NotBusy;
@@ -787,6 +790,15 @@ void DiagramSceneModel::onEndInsertElement(int row, const MDiagram *diagram)
         updateGraphicsItem(item, element);
         m_graphicsScene->invalidate();
         updateGraphicsItem(item, element);
+        // if element is relation update ends
+        if (DRelation *dRelation = dynamic_cast<DRelation *>(element)) {
+            DElement *dEnd = m_diagramController->findElement(dRelation->endAUid(), diagram);
+            if (dEnd)
+                updateGraphicsItem(graphicsItem(dEnd), dEnd);
+            dEnd = m_diagramController->findElement(dRelation->endBUid(), diagram);
+            if (dEnd)
+                updateGraphicsItem(graphicsItem(dEnd), dEnd);
+        }
         recalcSceneRectSize();
     }
     m_busyState = NotBusy;
@@ -796,6 +808,12 @@ void DiagramSceneModel::onBeginRemoveElement(int row, const MDiagram *diagram)
 {
     QMT_CHECK(m_busyState == NotBusy);
     if (diagram == m_diagram) {
+        // if element is relation store end's uid
+        m_relationEndsUid.clear();
+        if (DRelation *relation = dynamic_cast<DRelation *>(diagram->diagramElements().at(row))) {
+            m_relationEndsUid.append(relation->endAUid());
+            m_relationEndsUid.append(relation->endBUid());
+        }
         QGraphicsItem *item = m_graphicsItems.takeAt(row);
         deleteGraphicsItem(item, diagram->diagramElements().at(row));
         recalcSceneRectSize();
@@ -808,6 +826,12 @@ void DiagramSceneModel::onEndRemoveElement(int row, const MDiagram *diagram)
     Q_UNUSED(row);
     Q_UNUSED(diagram);
     QMT_CHECK(m_busyState == RemoveElement);
+    // update elements from store (see above)
+    for (const Uid &end_uid : m_relationEndsUid) {
+        DElement *dEnd = m_diagramController->findElement(end_uid, diagram);
+        if (dEnd)
+            updateGraphicsItem(graphicsItem(dEnd), dEnd);
+    }
     m_busyState = NotBusy;
 }
 
@@ -954,16 +978,36 @@ void DiagramSceneModel::saveSelectionStatusBeforeExport(bool exportSelectedEleme
 
     // Selections would also render to the clipboard
     m_graphicsScene->clearSelection();
+    foreach (QGraphicsItem *item, m_graphicsItems) {
+        if (IEditable *editItem = dynamic_cast<IEditable *>(item)) {
+            if (editItem->isEditing()) {
+                status->m_editItem = editItem;
+                editItem->finishEdit();
+            }
+        }
+    }
     removeExtraSceneItems();
 
-    if (!exportSelectedElements) {
-        status->m_sceneBoundingRect = m_graphicsScene->itemsBoundingRect();
-    } else {
-        foreach (QGraphicsItem *item, m_graphicsItems) {
-            if (status->m_selectedItems.contains(item) || status->m_secondarySelectedItems.contains(item))
+    foreach (QGraphicsItem *item, m_graphicsItems) {
+        if (!exportSelectedElements
+                || status->m_selectedItems.contains(item)
+                || status->m_secondarySelectedItems.contains(item)) {
+            // TODO introduce interface for calculating export boundary
+            if (SwimlaneItem *swimlane = dynamic_cast<SwimlaneItem *>(item)) {
+                QRectF boundary = item->mapRectToScene(swimlane->boundingRect());
+                if (swimlane->swimlane()->isHorizontal()) {
+                    boundary.setLeft(status->m_sceneBoundingRect.left());
+                    boundary.setRight(status->m_sceneBoundingRect.right());
+                } else {
+                    boundary.setTop(status->m_sceneBoundingRect.top());
+                    boundary.setBottom(status->m_sceneBoundingRect.bottom());
+                }
+                status->m_sceneBoundingRect |= boundary;
+            } else {
                 status->m_sceneBoundingRect |= item->mapRectToScene(item->boundingRect());
-            else
-                item->hide();
+            }
+        } else {
+            item->hide();
         }
     }
 }
@@ -989,6 +1033,10 @@ void DiagramSceneModel::restoreSelectedStatusAfterExport(const DiagramSceneModel
             m_focusItem = status.m_focusItem;
         }
     }
+
+    // reset edit item
+    if (status.m_editItem)
+        status.m_editItem->edit();
 }
 
 void DiagramSceneModel::recalcSceneRectSize()

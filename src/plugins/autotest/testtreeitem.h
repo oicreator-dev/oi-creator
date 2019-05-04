@@ -50,6 +50,7 @@ namespace Internal {
 class TestParseResult;
 class TestConfiguration;
 enum class TestRunMode;
+
 class TestTreeItem : public Utils::TypedTreeItem<TestTreeItem>
 {
 public:
@@ -120,6 +121,7 @@ public:
     virtual TestTreeItem *findChild(const TestTreeItem *other) = 0;
     virtual bool modify(const TestParseResult *result) = 0;
     virtual bool isGroupNodeFor(const TestTreeItem *other) const;
+    virtual bool isGroupable() const;
     virtual TestTreeItem *createParentGroupNode() const = 0;
     // based on (internal) filters this will be used to filter out sub items (and remove them)
     // returns a copy of the item that contains the filtered out children or nullptr
@@ -157,7 +159,7 @@ private:
 class TestCodeLocationAndType
 {
 public:
-    QString m_name;     // tag name for m_type == TEST_DATATAG, file name for other values
+    QString m_name;     // tag name for m_type == TestDataTag, file name for other values
     unsigned m_line = 0;
     unsigned m_column = 0;
     TestTreeItem::Type m_type = TestTreeItem::Root;

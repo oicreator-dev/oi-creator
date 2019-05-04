@@ -66,6 +66,9 @@ const Icon INTERRUPT(
 const Icon INTERRUPT_FLAT({
         {":/debugger/images/debugger_interrupt_mask.png", Theme::IconsInterruptToolBarColor},
         {":/projectexplorer/images/debugger_beetle_mask.png", Theme::IconsDebugColor}});
+const Icon STOP_FLAT({
+        {":/debugger/images/debugger_stop_mask.png", Theme::IconsStopColor},
+        {":/projectexplorer/images/debugger_beetle_mask.png", Theme::IconsDebugColor}});
 const Icon DEBUG_INTERRUPT_SMALL({
         {":/utils/images/interrupt_small.png", Theme::IconsInterruptColor},
         {":/projectexplorer/images/debugger_overlay_small.png", Theme::PanelTextColorMid}}, Icon::MenuTintedStyle);
@@ -81,9 +84,18 @@ const Icon DEBUG_EXIT_SMALL_TOOLBAR({
 const Icon LOCATION({
         {":/debugger/images/location_background.png", Theme::IconsCodeModelOverlayForegroundColor},
         {":/debugger/images/location.png", Theme::IconsWarningToolBarColor}}, Icon::Tint);
+const Icon REVERSE_LOCATION({
+        {":/debugger/images/debugger_reversemode_background.png", Theme::IconsCodeModelOverlayForegroundColor},
+        {":/debugger/images/debugger_reversemode.png", Theme::IconsWarningToolBarColor}}, Icon::Tint);
 const Icon REVERSE_MODE({
         {":/debugger/images/debugger_reversemode_background.png", Theme::IconsCodeModelOverlayForegroundColor},
         {":/debugger/images/debugger_reversemode.png", Theme::IconsInfoColor}}, Icon::Tint);
+const Icon DIRECTION_BACKWARD({
+        {":/debugger/images/debugger_reversemode_background.png", Theme::IconsCodeModelOverlayForegroundColor},
+        {":/debugger/images/debugger_reversemode.png", Theme::IconsInfoColor}}, Icon::Tint);
+const Icon DIRECTION_FORWARD({
+        {":/debugger/images/location_background.png", Theme::IconsCodeModelOverlayForegroundColor},
+        {":/debugger/images/location.png", Theme::IconsInfoColor}}, Icon::Tint);
 const Icon APP_ON_TOP({
         {":/utils/images/app-on-top.png", Theme::PanelTextColorMid}}, Icon::MenuTintedStyle);
 const Icon APP_ON_TOP_TOOLBAR({
@@ -127,5 +139,19 @@ const Icon MODE_DEBUGGER_FLAT({
 const Icon MODE_DEBUGGER_FLAT_ACTIVE({
         {":/debugger/images/mode_debug_mask.png", Theme::IconsModeDebugActiveColor}});
 
+const Icon MACOS_TOUCHBAR_DEBUG(
+        ":/debugger/images/macos_touchbar_debug.png");
+const Icon MACOS_TOUCHBAR_DEBUG_EXIT(
+        ":/debugger/images/macos_touchbar_debug_exit.png");
+const Icon MACOS_TOUCHBAR_DEBUG_INTERRUPT(
+        ":/debugger/images/macos_touchbar_debug_interrupt.png");
+const Icon MACOS_TOUCHBAR_DEBUG_CONTINUE(
+        ":/debugger/images/macos_touchbar_debug_continue.png");
+const Icon MACOS_TOUCHBAR_DEBUG_STEP_OVER(
+        ":/debugger/images/macos_touchbar_debug_step_over.png");
+const Icon MACOS_TOUCHBAR_DEBUG_STEP_INTO(
+        ":/debugger/images/macos_touchbar_debug_step_into.png");
+const Icon MACOS_TOUCHBAR_DEBUG_STEP_OUT(
+        ":/debugger/images/macos_touchbar_debug_step_out.png");
 } // namespace Icons
 } // namespace Debugger

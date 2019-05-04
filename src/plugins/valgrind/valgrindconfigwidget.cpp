@@ -44,17 +44,15 @@
 namespace Valgrind {
 namespace Internal {
 
-ValgrindConfigWidget::ValgrindConfigWidget(ValgrindBaseSettings *settings,
-        QWidget *parent, bool global)
-    : QWidget(parent),
-      m_settings(settings),
+ValgrindConfigWidget::ValgrindConfigWidget(ValgrindBaseSettings *settings, bool global)
+    : m_settings(settings),
       m_ui(new Ui::ValgrindConfigWidget)
 {
     m_ui->setupUi(this);
     m_model = new QStandardItemModel(this);
 
     m_ui->valgrindExeChooser->setExpectedKind(Utils::PathChooser::ExistingCommand);
-    m_ui->valgrindExeChooser->setHistoryCompleter(QLatin1String("Valgrind.Command.History"));
+    m_ui->valgrindExeChooser->setHistoryCompleter("Valgrind.Command.History");
     m_ui->valgrindExeChooser->setPromptDialogTitle(tr("Valgrind Command"));
 
     updateUi();
@@ -75,6 +73,10 @@ ValgrindConfigWidget::ValgrindConfigWidget(ValgrindBaseSettings *settings,
     //
     // Callgrind
     //
+    m_ui->kcachegrindExeChooser->setExpectedKind(Utils::PathChooser::ExistingCommand);
+    m_ui->kcachegrindExeChooser->setPromptDialogTitle(tr("KCachegrind Command"));
+    connect(m_ui->kcachegrindExeChooser, &Utils::PathChooser::rawPathChanged,
+            m_settings, &ValgrindBaseSettings::setKCachegrindExecutable);
     connect(m_ui->enableCacheSim, &QCheckBox::toggled,
             m_settings, &ValgrindBaseSettings::setEnableCacheSim);
     connect(m_settings, &ValgrindBaseSettings::enableCacheSimChanged,
@@ -149,7 +151,7 @@ ValgrindConfigWidget::ValgrindConfigWidget(ValgrindBaseSettings *settings,
 
     if (!global) {
         // In project settings we want a flat vertical list.
-        QVBoxLayout *l = new QVBoxLayout;
+        auto l = new QVBoxLayout;
         while (layout()->count()) {
             QLayoutItem *item = layout()->takeAt(0);
             if (QWidget *w = item->widget())
@@ -170,6 +172,7 @@ void ValgrindConfigWidget::updateUi()
 {
     m_ui->valgrindExeChooser->setPath(m_settings->valgrindExecutable());
     m_ui->smcDetectionComboBox->setCurrentIndex(m_settings->selfModifyingCodeDetection());
+    m_ui->kcachegrindExeChooser->setPath(m_settings->kcachegrindExecutable());
     m_ui->enableCacheSim->setChecked(m_settings->enableCacheSim());
     m_ui->enableBranchSim->setChecked(m_settings->enableBranchSim());
     m_ui->collectSystime->setChecked(m_settings->collectSystime());

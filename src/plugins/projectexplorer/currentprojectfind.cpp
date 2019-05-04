@@ -66,7 +66,7 @@ QString CurrentProjectFind::displayName() const
 
 bool CurrentProjectFind::isEnabled() const
 {
-    return ProjectTree::currentProject() != 0 && BaseFileFind::isEnabled();
+    return ProjectTree::currentProject() != nullptr && BaseFileFind::isEnabled();
 }
 
 QVariant CurrentProjectFind::additionalParameters() const
@@ -86,7 +86,7 @@ Utils::FileIterator *CurrentProjectFind::files(const QStringList &nameFilters,
     QString projectFile = additionalParameters.toString();
     for (Project *project : SessionManager::projects()) {
         if (project->document() && projectFile == project->projectFilePath().toString())
-            return filesForProjects(nameFilters, exclusionFilters, QList<Project *>() << project);
+            return filesForProjects(nameFilters, exclusionFilters, {project});
     }
     return new Utils::FileListIterator(QStringList(), QList<QTextCodec *>());
 }

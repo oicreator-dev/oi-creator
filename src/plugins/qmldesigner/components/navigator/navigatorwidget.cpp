@@ -45,10 +45,9 @@
 
 namespace QmlDesigner {
 
-NavigatorWidget::NavigatorWidget(NavigatorView *view) :
-        QFrame(),
-        m_treeView(new NavigatorTreeView),
-        m_navigatorView(view)
+NavigatorWidget::NavigatorWidget(NavigatorView *view)
+    : m_treeView(new NavigatorTreeView),
+    m_navigatorView(view)
 {
     m_treeView->setDragEnabled(true);
     m_treeView->setAcceptDrops(true);
@@ -159,12 +158,12 @@ QList<QToolButton *> NavigatorWidget::createToolBarWidgets()
     return buttons;
 }
 
-void NavigatorWidget::contextHelpId(const Core::IContext::HelpIdCallback &callback) const
+void NavigatorWidget::contextHelp(const Core::IContext::HelpCallback &callback) const
 {
     if (navigatorView())
-        navigatorView()->contextHelpId(callback);
+        navigatorView()->contextHelp(callback);
     else
-        callback(QString());
+        callback({});
 }
 
 void NavigatorWidget::disableNavigator()

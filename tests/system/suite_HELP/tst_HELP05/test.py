@@ -34,9 +34,7 @@ def verifyInteractiveQMLHelp(lineText, helpText):
     homeKey = "<Home>"
     if platform.system() == "Darwin":
         homeKey = "<Ctrl+Left>"
-        type(editorArea, homeKey)
-    else:
-        type(editorArea, homeKey)
+    type(editorArea, homeKey)
     snooze(1)
     # call help
     type(editorArea, "<F1>")
@@ -45,7 +43,7 @@ def verifyInteractiveQMLHelp(lineText, helpText):
                 % (helpText, getHelpTitle()))
 
 def main():
-    startApplication("qtcreator" + SettingsPath)
+    startQC()
     if not startedWithoutPluginError():
         return
     qchs = []

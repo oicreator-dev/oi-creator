@@ -27,7 +27,11 @@
 
 #include <pchmanagerclientinterface.h>
 #include <precompiledheadersupdatedmessage.h>
+#include <progressmessage.h>
+#include <pchtaskgeneratorinterface.h>
+#include <removegeneratedfilesmessage.h>
 #include <removeprojectpartsmessage.h>
+#include <updategeneratedfilesmessage.h>
 #include <updateprojectpartsmessage.h>
 
 #include <utils/smallstring.h>
@@ -37,11 +41,13 @@
 namespace ClangBackEnd {
 
 PchManagerServer::PchManagerServer(ClangPathWatcherInterface &fileSystemWatcher,
-                                   PchCreatorInterface &pchCreator,
-                                   ProjectPartsInterface &projectParts)
-    : m_fileSystemWatcher(fileSystemWatcher),
-      m_pchCreator(pchCreator),
-      m_projectParts(projectParts)
+                                   PchTaskGeneratorInterface &pchTaskGenerator,
+                                   ProjectPartsManagerInterface &projectParts,
+                                   GeneratedFilesInterface &generatedFiles)
+    : m_fileSystemWatcher(fileSystemWatcher)
+    , m_pchTaskGenerator(pchTaskGenerator)
+    , m_projectPartsManager(projectParts)
+    , m_generatedFiles(generatedFiles)
 {
     m_fileSystemWatcher.setNotifier(this);
 }
@@ -49,40 +55,91 @@ PchManagerServer::PchManagerServer(ClangPathWatcherInterface &fileSystemWatcher,
 void PchManagerServer::end()
 {
     QCoreApplication::exit();
-
 }
 
 void PchManagerServer::updateProjectParts(UpdateProjectPartsMessage &&message)
 {
-    m_pchCreator.setGeneratedFiles(message.takeGeneratedFiles());
+    m_toolChainsArgumentsCache.update(message.projectsParts, message.toolChainArguments);
 
-    m_pchCreator.generatePchs(m_projectParts.update(message.takeProjectsParts()));
+    ProjectPartContainers newProjectParts = m_projectPartsManager.update(message.takeProjectsParts());
 
-    m_fileSystemWatcher.updateIdPaths(m_pchCreator.takeProjectsIncludes());
+    if (m_generatedFiles.isValid()) {
+        m_pchTaskGenerator.addProjectParts(std::move(newProjectParts),
+                                           std::move(message.toolChainArguments));
+    } else  {
+        m_projectPartsManager.updateDeferred(newProjectParts);
+    }
 }
 
 void PchManagerServer::removeProjectParts(RemoveProjectPartsMessage &&message)
 {
     m_fileSystemWatcher.removeIds(message.projectsPartIds);
 
-    m_projectParts.remove(message.projectsPartIds);
+    m_projectPartsManager.remove(message.projectsPartIds);
+
+    m_pchTaskGenerator.removeProjectParts(message.projectsPartIds);
+
+    m_toolChainsArgumentsCache.remove(message.projectsPartIds);
 }
 
-void PchManagerServer::pathsWithIdsChanged(const Utils::SmallStringVector &ids)
+namespace {
+ProjectPartIds projectPartIds(const ProjectPartContainers &projectParts)
 {
-    m_pchCreator.generatePchs(m_projectParts.projects(ids));
+    ProjectPartIds ids;
+    ids.reserve(projectParts.size());
 
-    m_fileSystemWatcher.updateIdPaths(m_pchCreator.takeProjectsIncludes());
+    std::transform(projectParts.cbegin(),
+                   projectParts.cend(),
+                   std::back_inserter(ids),
+                   [](const ProjectPartContainer &projectPart) { return projectPart.projectPartId; });
+
+    return ids;
+}
+}
+
+void PchManagerServer::updateGeneratedFiles(UpdateGeneratedFilesMessage &&message)
+{
+    m_generatedFiles.update(message.takeGeneratedFiles());
+
+    if (m_generatedFiles.isValid()) {
+        ProjectPartContainers deferredProjectParts = m_projectPartsManager.deferredUpdates();
+        ArgumentsEntries entries = m_toolChainsArgumentsCache.arguments(
+            projectPartIds(deferredProjectParts));
+
+        for (ArgumentsEntry &entry : entries) {
+            m_pchTaskGenerator.addProjectParts(std::move(deferredProjectParts),
+                                               std::move(entry.arguments));
+        }
+    }
+}
+
+void PchManagerServer::removeGeneratedFiles(RemoveGeneratedFilesMessage &&message)
+{
+    m_generatedFiles.remove(message.takeGeneratedFiles());
+}
+
+void PchManagerServer::pathsWithIdsChanged(const ProjectPartIds &ids)
+{
+    ArgumentsEntries entries = m_toolChainsArgumentsCache.arguments(ids);
+
+    for (ArgumentsEntry &entry : entries) {
+        m_pchTaskGenerator.addProjectParts(m_projectPartsManager.projects(entry.ids),
+                                           std::move(entry.arguments));
+    }
 }
 
 void PchManagerServer::pathsChanged(const FilePathIds &/*filePathIds*/)
 {
 }
 
-void PchManagerServer::taskFinished(TaskFinishStatus status, const ProjectPartPch &projectPartPch)
+void PchManagerServer::setPchCreationProgress(int progress, int total)
 {
-    if (status == TaskFinishStatus::Successfully)
-        client()->precompiledHeadersUpdated(PrecompiledHeadersUpdatedMessage({projectPartPch.clone()}));
+    client()->progress({ProgressType::PrecompiledHeader, progress, total});
+}
+
+void PchManagerServer::setDependencyCreationProgress(int progress, int total)
+{
+    client()->progress({ProgressType::DependencyCreation, progress, total});
 }
 
 } // namespace ClangBackEnd

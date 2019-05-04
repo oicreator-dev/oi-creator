@@ -44,11 +44,12 @@ public:
     QString filePath;
 
     // Both values start at 1.
-    int line;
-    int column;
+    int line = 0;
+    int column = 0;
 };
 
 DEBUGGER_EXPORT bool operator==(const DiagnosticLocation &first, const DiagnosticLocation &second);
+DEBUGGER_EXPORT bool operator<(const DiagnosticLocation &first, const DiagnosticLocation &second);
 DEBUGGER_EXPORT QDebug operator<<(QDebug dbg, const DiagnosticLocation &location);
 
 } // namespace Debugger

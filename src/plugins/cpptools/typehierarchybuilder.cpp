@@ -42,14 +42,14 @@ QString unqualifyName(const QString &qualifiedName)
 class DerivedHierarchyVisitor : public CPlusPlus::SymbolVisitor
 {
 public:
-    DerivedHierarchyVisitor(const QString &qualifiedName)
+    explicit DerivedHierarchyVisitor(const QString &qualifiedName)
         : _qualifiedName(qualifiedName)
         , _unqualifiedName(unqualifyName(qualifiedName))
     {}
 
     void execute(const CPlusPlus::Document::Ptr &doc, const CPlusPlus::Snapshot &snapshot);
 
-    virtual bool visit(CPlusPlus::Class *);
+    bool visit(CPlusPlus::Class *) override;
 
     const QList<CPlusPlus::Symbol *> &derived() { return _derived; }
     const QStringList otherBases() { return _otherBases; }
@@ -119,8 +119,7 @@ bool DerivedHierarchyVisitor::visit(CPlusPlus::Class *symbol)
 
 } // namespace
 
-TypeHierarchy::TypeHierarchy() : _symbol(0)
-{}
+TypeHierarchy::TypeHierarchy() = default;
 
 TypeHierarchy::TypeHierarchy(CPlusPlus::Symbol *symbol) : _symbol(symbol)
 {}

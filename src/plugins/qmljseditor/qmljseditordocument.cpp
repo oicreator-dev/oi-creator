@@ -58,23 +58,16 @@ enum {
 struct Declaration
 {
     QString text;
-    int startLine;
-    int startColumn;
-    int endLine;
-    int endColumn;
-
-    Declaration()
-        : startLine(0),
-        startColumn(0),
-        endLine(0),
-        endColumn(0)
-    { }
+    int startLine = 0;
+    int startColumn = 0;
+    int endLine = 0;
+    int endColumn = 0;
 };
 
 class FindIdDeclarations: protected Visitor
 {
 public:
-    typedef QHash<QString, QList<AST::SourceLocation> > Result;
+    using Result = QHash<QString, QList<AST::SourceLocation> >;
 
     Result operator()(Document::Ptr doc)
     {
@@ -108,11 +101,11 @@ protected:
     using Visitor::visit;
     using Visitor::endVisit;
 
-    virtual bool visit(AST::UiScriptBinding *node)
+    bool visit(AST::UiScriptBinding *node) override
     {
         if (asString(node->qualifiedId) == QLatin1String("id")) {
-            if (AST::ExpressionStatement *stmt = AST::cast<AST::ExpressionStatement*>(node->statement)) {
-                if (AST::IdentifierExpression *idExpr = AST::cast<AST::IdentifierExpression *>(stmt->expression)) {
+            if (auto stmt = AST::cast<const AST::ExpressionStatement*>(node->statement)) {
+                if (auto idExpr = AST::cast<const AST::IdentifierExpression *>(stmt->expression)) {
                     if (!idExpr->name.isEmpty()) {
                         const QString &id = idExpr->name.toString();
                         QList<AST::SourceLocation> *locs = &_ids[id];
@@ -130,7 +123,7 @@ protected:
         return false;
     }
 
-    virtual bool visit(AST::IdentifierExpression *node)
+    bool visit(AST::IdentifierExpression *node) override
     {
         if (!node->name.isEmpty()) {
             const QString &name = node->name.toString();
@@ -205,7 +198,7 @@ protected:
         decl->endColumn = last.startColumn + last.length;
     }
 
-    virtual bool visit(AST::UiObjectDefinition *node)
+    bool visit(AST::UiObjectDefinition *node) override
     {
         ++_depth;
 
@@ -223,12 +216,12 @@ protected:
         return true; // search for more bindings
     }
 
-    virtual void endVisit(AST::UiObjectDefinition *)
+    void endVisit(AST::UiObjectDefinition *) override
     {
         --_depth;
     }
 
-    virtual bool visit(AST::UiObjectBinding *node)
+    bool visit(AST::UiObjectBinding *node) override
     {
         ++_depth;
 
@@ -250,12 +243,12 @@ protected:
         return true; // search for more bindings
     }
 
-    virtual void endVisit(AST::UiObjectBinding *)
+    void endVisit(AST::UiObjectBinding *) override
     {
         --_depth;
     }
 
-    virtual bool visit(AST::UiScriptBinding *)
+    bool visit(AST::UiScriptBinding *) override
     {
         ++_depth;
 
@@ -272,17 +265,17 @@ protected:
         return false; // more more bindings in this subtree.
     }
 
-    virtual void endVisit(AST::UiScriptBinding *)
+    void endVisit(AST::UiScriptBinding *) override
     {
         --_depth;
     }
 
-    virtual bool visit(AST::FunctionExpression *)
+    bool visit(AST::FunctionExpression *) override
     {
         return false;
     }
 
-    virtual bool visit(AST::FunctionDeclaration *ast)
+    bool visit(AST::FunctionDeclaration *ast) override
     {
         if (ast->name.isEmpty())
             return false;
@@ -295,8 +288,8 @@ protected:
 
         decl.text += QLatin1Char('(');
         for (FormalParameterList *it = ast->formals; it; it = it->next) {
-            if (!it->name.isEmpty())
-                decl.text += it->name;
+            if (!it->element->bindingIdentifier.isEmpty())
+                decl.text += it->element->bindingIdentifier;
 
             if (it->next)
                 decl.text += QLatin1String(", ");
@@ -309,14 +302,14 @@ protected:
         return false;
     }
 
-    virtual bool visit(AST::VariableDeclaration *ast)
+    bool visit(AST::PatternElement *ast) override
     {
-        if (ast->name.isEmpty())
+        if (!ast->isVariableDeclaration() || ast->bindingIdentifier.isEmpty())
             return false;
 
         Declaration decl;
         decl.text.fill(QLatin1Char(' '), _depth);
-        decl.text += ast->name;
+        decl.text += ast->bindingIdentifier;
 
         const SourceLocation first = ast->identifierToken;
         decl.startLine = first.startLine;
@@ -329,10 +322,10 @@ protected:
         return false;
     }
 
-    bool visit(AST::BinaryExpression *ast)
+    bool visit(AST::BinaryExpression *ast) override
     {
-        AST::FieldMemberExpression *field = AST::cast<AST::FieldMemberExpression *>(ast->left);
-        AST::FunctionExpression *funcExpr = AST::cast<AST::FunctionExpression *>(ast->right);
+        auto field = AST::cast<const AST::FieldMemberExpression *>(ast->left);
+        auto funcExpr = AST::cast<const AST::FunctionExpression *>(ast->right);
 
         if (field && funcExpr && funcExpr->body && (ast->op == QSOperator::Assign)) {
             Declaration decl;
@@ -343,8 +336,8 @@ protected:
 
             decl.text += QLatin1Char('(');
             for (FormalParameterList *it = funcExpr->formals; it; it = it->next) {
-                if (!it->name.isEmpty())
-                    decl.text += it->name;
+                if (!it->element->bindingIdentifier.isEmpty())
+                    decl.text += it->element->bindingIdentifier;
 
                 if (it->next)
                     decl.text += QLatin1String(", ");
@@ -368,7 +361,7 @@ public:
     {
         _textDocument = textDocument;
         _ranges.clear();
-        if (doc && doc->ast() != 0)
+        if (doc && doc->ast() != nullptr)
             doc->ast()->accept(this);
         return _ranges;
     }
@@ -376,33 +369,33 @@ public:
 protected:
     using AST::Visitor::visit;
 
-    virtual bool visit(AST::UiObjectBinding *ast)
+    bool visit(AST::UiObjectBinding *ast) override
     {
         if (ast->initializer && ast->initializer->lbraceToken.length)
             _ranges.append(createRange(ast, ast->initializer));
         return true;
     }
 
-    virtual bool visit(AST::UiObjectDefinition *ast)
+    bool visit(AST::UiObjectDefinition *ast) override
     {
         if (ast->initializer && ast->initializer->lbraceToken.length)
             _ranges.append(createRange(ast, ast->initializer));
         return true;
     }
 
-    virtual bool visit(AST::FunctionExpression *ast)
+    bool visit(AST::FunctionExpression *ast) override
     {
         _ranges.append(createRange(ast));
         return true;
     }
 
-    virtual bool visit(AST::FunctionDeclaration *ast)
+    bool visit(AST::FunctionDeclaration *ast) override
     {
         _ranges.append(createRange(ast));
         return true;
     }
 
-    bool visit(AST::BinaryExpression *ast)
+    bool visit(AST::BinaryExpression *ast) override
     {
         auto field = AST::cast<AST::FieldMemberExpression *>(ast->left);
         auto funcExpr = AST::cast<AST::FunctionExpression *>(ast->right);
@@ -412,9 +405,9 @@ protected:
         return true;
     }
 
-    virtual bool visit(AST::UiScriptBinding *ast)
+    bool visit(AST::UiScriptBinding *ast) override
     {
-        if (AST::Block *block = AST::cast<AST::Block *>(ast->statement))
+        if (auto block = AST::cast<AST::Block *>(ast->statement))
             _ranges.append(createRange(ast, block));
         return true;
     }
@@ -660,7 +653,7 @@ QmlJSEditorDocument::QmlJSEditorDocument()
     connect(this, &TextEditor::TextDocument::tabSettingsChanged,
             d, &Internal::QmlJSEditorDocumentPrivate::invalidateFormatterCache);
     setSyntaxHighlighter(new QmlJSHighlighter(document()));
-    setIndenter(new Internal::Indenter);
+    setIndenter(new Internal::Indenter(document()));
 }
 
 QmlJSEditorDocument::~QmlJSEditorDocument()

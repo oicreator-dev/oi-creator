@@ -43,35 +43,36 @@ namespace CppTools {
 class CppRefactoringChangesData : public TextEditor::RefactoringChangesData
 {
 public:
-    CppRefactoringChangesData(const Snapshot &snapshot)
+    explicit CppRefactoringChangesData(const Snapshot &snapshot)
         : m_snapshot(snapshot)
         , m_modelManager(CppModelManager::instance())
         , m_workingCopy(m_modelManager->workingCopy())
     {}
 
-    virtual void indentSelection(const QTextCursor &selection,
-                                 const QString &fileName,
-                                 const TextEditor::TextDocument *textDocument) const
+    void indentSelection(const QTextCursor &selection,
+                         const QString &fileName,
+                         const TextEditor::TextDocument *textDocument) const override
     {
         const TextEditor::TabSettings &tabSettings =
             ProjectExplorer::actualTabSettings(fileName, textDocument);
 
-        CppQtStyleIndenter indenter;
-        indenter.indent(selection.document(), selection, QChar::Null, tabSettings);
+        CppQtStyleIndenter indenter(selection.document());
+        indenter.indent(selection, QChar::Null, tabSettings);
     }
 
-    virtual void reindentSelection(const QTextCursor &selection,
-                                   const QString &fileName,
-                                   const TextEditor::TextDocument *textDocument) const
+    void reindentSelection(const QTextCursor &selection,
+                           const QString &fileName,
+                           const TextEditor::TextDocument *textDocument) const override
     {
         const TextEditor::TabSettings &tabSettings =
             ProjectExplorer::actualTabSettings(fileName, textDocument);
 
-        CppQtStyleIndenter indenter;
-        indenter.reindent(selection.document(), selection, tabSettings);
+        CppQtStyleIndenter indenter(selection.document());
+        indenter.reindent(selection,
+                          tabSettings);
     }
 
-    virtual void fileChanged(const QString &fileName)
+    void fileChanged(const QString &fileName) override
     {
         m_modelManager->updateSourceFiles(QSet<QString>() << fileName);
     }
@@ -107,7 +108,7 @@ CppRefactoringFilePtr CppRefactoringChanges::file(const QString &fileName) const
 
 CppRefactoringFileConstPtr CppRefactoringChanges::fileNoEditor(const QString &fileName) const
 {
-    QTextDocument *document = 0;
+    QTextDocument *document = nullptr;
     if (data()->m_workingCopy.contains(fileName))
         document = new QTextDocument(QString::fromUtf8(data()->m_workingCopy.source(fileName)));
     CppRefactoringFilePtr result(new CppRefactoringFile(document, fileName));
@@ -197,12 +198,12 @@ Utils::ChangeSet::Range CppRefactoringFile::range(unsigned tokenIndex) const
     unsigned line, column;
     cppDocument()->translationUnit()->getPosition(token.utf16charsBegin(), &line, &column);
     const int start = document()->findBlockByNumber(line - 1).position() + column - 1;
-    return Utils::ChangeSet::Range(start, start + token.utf16chars());
+    return {start, static_cast<int>(start + token.utf16chars())};
 }
 
 Utils::ChangeSet::Range CppRefactoringFile::range(AST *ast) const
 {
-    return Utils::ChangeSet::Range(startOf(ast), endOf(ast));
+    return {startOf(ast), endOf(ast)};
 }
 
 int CppRefactoringFile::startOf(unsigned index) const

@@ -40,12 +40,14 @@
 
 namespace CppTools {
 
+class KitInfo;
+
 class ToolChainInfo
 {
 public:
     ToolChainInfo() = default;
     ToolChainInfo(const ProjectExplorer::ToolChain *toolChain,
-                  const ProjectExplorer::Kit *kit);
+                  const QString &sysRootPath);
 
     bool isValid() const { return type.isValid(); }
 
@@ -57,8 +59,8 @@ public:
     QStringList extraCodeModelFlags;
 
     QString sysRootPath; // For headerPathsRunner.
-    ProjectExplorer::ToolChain::SystemHeaderPathsRunner headerPathsRunner;
-    ProjectExplorer::ToolChain::PredefinedMacrosRunner predefinedMacrosRunner;
+    ProjectExplorer::ToolChain::BuiltInHeaderPathsRunner headerPathsRunner;
+    ProjectExplorer::ToolChain::MacroInspectionRunner macroInspectionRunner;
 };
 
 class CPPTOOLS_EXPORT ProjectUpdateInfo
@@ -66,9 +68,7 @@ class CPPTOOLS_EXPORT ProjectUpdateInfo
 public:
     ProjectUpdateInfo() = default;
     ProjectUpdateInfo(ProjectExplorer::Project *project,
-                      const ProjectExplorer::ToolChain *cToolChain,
-                      const ProjectExplorer::ToolChain *cxxToolChain,
-                      const ProjectExplorer::Kit *kit,
+                      const KitInfo &kitInfo,
                       const RawProjectParts &rawProjectParts);
     bool isValid() const { return project && !rawProjectParts.isEmpty(); }
 
@@ -87,7 +87,7 @@ class CPPTOOLS_EXPORT ProjectInfo
 {
 public:
     ProjectInfo() = default;
-    ProjectInfo(QPointer<ProjectExplorer::Project> project);
+    explicit ProjectInfo(QPointer<ProjectExplorer::Project> project);
 
     bool isValid() const;
 
@@ -111,7 +111,7 @@ private:
     QVector<ProjectPart::Ptr> m_projectParts;
 
     // The members below are (re)calculated from the project parts with finish()
-    ProjectPartHeaderPaths m_headerPaths;
+    ProjectExplorer::HeaderPaths m_headerPaths;
     QSet<QString> m_sourceFiles;
     ProjectExplorer::Macros m_defines;
 };

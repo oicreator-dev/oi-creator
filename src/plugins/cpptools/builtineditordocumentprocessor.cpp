@@ -47,7 +47,7 @@
 #include <QLoggingCategory>
 #include <QTextBlock>
 
-static Q_LOGGING_CATEGORY(log, "qtc.cpptools.builtineditordocumentprocessor")
+static Q_LOGGING_CATEGORY(log, "qtc.cpptools.builtineditordocumentprocessor", QtWarningMsg)
 
 namespace {
 
@@ -95,14 +95,14 @@ CppTools::CheckSymbols *createHighlighter(const CPlusPlus::Document::Ptr &doc,
                                           const CPlusPlus::Snapshot &snapshot,
                                           QTextDocument *textDocument)
 {
-    QTC_ASSERT(doc, return 0);
-    QTC_ASSERT(doc->translationUnit(), return 0);
-    QTC_ASSERT(doc->translationUnit()->ast(), return 0);
-    QTC_ASSERT(textDocument, return 0);
+    QTC_ASSERT(doc, return nullptr);
+    QTC_ASSERT(doc->translationUnit(), return nullptr);
+    QTC_ASSERT(doc->translationUnit()->ast(), return nullptr);
+    QTC_ASSERT(textDocument, return nullptr);
 
     using namespace CPlusPlus;
     using namespace CppTools;
-    typedef TextEditor::HighlightingResult Result;
+    using Result = TextEditor::HighlightingResult;
     QList<Result> macroUses;
 
     using Utils::Text::convertPosition;
@@ -112,7 +112,6 @@ CppTools::CheckSymbols *createHighlighter(const CPlusPlus::Document::Ptr &doc,
         int line, column;
         convertPosition(textDocument, macro.utf16CharOffset(), &line, &column);
 
-        ++column; //Highlighting starts at (column-1) --> compensate here
         Result use(line, column, macro.nameToQString().size(), SemanticHighlighter::MacroUse);
         macroUses.append(use);
     }
@@ -137,7 +136,7 @@ CppTools::CheckSymbols *createHighlighter(const CPlusPlus::Document::Ptr &doc,
 
         int line, column;
         convertPosition(textDocument, macro.utf16charsBegin(), &line, &column);
-        ++column; //Highlighting starts at (column-1) --> compensate here
+
         Result use(line, column, name.size(), SemanticHighlighter::MacroUse);
         macroUses.append(use);
     }
@@ -164,11 +163,12 @@ BuiltinEditorDocumentProcessor::BuiltinEditorDocumentProcessor(
         TextEditor::TextDocument *document,
         bool enableSemanticHighlighter)
     : BaseEditorDocumentProcessor(document->document(), document->filePath().toString())
-    , m_parser(new BuiltinEditorDocumentParser(document->filePath().toString()))
+    , m_parser(new BuiltinEditorDocumentParser(document->filePath().toString(),
+                                               indexerFileSizeLimitInMb()))
     , m_codeWarningsUpdated(false)
     , m_semanticHighlighter(enableSemanticHighlighter
                             ? new CppTools::SemanticHighlighter(document)
-                            : 0)
+                            : nullptr)
 {
     using namespace Internal;
 

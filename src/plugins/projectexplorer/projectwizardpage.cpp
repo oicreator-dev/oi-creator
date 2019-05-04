@@ -68,8 +68,8 @@ public:
     AddNewTree(FolderNode *node, QList<AddNewTree *> children, const QString &displayName);
     AddNewTree(FolderNode *node, QList<AddNewTree *> children, const FolderNode::AddNewInformation &info);
 
-    QVariant data(int column, int role) const;
-    Qt::ItemFlags flags(int column) const;
+    QVariant data(int column, int role) const override;
+    Qt::ItemFlags flags(int column) const override;
 
     QString displayName() const { return m_displayName; }
     FolderNode *node() const { return m_node; }
@@ -202,7 +202,7 @@ void BestNodeSelector::inspect(AddNewTree *tree, bool isContextNode)
 AddNewTree *BestNodeSelector::bestChoice() const
 {
     if (m_deploys)
-        return 0;
+        return nullptr;
     return m_bestChoice;
 }
 
@@ -456,10 +456,11 @@ void ProjectWizardPage::initializeProjectTree(Node *context, const QStringList &
     }
     root->prependChild(createNoneNode(&selector));
 
-    // Set combobox to context node:
+    // Set combobox to context node if that appears in the tree:
     auto predicate = [context](TreeItem *ti) { return static_cast<AddNewTree*>(ti)->node() == context; };
     TreeItem *contextItem = root->findAnyChild(predicate);
-    m_ui->projectComboBox->setCurrentIndex(m_model.indexForItem(contextItem));
+    if (contextItem)
+        m_ui->projectComboBox->setCurrentIndex(m_model.indexForItem(contextItem));
 
     setAdditionalInfo(selector.deployingProjects());
     setBestNode(selector.bestChoice());

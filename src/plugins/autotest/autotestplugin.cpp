@@ -53,9 +53,11 @@
 #include <projectexplorer/buildmanager.h>
 #include <projectexplorer/projectexplorer.h>
 #include <projectexplorer/projectexplorericons.h>
+#include <projectexplorer/runconfiguration.h>
 #include <projectexplorer/session.h>
 #include <projectexplorer/target.h>
 #include <texteditor/texteditor.h>
+#include <texteditor/textdocument.h>
 #include <utils/textutils.h>
 #include <utils/utilsicons.h>
 
@@ -110,7 +112,8 @@ void AutotestPlugin::initializeMenuEntries()
     action->setIcon(Utils::Icons::RUN_SMALL_TOOLBAR.icon());
     action->setToolTip(tr("Run All Tests"));
     Command *command = ActionManager::registerAction(action, Constants::ACTION_RUN_ALL_ID);
-    command->setDefaultKeySequence(QKeySequence(tr("Alt+Shift+T,Alt+A")));
+    command->setDefaultKeySequence(
+        QKeySequence(useMacShortcuts ? tr("Ctrl+Meta+T, Ctrl+Meta+A") : tr("Alt+Shift+T,Alt+A")));
     connect(action, &QAction::triggered, this, &AutotestPlugin::onRunAllTriggered);
     action->setEnabled(false);
     menu->addAction(command);
@@ -122,7 +125,8 @@ void AutotestPlugin::initializeMenuEntries()
     action->setIcon(runSelectedIcon.icon());
     action->setToolTip(tr("Run Selected Tests"));
     command = ActionManager::registerAction(action, Constants::ACTION_RUN_SELECTED_ID);
-    command->setDefaultKeySequence(QKeySequence(tr("Alt+Shift+T,Alt+R")));
+    command->setDefaultKeySequence(
+        QKeySequence(useMacShortcuts ? tr("Ctrl+Meta+T, Ctrl+Meta+R") : tr("Alt+Shift+T,Alt+R")));
     connect(action, &QAction::triggered, this, &AutotestPlugin::onRunSelectedTriggered);
     action->setEnabled(false);
     menu->addAction(command);
@@ -134,15 +138,17 @@ void AutotestPlugin::initializeMenuEntries()
     action->setIcon(runFileIcon.icon());
     action->setToolTip(tr("Run Tests for Current File"));
     command = ActionManager::registerAction(action, Constants::ACTION_RUN_FILE_ID);
-    command->setDefaultKeySequence(QKeySequence(tr("Alt+Shift+T,Alt+F")));
+    command->setDefaultKeySequence(
+        QKeySequence(useMacShortcuts ? tr("Ctrl+Meta+T, Ctrl+Meta+F") : tr("Alt+Shift+T,Alt+F")));
     connect(action, &QAction::triggered, this, &AutotestPlugin::onRunFileTriggered);
     action->setEnabled(false);
     menu->addAction(command);
 
     action = new QAction(tr("Re&scan Tests"), this);
     command = ActionManager::registerAction(action, Constants::ACTION_SCAN_ID);
-    command->setDefaultKeySequence(QKeySequence(tr("Alt+Shift+T,Alt+S")));
-    connect(action, &QAction::triggered, this, [] () {
+    command->setDefaultKeySequence(
+        QKeySequence(useMacShortcuts ? tr("Ctrl+Meta+T, Ctrl+Meta+S") : tr("Alt+Shift+T,Alt+S")));
+    connect(action, &QAction::triggered, this, []() {
         TestTreeModel::instance()->parser()->updateTestTree();
     });
     menu->addAction(command);
@@ -179,6 +185,10 @@ bool AutotestPlugin::initialize(const QStringList &arguments, QString *errorStri
     m_frameworkManager->activateFrameworksFromSettings(m_settings);
     TestTreeModel::instance()->syncTestFrameworks();
 
+    connect(ProjectExplorer::SessionManager::instance(),
+            &ProjectExplorer::SessionManager::startupProjectChanged, this, [this] {
+        m_runconfigCache.clear();
+    });
     return true;
 }
 
@@ -252,11 +262,22 @@ void AutotestPlugin::onRunFileTriggered()
     runner->prepareToRunTests(TestRunMode::Run);
 }
 
+static QList<TestConfiguration *> testItemsToTestConfigurations(const QList<TestTreeItem *> &items,
+                                                                TestRunMode mode)
+{
+    QList<TestConfiguration *> configs;
+    for (const TestTreeItem * item : items) {
+        if (TestConfiguration *currentConfig = item->asConfiguration(mode))
+            configs << currentConfig;
+    }
+    return configs;
+}
+
 void AutotestPlugin::onRunUnderCursorTriggered(TestRunMode mode)
 {
-    QTextCursor cursor = Utils::Text::wordStartCursor(
-                             TextEditor::BaseTextEditor::currentTextEditor()->editorWidget()->textCursor());
-    cursor.movePosition(QTextCursor::EndOfWord, QTextCursor::KeepAnchor);
+    TextEditor::BaseTextEditor *currentEditor = TextEditor::BaseTextEditor::currentTextEditor();
+    QTextCursor cursor = currentEditor->editorWidget()->textCursor();
+    cursor.select(QTextCursor::WordUnderCursor);
     const QString text = cursor.selectedText();
     if (text.isEmpty())
         return; // Do not trigger when no name under cursor
@@ -265,11 +286,15 @@ void AutotestPlugin::onRunUnderCursorTriggered(TestRunMode mode)
     if (testsItems.isEmpty())
         return; // Wrong location triggered
 
-    QList<TestConfiguration *> testsToRun;
-    for (const TestTreeItem * item : testsItems){
-        if (TestConfiguration *cfg = item->asConfiguration(mode))
-            testsToRun << cfg;
-    }
+    // check whether we have been triggered on a test function definition
+    const uint line = uint(currentEditor->currentLine());
+    const QString &filePath = currentEditor->textDocument()->filePath().toString();
+    const QList<TestTreeItem *> filteredItems = Utils::filtered(testsItems, [&](TestTreeItem *it){
+        return it->line() == line && it->filePath() == filePath;
+    });
+
+    const QList<TestConfiguration *> testsToRun = testItemsToTestConfigurations(
+                filteredItems.size() == 1 ? filteredItems : testsItems, mode);
 
     if (testsToRun.isEmpty()) {
         MessageManager::write(tr("Selected test was not found (%1).").arg(text), MessageManager::Flash);
@@ -307,6 +332,23 @@ void AutotestPlugin::updateMenuItemsEnabledState()
     ActionManager::command(Constants::ACTION_RUN_DBG_UCURSOR)->action()->setEnabled(canRun);
 }
 
+void AutotestPlugin::cacheRunConfigChoice(const QString &buildTargetKey, const ChoicePair &choice)
+{
+    if (s_instance)
+        s_instance->m_runconfigCache.insert(buildTargetKey, choice);
+}
+
+ChoicePair AutotestPlugin::cachedChoiceFor(const QString &buildTargetKey)
+{
+    return s_instance ? s_instance->m_runconfigCache.value(buildTargetKey) : ChoicePair();
+}
+
+void AutotestPlugin::clearChoiceCache()
+{
+    if (s_instance)
+        s_instance->m_runconfigCache.clear();
+}
+
 QList<QObject *> AutotestPlugin::createTestObjects() const
 {
     QList<QObject *> tests;
@@ -314,4 +356,10 @@ QList<QObject *> AutotestPlugin::createTestObjects() const
     tests << new AutoTestUnitTests(TestTreeModel::instance());
 #endif
     return tests;
+}
+
+bool ChoicePair::matches(const ProjectExplorer::RunConfiguration *rc) const
+{
+    return rc ? (rc->displayName() == displayName && rc->runnable().executable == executable)
+              : false;
 }

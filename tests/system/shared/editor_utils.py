@@ -23,7 +23,9 @@
 #
 ############################################################################
 
-import re;
+def jumpToFirstLine(editor):
+    home = "<Home>" if platform.system() == 'Darwin' else "<Ctrl+Home>"
+    type(editor, home)
 
 # places the cursor inside the given editor into the given line
 # (leading and trailing whitespaces are ignored!)
@@ -38,10 +40,7 @@ def placeCursorToLine(editor, line, isRegex=False):
     if not isinstance(editor, (str, unicode)):
         editor = objectMap.realName(editor)
     oldPosition = 0
-    if isDarwin:
-        type(getEditor(), "<Home>")
-    else:
-        type(getEditor(), "<Ctrl+Home>")
+    jumpToFirstLine(getEditor())
     found = False
     if isRegex:
         regex = re.compile(line)
@@ -79,13 +78,16 @@ def menuVisibleAtEditor(editor, menuInList):
                     return True
             return False
         menu = waitForObject("{type='QMenu' unnamed='1' visible='1'}", 500)
-        if platform.system() == 'Darwin':
-            menu.activateWindow()
-        success = menu.visible and widgetContainsPoint(editor, menu.mapToGlobal(QPoint(0, 0)))
+        topLeft = menu.mapToGlobal(QPoint(0, 0))
+        bottomLeft = menu.mapToGlobal(QPoint(0, menu.height))
+        success = menu.visible and (widgetContainsPoint(editor, topLeft)
+                                    or widgetContainsPoint(editor, bottomLeft))
         if success:
             menuInList[0] = menu
         return success
     except:
+        t, v = sys.exc_info()[:2]
+        test.log("Exception: %s" % str(t), str(v))
         return False
 
 # this function checks whether the given global point (QPoint)
@@ -106,7 +108,7 @@ def openContextMenuOnTextCursorPosition(editor):
 # param direction is one of "Left", "Right", "Up", "Down", but "End" and combinations work as well
 # param typeCount defines how often the cursor will be moved in the given direction (while marking)
 def markText(editor, direction, typeCount=1):
-    for i in range(typeCount):
+    for _ in range(typeCount):
         type(editor, "<Shift+%s>" % direction)
 
 # works for all standard editors
@@ -148,7 +150,7 @@ def verifyHoveringOnEditor(editor, lines, additionalKeyPresses, expectedTypes, e
         for ty in additionalKeyPresses:
             type(editor, ty)
         rect = editor.cursorRect(editor.textCursor())
-        expectedToolTip = "{type='QTipLabel' visible='1'}"
+        expectedToolTip = "{type='QLabel' objectName='qcToolTip' visible='1'}"
         # wait for similar tooltips to disappear
         checkIfObjectExists(expectedToolTip, False, 1000, True)
         sendEvent("QMouseEvent", editor, QEvent.MouseMove, rect.x+rect.width/2, rect.y+rect.height/2, Qt.NoButton, 0)
@@ -173,7 +175,7 @@ def verifyHoveringOnEditor(editor, lines, additionalKeyPresses, expectedTypes, e
 # param expectedVals a dict holding property value pairs that must match
 def __handleTextTips__(textTip, expectedVals, alternativeVals):
     props = object.properties(textTip)
-    expFail = altFail = False
+    expFail = False
     eResult = verifyProperties(props, expectedVals)
     for val in eResult.itervalues():
         if not val:
@@ -182,7 +184,6 @@ def __handleTextTips__(textTip, expectedVals, alternativeVals):
     if expFail and alternativeVals != None:
         aResult = verifyProperties(props, alternativeVals)
     else:
-        altFail = True
         aResult = None
     if not expFail:
         test.passes("TextTip verified")
@@ -360,10 +361,10 @@ def invokeContextMenuItem(editorArea, command1, command2 = None):
 def invokeFindUsage(editor, line, typeOperation, n=1):
     if not placeCursorToLine(editor, line, True):
         return False
-    for i in range(n):
+    for _ in range(n):
         type(editor, typeOperation)
     snooze(1)
-    invokeContextMenuItem(editor, "Find Usages")
+    invokeContextMenuItem(editor, "Find References to Symbol Under Cursor")
     return True
 
 def addBranchWildcardToRoot(rootNode):

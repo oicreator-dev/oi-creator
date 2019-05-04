@@ -46,12 +46,15 @@ enum Type {
     Skip,
     BlacklistedPass,
     BlacklistedFail,
+    BlacklistedXPass,
+    BlacklistedXFail,
     Benchmark,
     MessageDebug,
     MessageInfo,
     MessageWarn,
     MessageFatal,
     MessageSystem,
+    MessageLocation,
 
     MessageInternal, INTERNAL_MESSAGES_BEGIN = MessageInternal,
     MessageDisabledTests,
@@ -63,6 +66,8 @@ enum Type {
     MessageTestCaseEnd,
     MessageIntermediate,
     MessageCurrentTest, INTERNAL_MESSAGES_END = MessageCurrentTest,
+
+    Application,
 
     Invalid,
     LAST_TYPE = Invalid

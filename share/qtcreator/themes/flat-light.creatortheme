@@ -50,6 +50,7 @@ DoubleTabWidget2ndTabInactiveTextColor=ff000000
 EditorPlaceholderColor=fff4f4f4
 FancyToolBarSeparatorColor=toolBarItemDisabled
 FancyTabBarBackgroundColor=shadowBackground
+FancyTabBarSelectedBackgroundColor=selectedBackground
 FancyTabWidgetDisabledSelectedTextColor=toolBarItemDisabled
 FancyTabWidgetDisabledUnselectedTextColor=toolBarItemDisabled
 FancyTabWidgetEnabledSelectedTextColor=fancyBarsBoldTextColor
@@ -225,6 +226,7 @@ FlatProjectsMode=false
 FlatMenuBar=false
 ToolBarIconShadow=false
 WindowColorAsBase=false
+DarkUserInterface=false
 
 [Gradients]
 DetailsWidgetHeaderGradient\1\color=00000000

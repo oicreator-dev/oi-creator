@@ -3,6 +3,11 @@ include(../../qtcreator.pri)
 TEMPLATE  = subdirs
 
 SUBDIRS   = \
+<<<<<<< HEAD
+=======
+    autotest \
+    clangformat \
+>>>>>>> 8d0cd98d4da3a64a839007332991e1165a5837dd
     clangtools \
     coreplugin \
     texteditor \
@@ -26,10 +31,23 @@ SUBDIRS   = \
     valgrind \
     todo \
     beautifier \
+<<<<<<< HEAD
     silversearcher \
     lmakeprojectmanager \
     qmakeprojectmanager\
     resourceeditor
+=======
+    modeleditor \
+    winrt \
+    updateinfo \
+    scxmleditor \
+    welcome \
+    silversearcher \
+    languageclient \
+    cppcheck \
+    compilationdatabaseprojectmanager \
+    qmlpreview
+>>>>>>> 8d0cd98d4da3a64a839007332991e1165a5837dd
 
 qtHaveModule(serialport) {
     SUBDIRS += serialterminal
@@ -38,9 +56,13 @@ qtHaveModule(serialport) {
 }
 
 qtHaveModule(quick) {
+<<<<<<< HEAD
     #SUBDIRS += qmlprofiler
+=======
+    SUBDIRS += qmlprofiler perfprofiler
+>>>>>>> 8d0cd98d4da3a64a839007332991e1165a5837dd
 } else {
-    warning("QmlProfiler plugin has been disabled since the Qt Quick module is not available.")
+    warning("QmlProfiler and PerfProfiler plugins have been disabled since the Qt Quick module is not available.")
 }
 
 qtHaveModule(help) {
@@ -79,8 +101,8 @@ exists(../shared/qbs/qbs.pro)|!isEmpty(QBS_INSTALL_DIR): \
 SUBDIRS += \
     clangcodemodel
 
-QTC_NO_CLANG_LIBTOOLING=$$(QTC_NO_CLANG_LIBTOOLING)
-isEmpty(QTC_NO_CLANG_LIBTOOLING) {
+QTC_ENABLE_CLANG_LIBTOOLING=$$(QTC_ENABLE_CLANG_LIBTOOLING)
+!isEmpty(QTC_ENABLE_CLANG_LIBTOOLING) {
     SUBDIRS += clangrefactoring
     SUBDIRS += clangpchmanager
 } else {
@@ -103,4 +125,8 @@ linux-* {
      SUBDIRS += debugger/ptracepreload.pro
 }
 
+<<<<<<< HEAD
 
+=======
+QMAKE_EXTRA_TARGETS += deployqt # dummy
+>>>>>>> 8d0cd98d4da3a64a839007332991e1165a5837dd

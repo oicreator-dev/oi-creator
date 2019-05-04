@@ -27,6 +27,8 @@
 
 #include "cpptools_global.h"
 
+#include <utils/optional.h>
+
 #include <QVariantMap>
 
 QT_BEGIN_NAMESPACE
@@ -34,6 +36,7 @@ class QSettings;
 QT_END_NAMESPACE
 
 namespace CPlusPlus { class Overview; }
+namespace TextEditor { class TabSettings; }
 
 namespace CppTools {
 
@@ -42,26 +45,26 @@ class CPPTOOLS_EXPORT CppCodeStyleSettings
 public:
     CppCodeStyleSettings();
 
-    bool indentBlockBraces;
-    bool indentBlockBody;
-    bool indentClassBraces;
-    bool indentEnumBraces;
-    bool indentNamespaceBraces;
-    bool indentNamespaceBody;
-    bool indentAccessSpecifiers;
-    bool indentDeclarationsRelativeToAccessSpecifiers;
-    bool indentFunctionBody;
-    bool indentFunctionBraces;
-    bool indentSwitchLabels;
-    bool indentStatementsRelativeToSwitchLabels;
-    bool indentBlocksRelativeToSwitchLabels;
-    bool indentControlFlowRelativeToSwitchLabels;
+    bool indentBlockBraces = false;
+    bool indentBlockBody = true;
+    bool indentClassBraces = false;
+    bool indentEnumBraces = false;
+    bool indentNamespaceBraces = false;
+    bool indentNamespaceBody = false;
+    bool indentAccessSpecifiers = false;
+    bool indentDeclarationsRelativeToAccessSpecifiers = true;
+    bool indentFunctionBody = true;
+    bool indentFunctionBraces = false;
+    bool indentSwitchLabels = false;
+    bool indentStatementsRelativeToSwitchLabels = true;
+    bool indentBlocksRelativeToSwitchLabels = false;
+    bool indentControlFlowRelativeToSwitchLabels = true;
 
     // Formatting of pointer and reference declarations, see Overview::StarBindFlag.
-    bool bindStarToIdentifier;
-    bool bindStarToTypeName;
-    bool bindStarToLeftSpecifier;
-    bool bindStarToRightSpecifier;
+    bool bindStarToIdentifier = true;
+    bool bindStarToTypeName = false;
+    bool bindStarToLeftSpecifier = false;
+    bool bindStarToRightSpecifier = false;
 
     // false: if (a &&
     //            b)
@@ -72,15 +75,15 @@ public:
     // but always: while (a &&
     //                    b)
     //                 foo;
-    bool extraPaddingForConditionsIfConfusingAlign;
+    bool extraPaddingForConditionsIfConfusingAlign = true;
 
     // false: a = a +
     //                b;
     // true:  a = a +
     //            b
-    bool alignAssignments;
+    bool alignAssignments = false;
 
-    bool preferGetterNameWithoutGetPrefix;
+    bool preferGetterNameWithoutGetPrefix = true;
 
     void toSettings(const QString &category, QSettings *s) const;
     void fromSettings(const QString &category, const QSettings *s);
@@ -92,8 +95,10 @@ public:
     bool operator==(const CppCodeStyleSettings &s) const { return equals(s); }
     bool operator!=(const CppCodeStyleSettings &s) const { return !equals(s); }
 
-    static CppCodeStyleSettings currentProjectCodeStyle();
+    static Utils::optional<CppCodeStyleSettings> currentProjectCodeStyle();
     static CppCodeStyleSettings currentGlobalCodeStyle();
+    static TextEditor::TabSettings currentProjectTabSettings();
+    static TextEditor::TabSettings currentGlobalTabSettings();
 
     /*! Returns an Overview configured by the current project's code style.
 

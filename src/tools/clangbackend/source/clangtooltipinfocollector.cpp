@@ -29,12 +29,14 @@
 #include "clangstring.h"
 #include "cursor.h"
 #include "sourcerange.h"
+#include "token.h"
 #include "unsavedfiles.h"
 #include "unsavedfile.h"
 
 #include <clangsupport/sourcerangecontainer.h>
 #include <utils/qtcassert.h>
 #include <utils/textfileformat.h>
+#include <utils/qtcassert.h>
 
 #include <utf8string.h>
 
@@ -43,6 +45,20 @@
 #include <QTextCodec>
 
 namespace ClangBackEnd {
+
+Utf8String qualificationPrefix(const Cursor &cursor)
+{
+    // TODO: Implement with qualificationPrefixAsVector()
+    Utf8String qualifiedName;
+
+    for (Cursor parent = cursor.semanticParent();
+         parent.isValid() && (parent.kind() == CXCursor_Namespace);
+         parent = parent.semanticParent()) {
+        qualifiedName = parent.spelling() + Utf8StringLiteral("::") + qualifiedName;
+    }
+
+    return qualifiedName;
+}
 
 namespace {
 
@@ -57,20 +73,6 @@ Utf8StringVector qualificationPrefixAsVector(const Cursor &cursor)
     }
 
     return result;
-}
-
-Utf8String qualificationPrefix(const Cursor &cursor)
-{
-    // TODO: Implement with qualificationPrefixAsVector()
-    Utf8String qualifiedName;
-
-    for (Cursor parent = cursor.semanticParent();
-         parent.isValid() && (parent.kind() == CXCursor_Namespace);
-         parent = parent.semanticParent()) {
-        qualifiedName = parent.spelling() + Utf8StringLiteral("::") + qualifiedName;
-    }
-
-    return qualifiedName;
 }
 
 Utf8String displayName(const Cursor &cursor)
@@ -275,17 +277,12 @@ Utf8String ToolTipInfoCollector::textForNamespaceAlias(const Cursor &cursor) con
 {
     // TODO: Add some libclang API to get the aliased name straight away.
 
-    CXToken *cxTokens = nullptr;
-    uint cxTokenCount = 0;
-
-    clang_tokenize(m_cxTranslationUnit, cursor.cxSourceRange(), &cxTokens, &cxTokenCount);
+    const Tokens tokens(cursor.sourceRange());
 
     Utf8String aliasedName;
     // Start at 3 in order to skip these tokens: namespace X =
-    for (uint i = 3; i < cxTokenCount; ++i)
-        aliasedName += ClangString(clang_getTokenSpelling(m_cxTranslationUnit, cxTokens[i]));
-
-    clang_disposeTokens(m_cxTranslationUnit, cxTokens, cxTokenCount);
+    for (uint i = 3; i < tokens.size(); ++i)
+        aliasedName += tokens[i].spelling();
 
     return aliasedName;
 }
@@ -396,7 +393,7 @@ static bool isBuiltinOrPointerToBuiltin(const Type &type)
 
     // TODO: Simplify
     // TODO: Test with **
-    while (theType.pointeeType().isValid()) {
+    while (theType.pointeeType().isValid() && theType != theType.pointeeType()) {
         theType = theType.pointeeType();
         if (theType.isBuiltinType())
             return true;
@@ -429,14 +426,24 @@ ToolTipInfo ToolTipInfoCollector::qDocInfo(const Cursor &cursor) const
         return result;
     }
 
-    if (cursor.kind() == CXCursor_VarDecl || cursor.kind() == CXCursor_FieldDecl) {
-        result.qdocMark = typeName(cursor.type());
+    if (cursor.kind() == CXCursor_VarDecl || cursor.kind() == CXCursor_ParmDecl
+        || cursor.kind() == CXCursor_FieldDecl) {
         // maybe template instantiation
         if (cursor.type().kind() == CXType_Unexposed && cursor.type().canonical().kind() == CXType_Record) {
             result.qdocIdCandidates = qDocIdCandidates(cursor.type().canonical().declaration());
+            result.qdocMark = typeName(cursor.type());
             result.qdocCategory = ToolTipInfo::ClassOrNamespace;
             return result;
         }
+
+        Type type = cursor.type();
+        while (type.pointeeType().isValid() && type != type.pointeeType())
+            type = type.pointeeType();
+
+        const Cursor typeCursor = type.declaration();
+        result.qdocIdCandidates = qDocIdCandidates(typeCursor);
+        result.qdocCategory = qdocCategory(typeCursor);
+        result.qdocMark = typeName(type);
     }
 
     // TODO: Handle also RValueReference()

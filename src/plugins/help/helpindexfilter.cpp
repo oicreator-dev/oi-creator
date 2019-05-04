@@ -27,6 +27,7 @@
 
 #include "centralwidget.h"
 #include "helpicons.h"
+#include "helpmanager.h"
 #include "topicchooser.h"
 
 #include <coreplugin/icore.h>
@@ -54,17 +55,17 @@ HelpIndexFilter::HelpIndexFilter()
     setShortcutString("?");
 
     m_icon = Utils::Icons::BOOKMARK.icon();
-    connect(HelpManager::instance(), &HelpManager::setupFinished,
+    connect(Core::HelpManager::Signals::instance(), &Core::HelpManager::Signals::setupFinished,
             this, &HelpIndexFilter::invalidateCache);
-    connect(HelpManager::instance(), &HelpManager::documentationChanged,
-            this, &HelpIndexFilter::invalidateCache);
+    connect(Core::HelpManager::Signals::instance(),
+            &Core::HelpManager::Signals::documentationChanged,
+            this,
+            &HelpIndexFilter::invalidateCache);
     connect(HelpManager::instance(), &HelpManager::collectionFileChanged,
             this, &HelpIndexFilter::invalidateCache);
 }
 
-HelpIndexFilter::~HelpIndexFilter()
-{
-}
+HelpIndexFilter::~HelpIndexFilter() = default;
 
 void HelpIndexFilter::prepareSearch(const QString &entry)
 {
@@ -140,7 +141,7 @@ void HelpIndexFilter::accept(LocatorFilterEntry selection,
     Q_UNUSED(selectionStart)
     Q_UNUSED(selectionLength)
     const QString &key = selection.displayName;
-    const QMap<QString, QUrl> &links = HelpManager::linksForKeyword(key);
+    const QMap<QString, QUrl> &links = HelpManager::instance()->linksForKeyword(key);
     emit linksActivated(links, key);
 }
 

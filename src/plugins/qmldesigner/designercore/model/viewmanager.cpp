@@ -52,7 +52,7 @@
 
 namespace QmlDesigner {
 
-static Q_LOGGING_CATEGORY(viewBenchmark, "qtc.viewmanager.attach")
+static Q_LOGGING_CATEGORY(viewBenchmark, "qtc.viewmanager.attach", QtWarningMsg)
 
 class ViewManagerData
 {
@@ -143,7 +143,7 @@ void ViewManager::detachRewriterView()
 {
     if (RewriterView *view = currentDesignDocument()->rewriterView()) {
         view->deactivateTextMofifierChangeSignals();
-        currentModel()->setRewriterView(0);
+        currentModel()->setRewriterView(nullptr);
     }
 }
 
@@ -205,7 +205,7 @@ void ViewManager::detachViewsExceptRewriterAndComponetView()
     if (d->debugView.isAttached())
         currentModel()->detachView(&d->debugView);
 
-    currentModel()->setNodeInstanceView(0);
+    currentModel()->setNodeInstanceView(nullptr);
 }
 
 void ViewManager::attachItemLibraryView()
@@ -374,13 +374,13 @@ QWidget *ViewManager::widget(const QString &uniqueId) const
 
 void ViewManager::disableWidgets()
 {
-    for (auto view : views())
+    for (const auto &view : views())
         view->disableWidget();
 }
 
 void ViewManager::enableWidgets()
 {
-    for (auto view : views())
+    for (const auto &view : views())
         view->enableWidget();
 }
 
@@ -424,9 +424,9 @@ void ViewManager::toggleStatesViewExpanded()
     d->statesEditorView.toggleStatesViewExpanded();
 }
 
-void ViewManager::qmlJSEditorHelpId(const Core::IContext::HelpIdCallback &callback) const
+void ViewManager::qmlJSEditorContextHelp(const Core::IContext::HelpCallback &callback) const
 {
-    d->textEditorView.qmlJSEditorHelpId(callback);
+    d->textEditorView.qmlJSEditorContextHelp(callback);
 }
 
 Model *ViewManager::currentModel() const

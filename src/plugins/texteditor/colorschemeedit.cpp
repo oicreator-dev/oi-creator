@@ -54,10 +54,8 @@ namespace Internal {
 class FormatsModel : public QAbstractListModel
 {
 public:
-    FormatsModel(QObject *parent = 0):
-        QAbstractListModel(parent),
-        m_descriptions(0),
-        m_scheme(0)
+    FormatsModel(QObject *parent = nullptr):
+        QAbstractListModel(parent)
     {
     }
 
@@ -82,12 +80,12 @@ public:
         emitDataChanged(index(0));
     }
 
-    int rowCount(const QModelIndex &parent) const
+    int rowCount(const QModelIndex &parent) const override
     {
         return (parent.isValid() || !m_descriptions) ? 0 : int(m_descriptions->size());
     }
 
-    QVariant data(const QModelIndex &index, int role) const
+    QVariant data(const QModelIndex &index, int role) const override
     {
         if (!m_descriptions || !m_scheme)
             return QVariant();
@@ -139,8 +137,8 @@ public:
     }
 
 private:
-    const FormatDescriptions *m_descriptions;
-    const ColorScheme *m_scheme;
+    const FormatDescriptions *m_descriptions = nullptr;
+    const ColorScheme *m_scheme = nullptr;
     QFont m_baseFont;
 };
 
@@ -154,7 +152,10 @@ ColorSchemeEdit::ColorSchemeEdit(QWidget *parent) :
 {
     setContentsMargins(0, layoutSpacing, 0, 0);
     m_ui->setupUi(this);
+    m_ui->detailsScrollArea->viewport()->setAutoFillBackground(false);
+    m_ui->scrollAreaWidgetContents->setAutoFillBackground(false);
     m_ui->itemList->setModel(m_formatsModel);
+    m_ui->builtinSchemeLabel->setVisible(m_readOnly);
 
     populateUnderlineStyleComboBox();
 
@@ -186,6 +187,7 @@ ColorSchemeEdit::ColorSchemeEdit(QWidget *parent) :
             this, &ColorSchemeEdit::eraseUnderlineColor);
     connect(m_ui->underlineComboBox, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
             this, &ColorSchemeEdit::changeUnderlineStyle);
+    connect(m_ui->builtinSchemeLabel, &QLabel::linkActivated, this, &ColorSchemeEdit::copyScheme);
 }
 
 ColorSchemeEdit::~ColorSchemeEdit()
@@ -214,31 +216,9 @@ void ColorSchemeEdit::setReadOnly(bool readOnly)
 
     m_readOnly = readOnly;
 
-    const bool enabled = !readOnly;
-    m_ui->foregroundLabel->setEnabled(enabled);
-    m_ui->foregroundToolButton->setEnabled(enabled);
-    m_ui->backgroundLabel->setEnabled(enabled);
-    m_ui->backgroundToolButton->setEnabled(enabled);
-    m_ui->eraseBackgroundToolButton->setEnabled(enabled);
-    m_ui->eraseForegroundToolButton->setEnabled(enabled);
-    m_ui->relativeForegroundHeadline->setEnabled(enabled);
-    m_ui->foregroundSaturationLabel->setEnabled(enabled);
-    m_ui->foregroundLightnessLabel->setEnabled(enabled);
-    m_ui->foregroundSaturationSpinBox->setEnabled(enabled);
-    m_ui->foregroundLightnessSpinBox->setEnabled(enabled);
-    m_ui->relativeBackgroundHeadline->setEnabled(enabled);
-    m_ui->backgroundSaturationLabel->setEnabled(enabled);
-    m_ui->backgroundLightnessLabel->setEnabled(enabled);
-    m_ui->backgroundSaturationSpinBox->setEnabled(enabled);
-    m_ui->backgroundLightnessSpinBox->setEnabled(enabled);
-    m_ui->fontHeadline->setEnabled(enabled);
-    m_ui->boldCheckBox->setEnabled(enabled);
-    m_ui->italicCheckBox->setEnabled(enabled);
-    m_ui->underlineHeadline->setEnabled(enabled);
-    m_ui->underlineLabel->setEnabled(enabled);
-    m_ui->underlineColorToolButton->setEnabled(enabled);
-    m_ui->eraseUnderlineColorToolButton->setEnabled(enabled);
-    m_ui->underlineComboBox->setEnabled(enabled);
+    m_ui->detailsScrollArea->setVisible(!readOnly);
+    m_ui->builtinSchemeLabel->setVisible(readOnly);
+    updateControls();
 }
 
 void ColorSchemeEdit::setColorScheme(const ColorScheme &colorScheme)
@@ -278,8 +258,10 @@ void ColorSchemeEdit::updateForegroundControls()
     const auto &formatDescription = m_descriptions[m_curItem];
     const Format &format = m_scheme.formatFor(formatDescription.id());
 
-    bool isVisible = formatDescription.showControl(FormatDescription::ShowForegroundControl);
+    bool isVisible = !m_readOnly
+                     && formatDescription.showControl(FormatDescription::ShowForegroundControl);
 
+    m_ui->relativeForegroundHeadline->setEnabled(isVisible);
     m_ui->foregroundLabel->setVisible(isVisible);
     m_ui->foregroundToolButton->setVisible(isVisible);
     m_ui->eraseForegroundToolButton->setVisible(isVisible);
@@ -296,8 +278,10 @@ void ColorSchemeEdit::updateBackgroundControls()
     const auto formatDescription = m_descriptions[m_curItem];
     const Format &format = m_scheme.formatFor(formatDescription.id());
 
-    bool isVisible = formatDescription.showControl(FormatDescription::ShowBackgroundControl);
+    bool isVisible = !m_readOnly
+                     && formatDescription.showControl(FormatDescription::ShowBackgroundControl);
 
+    m_ui->relativeBackgroundHeadline->setVisible(isVisible);
     m_ui->backgroundLabel->setVisible(isVisible);
     m_ui->backgroundToolButton->setVisible(isVisible);
     m_ui->eraseBackgroundToolButton->setVisible(isVisible);
@@ -317,7 +301,8 @@ void ColorSchemeEdit::updateRelativeForegroundControls()
     QSignalBlocker saturationSignalBlocker(m_ui->foregroundSaturationSpinBox);
     QSignalBlocker lightnessSignalBlocker(m_ui->foregroundLightnessSpinBox);
 
-    bool isVisible = formatDescription.showControl(FormatDescription::ShowRelativeForegroundControl);
+    bool isVisible = !m_readOnly
+                     && formatDescription.showControl(FormatDescription::ShowRelativeForegroundControl);
 
     m_ui->relativeForegroundHeadline->setVisible(isVisible);
     m_ui->foregroundSaturationLabel->setVisible(isVisible);
@@ -327,6 +312,14 @@ void ColorSchemeEdit::updateRelativeForegroundControls()
     m_ui->relativeForegroundSpacer1->setVisible(isVisible);
     m_ui->relativeForegroundSpacer2->setVisible(isVisible);
     m_ui->relativeForegroundSpacer3->setVisible(isVisible);
+
+    bool isEnabled = !m_readOnly && !format.foreground().isValid();
+
+    m_ui->relativeForegroundHeadline->setEnabled(isEnabled);
+    m_ui->foregroundSaturationLabel->setEnabled(isEnabled);
+    m_ui->foregroundLightnessLabel->setEnabled(isEnabled);
+    m_ui->foregroundSaturationSpinBox->setEnabled(isEnabled);
+    m_ui->foregroundLightnessSpinBox->setEnabled(isEnabled);
 
     m_ui->foregroundSaturationSpinBox->setValue(format.relativeForegroundSaturation());
     m_ui->foregroundLightnessSpinBox->setValue(format.relativeForegroundLightness());
@@ -340,7 +333,8 @@ void ColorSchemeEdit::updateRelativeBackgroundControls()
     QSignalBlocker saturationSignalBlocker(m_ui->backgroundSaturationSpinBox);
     QSignalBlocker lightnessSignalBlocker(m_ui->backgroundLightnessSpinBox);
 
-    bool isVisible = formatDescription.showControl(FormatDescription::ShowRelativeBackgroundControl);
+    bool isVisible = !m_readOnly
+                     && formatDescription.showControl(FormatDescription::ShowRelativeBackgroundControl);
 
     m_ui->relativeBackgroundHeadline->setVisible(isVisible);
     m_ui->backgroundSaturationLabel->setVisible(isVisible);
@@ -350,6 +344,14 @@ void ColorSchemeEdit::updateRelativeBackgroundControls()
     m_ui->relativeBackgroundSpacer1->setVisible(isVisible);
     m_ui->relativeBackgroundSpacer2->setVisible(isVisible);
     m_ui->relativeBackgroundSpacer3->setVisible(isVisible);
+
+    bool isEnabled = !m_readOnly && !format.background().isValid();
+
+    m_ui->relativeBackgroundHeadline->setEnabled(isEnabled);
+    m_ui->backgroundSaturationLabel->setEnabled(isEnabled);
+    m_ui->backgroundLightnessLabel->setEnabled(isEnabled);
+    m_ui->backgroundSaturationSpinBox->setEnabled(isEnabled);
+    m_ui->backgroundLightnessSpinBox->setEnabled(isEnabled);
 
     m_ui->backgroundSaturationSpinBox->setValue(format.relativeBackgroundSaturation());
     m_ui->backgroundLightnessSpinBox->setValue(format.relativeBackgroundLightness());
@@ -363,7 +365,8 @@ void ColorSchemeEdit::updateFontControls()
     QSignalBlocker boldSignalBlocker(m_ui->boldCheckBox);
     QSignalBlocker italicSignalBlocker(m_ui->italicCheckBox);
 
-    bool isVisible= formatDescription.showControl(FormatDescription::ShowFontControls);
+    bool isVisible = !m_readOnly
+                     && formatDescription.showControl(FormatDescription::ShowFontControls);
 
     m_ui->fontHeadline->setVisible(isVisible);
     m_ui->boldCheckBox->setVisible(isVisible);
@@ -383,7 +386,8 @@ void ColorSchemeEdit::updateUnderlineControls()
 
     QSignalBlocker comboBoxSignalBlocker(m_ui->underlineComboBox);
 
-    bool isVisible= formatDescription.showControl(FormatDescription::ShowUnderlineControl);
+    bool isVisible = !m_readOnly
+                     && formatDescription.showControl(FormatDescription::ShowUnderlineControl);
 
     m_ui->underlineHeadline->setVisible(isVisible);
     m_ui->underlineLabel->setVisible(isVisible);
@@ -412,11 +416,13 @@ void ColorSchemeEdit::changeForeColor()
     m_ui->foregroundToolButton->setStyleSheet(colorButtonStyleSheet(newColor));
     m_ui->eraseForegroundToolButton->setEnabled(true);
 
-    foreach (const QModelIndex &index, m_ui->itemList->selectionModel()->selectedRows()) {
+    for (const QModelIndex &index : m_ui->itemList->selectionModel()->selectedRows()) {
         const TextStyle category = m_descriptions[index.row()].id();
         m_scheme.formatFor(category).setForeground(newColor);
         m_formatsModel->emitDataChanged(index);
     }
+
+    updateControls();
 }
 
 void ColorSchemeEdit::changeBackColor()
@@ -430,7 +436,7 @@ void ColorSchemeEdit::changeBackColor()
     m_ui->backgroundToolButton->setStyleSheet(colorButtonStyleSheet(newColor));
     m_ui->eraseBackgroundToolButton->setEnabled(true);
 
-    foreach (const QModelIndex &index, m_ui->itemList->selectionModel()->selectedRows()) {
+    for (const QModelIndex &index : m_ui->itemList->selectionModel()->selectedRows()) {
         const TextStyle category = m_descriptions[index.row()].id();
         m_scheme.formatFor(category).setBackground(newColor);
         m_formatsModel->emitDataChanged(index);
@@ -438,6 +444,8 @@ void ColorSchemeEdit::changeBackColor()
         if (index.row() == 0)
             setItemListBackground(newColor);
     }
+
+    updateControls();
 }
 
 void ColorSchemeEdit::eraseBackColor()
@@ -453,6 +461,8 @@ void ColorSchemeEdit::eraseBackColor()
         m_scheme.formatFor(category).setBackground(newColor);
         m_formatsModel->emitDataChanged(index);
     }
+
+    updateControls();
 }
 
 void ColorSchemeEdit::eraseForeColor()
@@ -463,11 +473,13 @@ void ColorSchemeEdit::eraseForeColor()
     m_ui->foregroundToolButton->setStyleSheet(colorButtonStyleSheet(newColor));
     m_ui->eraseForegroundToolButton->setEnabled(false);
 
-    foreach (const QModelIndex &index, m_ui->itemList->selectionModel()->selectedRows()) {
+    for (const QModelIndex &index : m_ui->itemList->selectionModel()->selectedRows()) {
         const TextStyle category = m_descriptions[index.row()].id();
         m_scheme.formatFor(category).setForeground(newColor);
         m_formatsModel->emitDataChanged(index);
     }
+
+    updateControls();
 }
 
 void ColorSchemeEdit::changeRelativeForeColor()
@@ -510,7 +522,7 @@ void ColorSchemeEdit::eraseRelativeForeColor()
     m_ui->foregroundSaturationSpinBox->setValue(0.0);
     m_ui->foregroundLightnessSpinBox->setValue(0.0);
 
-    foreach (const QModelIndex &index, m_ui->itemList->selectionModel()->selectedRows()) {
+    for (const QModelIndex &index : m_ui->itemList->selectionModel()->selectedRows()) {
         const TextStyle category = m_descriptions[index.row()].id();
         m_scheme.formatFor(category).setRelativeForegroundSaturation(0.0);
         m_scheme.formatFor(category).setRelativeForegroundLightness(0.0);
@@ -539,7 +551,7 @@ void ColorSchemeEdit::checkCheckBoxes()
     if (m_curItem == -1)
         return;
 
-    foreach (const QModelIndex &index, m_ui->itemList->selectionModel()->selectedRows()) {
+    for (const QModelIndex &index : m_ui->itemList->selectionModel()->selectedRows()) {
         const TextStyle category = m_descriptions[index.row()].id();
         m_scheme.formatFor(category).setBold(m_ui->boldCheckBox->isChecked());
         m_scheme.formatFor(category).setItalic(m_ui->italicCheckBox->isChecked());
@@ -558,7 +570,7 @@ void ColorSchemeEdit::changeUnderlineColor()
     m_ui->underlineColorToolButton->setStyleSheet(colorButtonStyleSheet(newColor));
     m_ui->eraseUnderlineColorToolButton->setEnabled(true);
 
-    foreach (const QModelIndex &index, m_ui->itemList->selectionModel()->selectedRows()) {
+    for (const QModelIndex &index : m_ui->itemList->selectionModel()->selectedRows()) {
         const TextStyle category = m_descriptions[index.row()].id();
         m_scheme.formatFor(category).setUnderlineColor(newColor);
         m_formatsModel->emitDataChanged(index);
@@ -573,7 +585,7 @@ void ColorSchemeEdit::eraseUnderlineColor()
     m_ui->underlineColorToolButton->setStyleSheet(colorButtonStyleSheet(newColor));
     m_ui->eraseUnderlineColorToolButton->setEnabled(false);
 
-    foreach (const QModelIndex &index, m_ui->itemList->selectionModel()->selectedRows()) {
+    for (const QModelIndex &index : m_ui->itemList->selectionModel()->selectedRows()) {
         const TextStyle category = m_descriptions[index.row()].id();
         m_scheme.formatFor(category).setUnderlineColor(newColor);
         m_formatsModel->emitDataChanged(index);
@@ -585,7 +597,7 @@ void ColorSchemeEdit::changeUnderlineStyle(int comboBoxIndex)
     if (m_curItem == -1)
         return;
 
-    foreach (const QModelIndex &index, m_ui->itemList->selectionModel()->selectedRows()) {
+    for (const QModelIndex &index : m_ui->itemList->selectionModel()->selectedRows()) {
         const TextStyle category = m_descriptions[index.row()].id();
         auto value = m_ui->underlineComboBox->itemData(comboBoxIndex);
         auto enumeratorIndex = static_cast<QTextCharFormat::UnderlineStyle>(value.toInt());

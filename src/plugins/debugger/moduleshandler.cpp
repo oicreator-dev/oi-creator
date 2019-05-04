@@ -171,7 +171,7 @@ public:
 
 bool ModulesModel::contextMenuEvent(const ItemViewEvent &ev)
 {
-    ModuleItem *item = itemForIndexAtLevel<1>(ev.index());
+    ModuleItem *item = itemForIndexAtLevel<1>(ev.sourceModelIndex());
 
     const bool enabled = engine->debuggerActionsEnabled();
     const bool canReload = engine->hasCapability(ReloadModuleCapability);
@@ -281,7 +281,7 @@ void ModulesHandler::removeAll()
     m_model->clear();
 }
 
-Modules ModulesHandler::modules() const
+const Modules ModulesHandler::modules() const
 {
     Modules mods;
     m_model->forItemsAtLevel<1>([&mods](ModuleItem *item) { mods.append(item->module); });

@@ -38,7 +38,7 @@
 #include "cppindexingsupport.h"
 #include "cpplocatordata.h"
 #include "cpplocatorfilter.h"
-#include "cppmodelmanagersupportinternal.h"
+#include "cppbuiltinmodelmanagersupport.h"
 #include "cpprefactoringchanges.h"
 #include "cpprefactoringengine.h"
 #include "cppsourceprocessor.h"
@@ -94,7 +94,7 @@ class DumpAST: protected ASTVisitor
 public:
     int depth;
 
-    DumpAST(Control *control)
+    explicit DumpAST(Control *control)
         : ASTVisitor(control), depth(0)
     { }
 
@@ -151,7 +151,7 @@ public:
     // The members below are cached/(re)calculated from the projects and/or their project parts
     bool m_dirty;
     QStringList m_projectFiles;
-    ProjectPartHeaderPaths m_headerPaths;
+    ProjectExplorer::HeaderPaths m_headerPaths;
     ProjectExplorer::Macros m_definedMacros;
 
     // Editor integration
@@ -500,16 +500,17 @@ void CppModelManager::initCppTools()
 void CppModelManager::initializeBuiltinModelManagerSupport()
 {
     d->m_builtinModelManagerSupport
-            = ModelManagerSupportProviderInternal().createModelManagerSupport();
+            = BuiltinModelManagerSupportProvider().createModelManagerSupport();
     d->m_activeModelManagerSupport = d->m_builtinModelManagerSupport;
     d->m_refactoringEngines[RefactoringEngineType::BuiltIn] =
             &d->m_activeModelManagerSupport->refactoringEngineInterface();
 }
 
 CppModelManager::CppModelManager()
-    : CppModelManagerBase(nullptr), d(new CppModelManagerPrivate)
+    : CppModelManagerBase(nullptr)
+    , d(new CppModelManagerPrivate)
 {
-    d->m_indexingSupporter = 0;
+    d->m_indexingSupporter = nullptr;
     d->m_enableGC = true;
 
     qRegisterMetaType<QSet<QString> >();
@@ -615,18 +616,18 @@ QStringList CppModelManager::internalProjectFiles() const
     return files;
 }
 
-ProjectPartHeaderPaths CppModelManager::internalHeaderPaths() const
+ProjectExplorer::HeaderPaths CppModelManager::internalHeaderPaths() const
 {
-    ProjectPartHeaderPaths headerPaths;
+    ProjectExplorer::HeaderPaths headerPaths;
     QMapIterator<ProjectExplorer::Project *, ProjectInfo> it(d->m_projectToProjectsInfo);
     while (it.hasNext()) {
         it.next();
         const ProjectInfo pinfo = it.value();
         foreach (const ProjectPart::Ptr &part, pinfo.projectParts()) {
-            foreach (const ProjectPartHeaderPath &path, part->headerPaths) {
-                const ProjectPartHeaderPath hp(QDir::cleanPath(path.path), path.type);
+            foreach (const ProjectExplorer::HeaderPath &path, part->headerPaths) {
+                ProjectExplorer::HeaderPath hp(QDir::cleanPath(path.path), path.type);
                 if (!headerPaths.contains(hp))
-                    headerPaths += hp;
+                    headerPaths.push_back(std::move(hp));
             }
         }
     }
@@ -694,7 +695,7 @@ void CppModelManager::removeExtraEditorSupport(AbstractEditorSupport *editorSupp
 CppEditorDocumentHandle *CppModelManager::cppEditorDocument(const QString &filePath) const
 {
     if (filePath.isEmpty())
-        return 0;
+        return nullptr;
 
     QMutexLocker locker(&d->m_cppEditorDocumentsMutex);
     return d->m_cppEditorDocuments.value(filePath, 0);
@@ -985,10 +986,11 @@ void CppModelManager::watchForCanceledProjectIndexer(const QVector<QFuture<void>
         if (future.isCanceled() || future.isFinished())
             continue;
 
-        QFutureWatcher<void> *watcher = new QFutureWatcher<void>();
-        connect(watcher, &QFutureWatcher<void>::canceled, this, [this, project]() {
+        auto watcher = new QFutureWatcher<void>();
+        connect(watcher, &QFutureWatcher<void>::canceled, this, [this, project, watcher]() {
             if (d->m_projectToIndexerCanceled.contains(project)) // Project not yet removed
                 d->m_projectToIndexerCanceled.insert(project, true);
+            watcher->deleteLater();
         });
         connect(watcher, &QFutureWatcher<void>::finished, this, [watcher]() {
             watcher->deleteLater();
@@ -1024,12 +1026,6 @@ void CppModelManager::updateCppEditorDocuments(bool projectsUpdated) const
             theCppEditorDocument->setRefreshReason(refreshReason);
         }
     }
-}
-
-QFuture<void> CppModelManager::updateProjectInfo(const ProjectInfo &newProjectInfo)
-{
-    QFutureInterface<void> dummy;
-    return updateProjectInfo(dummy, newProjectInfo);
 }
 
 QFuture<void> CppModelManager::updateProjectInfo(QFutureInterface<void> &futureInterface,
@@ -1165,8 +1161,9 @@ ProjectPart::Ptr CppModelManager::fallbackProjectPart()
 
     // Do not activate ObjectiveCExtensions since this will lead to the
     // "objective-c++" language option for a project-less *.cpp file.
-    part->languageExtensions = ProjectPart::AllExtensions;
-    part->languageExtensions &= ~ProjectPart::ObjectiveCExtensions;
+    part->languageExtensions = Utils::LanguageExtension::All;
+    part->languageExtensions &= ~Utils::LanguageExtensions(
+        Utils::LanguageExtension::ObjectiveC);
 
     part->qtVersion = ProjectPart::Qt5;
     part->updateLanguageFeatures();
@@ -1191,9 +1188,10 @@ void CppModelManager::emitDocumentUpdated(Document::Ptr doc)
 }
 
 void CppModelManager::emitAbstractEditorSupportContentsUpdated(const QString &filePath,
+                                                               const QString &sourcePath,
                                                                const QByteArray &contents)
 {
-    emit abstractEditorSupportContentsUpdated(filePath, contents);
+    emit abstractEditorSupportContentsUpdated(filePath, sourcePath, contents);
 }
 
 void CppModelManager::emitAbstractEditorSupportRemoved(const QString &filePath)
@@ -1413,7 +1411,7 @@ void CppModelManager::setIndexingSupport(CppIndexingSupport *indexingSupport)
 {
     if (indexingSupport) {
         if (dynamic_cast<BuiltinIndexingSupport *>(indexingSupport))
-            d->m_indexingSupporter = 0;
+            d->m_indexingSupporter = nullptr;
         else
             d->m_indexingSupporter = indexingSupport;
     }
@@ -1432,7 +1430,7 @@ QStringList CppModelManager::projectFiles()
     return d->m_projectFiles;
 }
 
-ProjectPartHeaderPaths CppModelManager::headerPaths()
+ProjectExplorer::HeaderPaths CppModelManager::headerPaths()
 {
     QMutexLocker locker(&d->m_projectMutex);
     ensureUpdated();
@@ -1440,7 +1438,7 @@ ProjectPartHeaderPaths CppModelManager::headerPaths()
     return d->m_headerPaths;
 }
 
-void CppModelManager::setHeaderPaths(const ProjectPartHeaderPaths &headerPaths)
+void CppModelManager::setHeaderPaths(const ProjectExplorer::HeaderPaths &headerPaths)
 {
     QMutexLocker locker(&d->m_projectMutex);
     d->m_headerPaths = headerPaths;

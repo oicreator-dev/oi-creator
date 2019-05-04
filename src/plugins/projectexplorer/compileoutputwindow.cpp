@@ -40,7 +40,7 @@
 #include <texteditor/texteditorsettings.h>
 #include <texteditor/fontsettings.h>
 #include <texteditor/behaviorsettings.h>
-#include <utils/ansiescapecodehandler.h>
+#include <utils/outputformatter.h>
 #include <utils/proxyaction.h>
 #include <utils/theme/theme.h>
 #include <utils/utilsicons.h>
@@ -108,7 +108,7 @@ private:
     }
 
 protected:
-    void mouseMoveEvent(QMouseEvent *ev)
+    void mouseMoveEvent(QMouseEvent *ev) override
     {
         const int line = cursorForPosition(ev->pos()).block().blockNumber();
         if (m_taskids.contains(line) && m_mousePressButton == Qt::NoButton)
@@ -118,14 +118,14 @@ protected:
         QPlainTextEdit::mouseMoveEvent(ev);
     }
 
-    void mousePressEvent(QMouseEvent *ev)
+    void mousePressEvent(QMouseEvent *ev) override
     {
         m_mousePressPosition = ev->pos();
         m_mousePressButton = ev->button();
         QPlainTextEdit::mousePressEvent(ev);
     }
 
-    void mouseReleaseEvent(QMouseEvent *ev)
+    void mouseReleaseEvent(QMouseEvent *ev) override
     {
         if ((m_mousePressPosition - ev->pos()).manhattanLength() < 4
                 && m_mousePressButton == Qt::LeftButton) {
@@ -151,7 +151,7 @@ CompileOutputWindow::CompileOutputWindow(QAction *cancelBuildAction) :
     m_cancelBuildButton(new QToolButton),
     m_zoomInButton(new QToolButton),
     m_zoomOutButton(new QToolButton),
-    m_escapeCodeHandler(new Utils::AnsiEscapeCodeHandler)
+    m_formatter(new Utils::OutputFormatter)
 {
     Core::Context context(C_COMPILE_OUTPUT);
     m_outputWindow = new CompileOutputTextEdit(context);
@@ -159,7 +159,8 @@ CompileOutputWindow::CompileOutputWindow(QAction *cancelBuildAction) :
     m_outputWindow->setWindowIcon(Icons::WINDOW.icon());
     m_outputWindow->setReadOnly(true);
     m_outputWindow->setUndoRedoEnabled(false);
-    m_outputWindow->setMaxLineCount(Core::Constants::DEFAULT_MAX_LINE_COUNT);
+    m_outputWindow->setMaxCharCount(Core::Constants::DEFAULT_MAX_CHAR_COUNT);
+    m_outputWindow->setFormatter(m_formatter);
 
     // Let selected text be colored as if the text edit was editable,
     // otherwise the highlight for searching is too light
@@ -210,7 +211,7 @@ CompileOutputWindow::~CompileOutputWindow()
     delete m_cancelBuildButton;
     delete m_zoomInButton;
     delete m_zoomOutButton;
-    delete m_escapeCodeHandler;
+    delete m_formatter;
 }
 
 void CompileOutputWindow::updateZoomEnabled()
@@ -226,7 +227,7 @@ void CompileOutputWindow::updateZoomEnabled()
 void CompileOutputWindow::updateFromSettings()
 {
     m_outputWindow->setWordWrapEnabled(ProjectExplorerPlugin::projectExplorerSettings().wrapAppOutput);
-    m_outputWindow->setMaxLineCount(ProjectExplorerPlugin::projectExplorerSettings().maxBuildOutputLines);
+    m_outputWindow->setMaxCharCount(ProjectExplorerPlugin::projectExplorerSettings().maxBuildOutputChars);
 }
 
 bool CompileOutputWindow::hasFocus() const
@@ -256,31 +257,24 @@ QList<QWidget *> CompileOutputWindow::toolBarWidgets() const
 
 void CompileOutputWindow::appendText(const QString &text, BuildStep::OutputFormat format)
 {
-    using Utils::Theme;
-    Theme *theme = Utils::creatorTheme();
-    QTextCharFormat textFormat;
+    Utils::OutputFormat fmt = Utils::NormalMessageFormat;
     switch (format) {
     case BuildStep::OutputFormat::Stdout:
-        textFormat.setForeground(theme->color(Theme::TextColorNormal));
-        textFormat.setFontWeight(QFont::Normal);
+        fmt = Utils::StdOutFormat;
         break;
     case BuildStep::OutputFormat::Stderr:
-        textFormat.setForeground(theme->color(Theme::OutputPanes_ErrorMessageTextColor));
-        textFormat.setFontWeight(QFont::Normal);
+        fmt = Utils::StdErrFormat;
         break;
     case BuildStep::OutputFormat::NormalMessage:
-        textFormat.setForeground(theme->color(Theme::OutputPanes_MessageOutput));
+        fmt = Utils::NormalMessageFormat;
         break;
     case BuildStep::OutputFormat::ErrorMessage:
-        textFormat.setForeground(theme->color(Theme::OutputPanes_ErrorMessageTextColor));
-        textFormat.setFontWeight(QFont::Bold);
+        fmt = Utils::ErrorMessageFormat;
         break;
 
     }
 
-    foreach (const Utils::FormattedText &output,
-             m_escapeCodeHandler->parseText(Utils::FormattedText(text, textFormat)))
-        m_outputWindow->appendText(output.text, output.format);
+    m_outputWindow->appendMessage(text, fmt);
 }
 
 void CompileOutputWindow::clearContents()
@@ -323,10 +317,11 @@ void CompileOutputWindow::registerPositionOf(const Task &task, int linkedOutputL
 {
     if (linkedOutputLines <= 0)
         return;
-    int blocknumber = m_outputWindow->document()->blockCount();
-    if (blocknumber > m_outputWindow->maxLineCount())
+    const int charNumber = m_outputWindow->document()->characterCount();
+    if (charNumber > m_outputWindow->maxCharCount())
         return;
 
+    const int blocknumber = m_outputWindow->document()->blockCount();
     const int startLine = blocknumber - linkedOutputLines + 1 - skipLines;
     const int endLine = blocknumber - skipLines;
 
@@ -361,8 +356,7 @@ void CompileOutputWindow::showPositionOf(const Task &task)
 
 void CompileOutputWindow::flush()
 {
-    if (m_escapeCodeHandler)
-        m_escapeCodeHandler->endFormatScope();
+    m_formatter->flush();
 }
 
 #include "compileoutputwindow.moc"

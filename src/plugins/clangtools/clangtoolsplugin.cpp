@@ -48,6 +48,9 @@
 #include <coreplugin/coreconstants.h>
 #include <coreplugin/dialogs/ioptionspage.h>
 
+#include <cpptools/cpptoolsconstants.h>
+#include <cpptools/cppmodelmanager.h>
+
 #include <projectexplorer/kitinformation.h>
 #include <projectexplorer/projectpanelfactory.h>
 #include <projectexplorer/target.h>
@@ -70,7 +73,7 @@ class ClangToolsOptionsPage : public Core::IOptionsPage
 public:
     explicit ClangToolsOptionsPage()
     {
-        setId("Analyzer.ClangTools.Settings");
+        setId(Constants::SETTINGS_PAGE_ID);
         setDisplayName(QCoreApplication::translate(
                            "ClangTools::Internal::ClangToolsOptionsPage",
                            "Clang Tools"));
@@ -79,19 +82,19 @@ public:
         setCategoryIcon(Analyzer::Icons::SETTINGSCATEGORY_ANALYZER);
     }
 
-    QWidget *widget()
+    QWidget *widget() override
     {
         if (!m_widget)
             m_widget = new ClangToolsConfigWidget(ClangToolsSettings::instance());
         return m_widget;
     }
 
-    void apply()
+    void apply() override
     {
         ClangToolsSettings::instance()->writeSettings();
     }
 
-    void finish()
+    void finish() override
     {
         delete m_widget;
     }

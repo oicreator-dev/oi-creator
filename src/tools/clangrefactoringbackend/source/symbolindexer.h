@@ -26,56 +26,61 @@
 #pragma once
 
 #include "filestatuscache.h"
-#include "symbolscollectorinterface.h"
+#include "symbolindexertaskqueueinterface.h"
 #include "symbolstorageinterface.h"
+#include "builddependenciesstorageinterface.h"
 #include "clangpathwatcher.h"
 
-#include <projectpartcontainerv2.h>
 #include <filecontainerv2.h>
+#include <precompiledheaderstorageinterface.h>
+#include <projectpartcontainer.h>
+#include <projectpartsstorageinterface.h>
 
 namespace ClangBackEnd {
 
-class SymbolIndexer : public ClangPathWatcherNotifier
+class SymbolsCollectorInterface;
+
+class SymbolIndexer final : public ClangPathWatcherNotifier
 {
 public:
-    SymbolIndexer(SymbolsCollectorInterface &symbolsCollector,
+    SymbolIndexer(SymbolIndexerTaskQueueInterface &symbolIndexerTaskQueue,
                   SymbolStorageInterface &symbolStorage,
+                  BuildDependenciesStorageInterface &buildDependenciesStorage,
+                  PrecompiledHeaderStorageInterface &precompiledHeaderStorage,
                   ClangPathWatcherInterface &pathWatcher,
                   FilePathCachingInterface &filePathCache,
                   FileStatusCache &fileStatusCache,
-                  Sqlite::TransactionInterface &transactionInterface);
+                  Sqlite::TransactionInterface &transactionInterface,
+                  ProjectPartsStorageInterface &projectPartsStorage);
 
-    void updateProjectParts(V2::ProjectPartContainers &&projectParts,
-                            V2::FileContainers &&generatedFiles);
-    void updateProjectPart(V2::ProjectPartContainer &&projectPart,
-                           const V2::FileContainers &generatedFiles);
+    void updateProjectParts(ProjectPartContainers &&projectParts);
+    void updateProjectPart(ProjectPartContainer &&projectPart);
 
-    void pathsWithIdsChanged(const Utils::SmallStringVector &ids) override;
+    void pathsWithIdsChanged(const ProjectPartIds &ids) override;
     void pathsChanged(const FilePathIds &filePathIds) override;
-    void updateChangedPath(FilePathId filePath);
+    void updateChangedPath(FilePathId filePath,
+                           std::vector<SymbolIndexerTask> &symbolIndexerTask);
 
     bool compilerMacrosOrIncludeSearchPathsAreDifferent(
-            const V2::ProjectPartContainer &projectPart,
+            const ProjectPartContainer &projectPart,
             const Utils::optional<ProjectPartArtefact> &optionalArtefact) const;
 
     FilePathIds filterChangedFiles(
-            const V2::ProjectPartContainer &projectPart) const;
+            const ProjectPartContainer &projectPart) const;
 
-    FilePathIds updatableFilePathIds(const V2::ProjectPartContainer &projectPart,
+    FilePathIds updatableFilePathIds(const ProjectPartContainer &projectPart,
                                      const Utils::optional<ProjectPartArtefact> &optionalArtefact) const;
 
-    Utils::SmallStringVector compilerArguments(const V2::ProjectPartContainer &projectPart,
-                                               const Utils::optional<ProjectPartArtefact> &optionalArtefact) const;
-    Utils::SmallStringVector compilerArguments(Utils::SmallStringVector arguments,
-                                               int projectPartId) const;
-
 private:
-    SymbolsCollectorInterface &m_symbolsCollector;
+    SymbolIndexerTaskQueueInterface &m_symbolIndexerTaskQueue;
     SymbolStorageInterface &m_symbolStorage;
+    BuildDependenciesStorageInterface &m_buildDependencyStorage;
+    PrecompiledHeaderStorageInterface &m_precompiledHeaderStorage;
     ClangPathWatcherInterface &m_pathWatcher;
     FilePathCachingInterface &m_filePathCache;
     FileStatusCache &m_fileStatusCache;
     Sqlite::TransactionInterface &m_transactionInterface;
+    ProjectPartsStorageInterface &m_projectPartsStorage;
 };
 
 } // namespace ClangBackEnd

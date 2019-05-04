@@ -46,8 +46,9 @@ def commit(commitMessage, expectedLogMessage, uncheckUntracked=False):
     checkOrFixCommitterInformation('invalidEmailLabel', 'emailLineEdit', 'nobody@nowhere.com')
     clickButton(waitForObject(":splitter.Commit File(s)_VcsBase::QActionPushButton"))
     vcsLog = waitForObject("{type='QPlainTextEdit' unnamed='1' visible='1' "
-                           "window=':Qt Creator_Core::Internal::MainWindow'}").plainText
-    test.verify(expectedLogMessage in str(vcsLog), "Searching for '%s' in log:\n%s " % (expectedLogMessage, vcsLog))
+                           "window=':Qt Creator_Core::Internal::MainWindow'}")
+    test.verify(waitFor('expectedLogMessage in str(vcsLog.plainText)', 2000),
+                "Searching for '%s' in log:\n%s " % (expectedLogMessage, vcsLog.plainText))
     return commitMessage
 
 def verifyItemsInGit(commitMessages):
@@ -92,7 +93,7 @@ def __clickCommit__(count):
         test.fail("Could not find the %d. commit - leaving test" % count)
         return False
     placeCursorToLine(gitEditor, line)
-    for i in range(30):
+    for _ in range(30):
         type(gitEditor, "<Left>")
     # get the current cursor rectangle which should be positioned on the commit ID
     rect = gitEditor.cursorRect()
@@ -145,7 +146,7 @@ def verifyClickCommit():
                         "Verifying whether diff editor contains pointless_header.h file.")
             test.verify(pointlessHeader not in diffOriginal,
                         "Verifying whether original does not contain pointless_header.h file.")
-            test.verify("HEADERS += \\\n        mainwindow.h \\\n    pointless_header.h\n" in diffChanged,
+            test.verify("HEADERS += \\\n        mainwindow.h \\\n        pointless_header.h\n" in diffChanged,
                         "Verifying whether diff editor has pointless_header.h listed in pro file.")
             test.verify("HEADERS += \\\n        mainwindow.h\n\n" in diffOriginal
                         and "pointless_header.h" not in diffOriginal,
@@ -161,7 +162,7 @@ def addEmptyFileOutsideProject(filename):
     __createProjectHandleLastPage__([filename], "Git", "<None>")
 
 def main():
-    startApplication("qtcreator" + SettingsPath)
+    startQC()
     if not startedWithoutPluginError():
         return
     createProject_Qt_GUI(srcPath, projectName, addToVersionControl = "Git")
@@ -234,7 +235,7 @@ def deleteProject():
     if os.path.exists(path):
         try:
             # Make files in .git writable to remove them
-            for root, dirs, files in os.walk(path):
+            for root, _, files in os.walk(path):
                 for name in files:
                     os.chmod(os.path.join(root, name), stat.S_IWUSR)
             shutil.rmtree(path)

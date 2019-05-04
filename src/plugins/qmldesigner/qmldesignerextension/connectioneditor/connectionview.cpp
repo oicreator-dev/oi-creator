@@ -52,9 +52,7 @@ ConnectionView::ConnectionView(QObject *parent) : AbstractView(parent),
     connectionViewWidget()->setBackendModel(m_backendModel);
 }
 
-ConnectionView::~ConnectionView()
-{
-}
+ConnectionView::~ConnectionView() = default;
 
 void ConnectionView::modelAttached(Model *model)
 {
@@ -151,7 +149,7 @@ void ConnectionView::selectedNodesChanged(const QList<ModelNode> & selectedNodeL
 
     if (connectionViewWidget()->currentTab() == ConnectionViewWidget::BindingTab
             || connectionViewWidget()->currentTab() == ConnectionViewWidget::DynamicPropertiesTab)
-        connectionViewWidget()->setEnabledAddButton(selectedNodeList.count() == 1);
+        emit connectionViewWidget()->setEnabledAddButton(selectedNodeList.count() == 1);
 }
 
 void ConnectionView::importsChanged(const QList<Import> & /*addedImports*/, const QList<Import> & /*removedImports*/)

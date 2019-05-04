@@ -30,12 +30,14 @@
 #include "textmark.h"
 #include "textdocument.h"
 
+#include <State>
+
 #include <QTextBlockUserData>
 #include <QPlainTextDocumentLayout>
 
 namespace TextEditor {
 struct Parenthesis;
-typedef QVector<Parenthesis> Parentheses;
+using Parentheses = QVector<Parenthesis>;
 
 struct TEXTEDITOR_EXPORT Parenthesis
 {
@@ -133,6 +135,9 @@ public:
     CodeFormatterData *codeFormatterData() const { return m_codeFormatterData; }
     void setCodeFormatterData(CodeFormatterData *data);
 
+    KSyntaxHighlighting::State syntaxState() { return m_syntaxState; }
+    void setSyntaxState(KSyntaxHighlighting::State state) { m_syntaxState = state; }
+
 private:
     TextMarks m_marks;
     int m_foldingIndent : 16;
@@ -144,6 +149,7 @@ private:
     int m_additionalAnnotationHeight = 0;
     Parentheses m_parentheses;
     CodeFormatterData *m_codeFormatterData;
+    KSyntaxHighlighting::State m_syntaxState;
 };
 
 
@@ -194,7 +200,7 @@ public:
         return static_cast<TextBlockUserData*>(block.userData());
     }
     static TextBlockUserData *userData(const QTextBlock &block) {
-        TextBlockUserData *data = static_cast<TextBlockUserData*>(block.userData());
+        auto data = static_cast<TextBlockUserData*>(block.userData());
         if (!data && block.isValid())
             const_cast<QTextBlock &>(block).setUserData((data = new TextBlockUserData));
         return data;

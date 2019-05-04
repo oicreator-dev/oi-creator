@@ -159,8 +159,8 @@ static QString sanitizeBlameOutput(const QString &b)
     forever {
         QTC_CHECK(prevPos < pos);
         int afterParen = prevPos + parenPos;
-        result.append(b.mid(prevPos, stripPos));
-        result.append(b.mid(afterParen, pos - afterParen));
+        result.append(b.midRef(prevPos, stripPos));
+        result.append(b.midRef(afterParen, pos - afterParen));
         prevPos = pos;
         QTC_CHECK(prevPos != 0);
         if (pos == b.size())
@@ -189,31 +189,10 @@ void GitEditorWidget::setPlainText(const QString &text)
     textDocument()->setPlainText(modText);
 }
 
-void GitEditorWidget::checkoutChange()
-{
-    GitPlugin::client()->stashAndCheckout(sourceWorkingDirectory(), m_currentChange);
-}
-
 void GitEditorWidget::resetChange(const QByteArray &resetType)
 {
     GitPlugin::client()->reset(
                 sourceWorkingDirectory(), QLatin1String("--" + resetType), m_currentChange);
-}
-
-void GitEditorWidget::cherryPickChange()
-{
-    GitPlugin::client()->synchronousCherryPick(sourceWorkingDirectory(), m_currentChange);
-}
-
-void GitEditorWidget::revertChange()
-{
-    GitPlugin::client()->synchronousRevert(sourceWorkingDirectory(), m_currentChange);
-}
-
-void GitEditorWidget::logChange()
-{
-    GitPlugin::client()->log(
-                sourceWorkingDirectory(), QString(), false, {m_currentChange});
 }
 
 void GitEditorWidget::applyDiffChunk(const DiffChunk& chunk, bool revert)
@@ -286,21 +265,17 @@ void GitEditorWidget::aboutToOpen(const QString &fileName, const QString &realFi
 
 QString GitEditorWidget::decorateVersion(const QString &revision) const
 {
-    const QFileInfo fi(source());
-    const QString workingDirectory = fi.absolutePath();
-
     // Format verbose, SHA1 being first token
-    return GitPlugin::client()->synchronousShortDescription(workingDirectory, revision);
+    return GitPlugin::client()->synchronousShortDescription(sourceWorkingDirectory(), revision);
 }
 
 QStringList GitEditorWidget::annotationPreviousVersions(const QString &revision) const
 {
     QStringList revisions;
     QString errorMessage;
-    const QFileInfo fi(source());
-    const QString workingDirectory = fi.absolutePath();
     // Get the SHA1's of the file.
-    if (!GitPlugin::client()->synchronousParentRevisions(workingDirectory, revision, &revisions, &errorMessage)) {
+    if (!GitPlugin::client()->synchronousParentRevisions(sourceWorkingDirectory(),
+                                                         revision, &revisions, &errorMessage)) {
         VcsOutputWindow::appendSilently(errorMessage);
         return QStringList();
     }
@@ -317,13 +292,22 @@ void GitEditorWidget::addChangeActions(QMenu *menu, const QString &change)
     m_currentChange = change;
     if (contentType() != OtherContent) {
         connect(menu->addAction(tr("Cherr&y-Pick Change %1").arg(change)), &QAction::triggered,
-                this, &GitEditorWidget::cherryPickChange);
+                this, [this]() {
+            GitPlugin::client()->synchronousCherryPick(sourceWorkingDirectory(), m_currentChange);
+        });
         connect(menu->addAction(tr("Re&vert Change %1").arg(change)), &QAction::triggered,
-                this, &GitEditorWidget::revertChange);
+                this, [this]() {
+            GitPlugin::client()->synchronousRevert(sourceWorkingDirectory(), m_currentChange);
+        });
         connect(menu->addAction(tr("C&heckout Change %1").arg(change)), &QAction::triggered,
-                this, &GitEditorWidget::checkoutChange);
+                this, [this]() {
+            GitPlugin::client()->checkout(sourceWorkingDirectory(), m_currentChange);
+        });
         connect(menu->addAction(tr("&Log for Change %1").arg(change)), &QAction::triggered,
-                this, &GitEditorWidget::logChange);
+                this, [this]() {
+            GitPlugin::client()->log(
+                        sourceWorkingDirectory(), QString(), false, {m_currentChange});
+        });
 
         QMenu *resetMenu = new QMenu(tr("&Reset to Change %1").arg(change), menu);
         connect(resetMenu->addAction(tr("&Hard")), &QAction::triggered,
@@ -371,8 +355,12 @@ QString GitEditorWidget::fileNameForLine(int line) const
 
 QString GitEditorWidget::sourceWorkingDirectory() const
 {
-    const QFileInfo fi(source());
-    return fi.isDir() ? fi.absoluteFilePath() : fi.absolutePath();
+    Utils::FileName path = Utils::FileName::fromString(source());
+    if (!path.isEmpty() && !path.toFileInfo().isDir())
+        path = path.parentDir();
+    while (!path.isEmpty() && !path.exists())
+        path = path.parentDir();
+    return path.toString();
 }
 
 } // namespace Internal

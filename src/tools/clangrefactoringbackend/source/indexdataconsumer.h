@@ -42,8 +42,9 @@ class IndexDataConsumer : public clang::index::IndexDataConsumer,
 public:
     IndexDataConsumer(SymbolEntries &symbolEntries,
                       SourceLocationEntries &sourceLocationEntries,
-                      FilePathCachingInterface &filePathCache)
-        : SymbolsVisitorBase(filePathCache, nullptr),
+                      FilePathCachingInterface &filePathCache,
+                      SourcesManager &sourcesManager)
+        : SymbolsVisitorBase(filePathCache, nullptr, sourcesManager),
           m_symbolEntries(symbolEntries),
           m_sourceLocationEntries(sourceLocationEntries)
     {}
@@ -54,9 +55,11 @@ public:
     bool handleDeclOccurence(const clang::Decl *declaration,
                              clang::index::SymbolRoleSet symbolRoles,
                              llvm::ArrayRef<clang::index::SymbolRelation> symbolRelations,
-                             clang::FileID fileId,
-                             unsigned offset,
+                             clang::SourceLocation sourceLocation,
                              ASTNodeInfo astNodeInfo) override;
+
+private:
+    bool skipSymbol(clang::FileID fileId, clang::index::SymbolRoleSet symbolRoles);
 
 private:
     SymbolEntries &m_symbolEntries;

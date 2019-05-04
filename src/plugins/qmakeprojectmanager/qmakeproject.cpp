@@ -41,10 +41,12 @@
 #include <coreplugin/progressmanager/progressmanager.h>
 #include <cpptools/cpprawprojectpart.h>
 #include <cpptools/projectinfo.h>
-#include <cpptools/projectpartheaderpath.h>
+#include <projectexplorer/headerpath.h>
 #include <cpptools/cppprojectupdater.h>
 #include <cpptools/cppmodelmanager.h>
 #include <qmljs/qmljsmodelmanagerinterface.h>
+
+#include <projectexplorer/buildinfo.h>
 #include <projectexplorer/buildmanager.h>
 #include <projectexplorer/buildtargetinfo.h>
 #include <projectexplorer/deploymentdata.h>
@@ -57,6 +59,7 @@
 #include <projectexplorer/toolchain.h>
 #include <proparser/qmakevfs.h>
 #include <qtsupport/profilereader.h>
+#include <qtsupport/qtcppkitinfo.h>
 #include <qtsupport/qtkitinformation.h>
 #include <qtsupport/qtversionmanager.h>
 #include <cpptools/generatedcodemodelsupport.h>
@@ -164,7 +167,7 @@ static QList<QmakeProject *> s_projects;
 QmakeProject::QmakeProject(const FileName &fileName) :
     Project(QmakeProjectManager::Constants::PROFILE_MIMETYPE, fileName),
     m_qmakeVfs(new QMakeVfs),
-    m_cppCodeModelUpdater(new CppTools::CppProjectUpdater(this))
+    m_cppCodeModelUpdater(new CppTools::CppProjectUpdater)
 {
     s_projects.append(this);
     setId(Constants::QMAKEPROJECT_ID);
@@ -260,36 +263,12 @@ void QmakeProject::updateCppCodeModel()
 
     m_toolChainWarnings.clear();
 
-    const Kit *k = nullptr;
-    if (Target *target = activeTarget())
-        k = target->kit();
-    else
-        k = KitManager::defaultKit();
-    QTC_ASSERT(k, return);
-
-    ToolChain *cToolChain
-            = ToolChainKitInformation::toolChain(k, ProjectExplorer::Constants::C_LANGUAGE_ID);
-    ToolChain *cxxToolChain
-            = ToolChainKitInformation::toolChain(k, ProjectExplorer::Constants::CXX_LANGUAGE_ID);
-
-    m_cppCodeModelUpdater->cancel();
-
-    QtSupport::BaseQtVersion *qtVersion = QtSupport::QtKitInformation::qtVersion(k);
-    ProjectPart::QtVersion qtVersionForPart = ProjectPart::NoQt;
-    if (qtVersion) {
-        if (qtVersion->qtVersion() <= QtSupport::QtVersionNumber(4,8,6))
-            qtVersionForPart = ProjectPart::Qt4_8_6AndOlder;
-        else if (qtVersion->qtVersion() < QtSupport::QtVersionNumber(5,0,0))
-            qtVersionForPart = ProjectPart::Qt4Latest;
-        else
-            qtVersionForPart = ProjectPart::Qt5;
-    }
-
-    const QList<QmakeProFile *> proFiles = rootProFile()->allProFiles();
+    QtSupport::CppKitInfo kitInfo(this);
+    QTC_ASSERT(kitInfo.isValid(), return);
 
     QList<ProjectExplorer::ExtraCompiler *> generators;
     CppTools::RawProjectParts rpps;
-    for (const QmakeProFile *pro : proFiles) {
+    for (const QmakeProFile *pro : rootProFile()->allProFiles()) {
         warnOnToolChainMismatch(pro);
 
         CppTools::RawProjectPart rpp;
@@ -300,35 +279,33 @@ void QmakeProject::updateCppCodeModel()
         rpp.setBuildTargetType(isExecutable ? CppTools::ProjectPart::Executable
                                             : CppTools::ProjectPart::Library);
 
-        rpp.setFlagsForCxx({cxxToolChain, pro->variableValue(Variable::CppFlags)});
-        rpp.setFlagsForC({cToolChain, pro->variableValue(Variable::CFlags)});
+        rpp.setFlagsForCxx({kitInfo.cxxToolChain, pro->variableValue(Variable::CppFlags)});
+        rpp.setFlagsForC({kitInfo.cToolChain, pro->variableValue(Variable::CFlags)});
         rpp.setMacros(ProjectExplorer::Macro::toMacros(pro->cxxDefines()));
         rpp.setPreCompiledHeaders(pro->variableValue(Variable::PrecompiledHeader));
         rpp.setSelectedForBuilding(pro->includedInExactParse());
 
         // Qt Version
         if (pro->variableValue(Variable::Config).contains(QLatin1String("qt")))
-            rpp.setQtVersion(qtVersionForPart);
+            rpp.setQtVersion(kitInfo.projectPartQtVersion);
         else
             rpp.setQtVersion(ProjectPart::NoQt);
 
         // Header paths
-        CppTools::ProjectPartHeaderPaths headerPaths;
-        using CppToolsHeaderPath = CppTools::ProjectPartHeaderPath;
+        ProjectExplorer::HeaderPaths headerPaths;
         foreach (const QString &inc, pro->variableValue(Variable::IncludePath)) {
-            const auto headerPath = CppToolsHeaderPath(inc, CppToolsHeaderPath::IncludePath);
+            const ProjectExplorer::HeaderPath headerPath{inc, HeaderPathType::User};
             if (!headerPaths.contains(headerPath))
                 headerPaths += headerPath;
         }
 
-        if (qtVersion && !qtVersion->frameworkInstallPath().isEmpty()) {
-            headerPaths += CppToolsHeaderPath(qtVersion->frameworkInstallPath(),
-                                              CppToolsHeaderPath::FrameworkPath);
-        }
+        if (kitInfo.qtVersion && !kitInfo.qtVersion->frameworkInstallPath().isEmpty())
+            headerPaths += {kitInfo.qtVersion->frameworkInstallPath(), HeaderPathType::Framework};
         rpp.setHeaderPaths(headerPaths);
 
         // Files and generators
-        QStringList fileList = pro->variableValue(Variable::Source);
+        const QStringList cumulativeSourceFiles = pro->variableValue(Variable::CumulativeSource);
+        QStringList fileList = pro->variableValue(Variable::ExactSource) + cumulativeSourceFiles;
         QList<ProjectExplorer::ExtraCompiler *> proGenerators = pro->extraCompilers();
         foreach (ProjectExplorer::ExtraCompiler *ec, proGenerators) {
             ec->forEachTarget([&](const Utils::FileName &generatedFile) {
@@ -337,13 +314,18 @@ void QmakeProject::updateCppCodeModel()
         }
         generators.append(proGenerators);
         fileList.prepend(CppTools::CppModelManager::configurationFileName());
-        rpp.setFiles(fileList);
+        rpp.setFiles(fileList, [cumulativeSourceFiles](const QString &filePath) {
+            // Keep this lambda thread-safe!
+            return CppTools::ProjectFile(filePath,
+                                         CppTools::ProjectFile::classify(filePath),
+                                         !cumulativeSourceFiles.contains(filePath));
+        });
 
         rpps.append(rpp);
     }
 
     CppTools::GeneratedCodeModelSupport::update(generators);
-    m_cppCodeModelUpdater->update({this, cToolChain, cxxToolChain, k, rpps});
+    m_cppCodeModelUpdater->update({this, kitInfo, rpps});
 }
 
 void QmakeProject::updateQmlJSCodeModel()
@@ -602,6 +584,8 @@ QList<Task> QmakeProject::projectIssues(const Kit *k) const
     QList<Task> result = Project::projectIssues(k);
     if (!QtSupport::QtKitInformation::qtVersion(k))
         result.append(createProjectTask(Task::TaskType::Error, tr("No Qt version set in kit.")));
+    else if (!QtSupport::QtKitInformation::qtVersion(k)->isValid())
+        result.append(createProjectTask(Task::TaskType::Error, tr("Qt version is invalid.")));
     if (!ToolChainKitInformation::toolChain(k, ProjectExplorer::Constants::CXX_LANGUAGE_ID))
         result.append(createProjectTask(Task::TaskType::Error, tr("No C++ compiler set in kit.")));
     return result;
@@ -624,7 +608,7 @@ static FolderNode *folderOf(FolderNode *in, const FileName &fileName)
 static FileNode *fileNodeOf(FolderNode *in, const FileName &fileName)
 {
     for (FolderNode *folder = folderOf(in, fileName); folder; folder = folder->parentFolderNode()) {
-        if (QmakeProFileNode *proFile = dynamic_cast<QmakeProFileNode *>(folder)) {
+        if (auto *proFile = dynamic_cast<QmakeProFileNode *>(folder)) {
             foreach (FileNode *fileNode, proFile->fileNodes()) {
                 if (fileNode->filePath() == fileName)
                     return fileNode;
@@ -682,8 +666,7 @@ QtSupport::ProFileReader *QmakeProject::createProFileReader(const QmakeProFile *
         }
 
         QtSupport::BaseQtVersion *qtVersion = QtSupport::QtKitInformation::qtVersion(k);
-        m_qmakeSysroot = SysRootKitInformation::hasSysRoot(k)
-                ? SysRootKitInformation::sysRoot(k).toString() : QString();
+        m_qmakeSysroot = SysRootKitInformation::sysRoot(k).toString();
 
         if (qtVersion && qtVersion->isValid()) {
             m_qmakeGlobals->qmake_abslocation = QDir::cleanPath(qtVersion->qmakeCommand().toString());
@@ -755,38 +738,6 @@ void QmakeProject::destroyProFileReader(QtSupport::ProFileReader *reader)
 QmakeProFileNode *QmakeProject::rootProjectNode() const
 {
     return static_cast<QmakeProFileNode *>(Project::rootProjectNode());
-}
-
-QList<QmakeProFile *>
-QmakeProject::collectAllProFiles(QmakeProFile *file, Parsing parse,
-                                 const QList<ProjectType> &projectTypes)
-{
-    QList<QmakeProFile *> result;
-    if (parse == ExactAndCumulativeParse || file->includedInExactParse())
-        if (projectTypes.isEmpty() || projectTypes.contains(file->projectType()))
-            result.append(file);
-
-    for (QmakePriFile *f : file->children()) {
-        auto qmakeProFileNode = dynamic_cast<QmakeProFile *>(f);
-        if (qmakeProFileNode)
-            result.append(collectAllProFiles(qmakeProFileNode, parse, projectTypes));
-    }
-
-    return result;
-}
-
-QList<QmakeProFile *> QmakeProject::applicationProFiles(Parsing parse) const
-{
-    return allProFiles({ProjectType::ApplicationTemplate, ProjectType::ScriptTemplate}, parse);
-}
-
-QList<QmakeProFile *> QmakeProject::allProFiles(const QList<ProjectType> &projectTypes, Parsing parse) const
-{
-    QList<QmakeProFile *> list;
-    if (!rootProFile())
-        return list;
-    list = collectAllProFiles(rootProFile(), parse, projectTypes);
-    return list;
 }
 
 void QmakeProject::activeTargetWasChanged()
@@ -1008,7 +959,7 @@ void CentralizedFolderWatcher::delayedFolderChanged(const QString &folder)
 
 void QmakeProject::configureAsExampleProject(const QSet<Core::Id> &platforms)
 {
-    QList<const BuildInfo *> infoList;
+    QList<BuildInfo> infoList;
     QList<Kit *> kits = KitManager::kits();
     foreach (Kit *k, kits) {
         QtSupport::BaseQtVersion *version = QtSupport::QtKitInformation::qtVersion(k);
@@ -1017,14 +968,10 @@ void QmakeProject::configureAsExampleProject(const QSet<Core::Id> &platforms)
                     && !Utils::contains(version->targetDeviceTypes(), [platforms](Core::Id i) { return platforms.contains(i); })))
             continue;
 
-        IBuildConfigurationFactory *factory = IBuildConfigurationFactory::find(k, projectFilePath().toString());
-        if (!factory)
-            continue;
-        foreach (BuildInfo *info, factory->availableSetups(k, projectFilePath().toString()))
-            infoList << info;
+        if (auto factory = BuildConfigurationFactory::find(k, projectFilePath().toString()))
+            infoList << factory->allAvailableSetups(k, projectFilePath().toString());
     }
     setup(infoList);
-    qDeleteAll(infoList);
 }
 
 void QmakeProject::updateBuildSystemData()
@@ -1041,12 +988,21 @@ void QmakeProject::updateBuildSystemData()
     target->setDeploymentData(deploymentData);
 
     BuildTargetInfoList appTargetList;
-    for (const QmakeProFile * const proFile : applicationProFiles()) {
-        TargetInformation ti = proFile->targetInformation();
-        if (!ti.valid)
-            continue;
 
-        const QStringList &config = proFile->variableValue(Variable::Config);
+    rootProjectNode()->forEachProjectNode([this, target, &appTargetList](const ProjectNode *pn) {
+        auto node = dynamic_cast<const QmakeProFileNode *>(pn);
+        if (!node || !node->includedInExactParse())
+            return;
+
+        if (node->projectType() != ProjectType::ApplicationTemplate
+                && node->projectType() != ProjectType::ScriptTemplate)
+            return;
+
+        TargetInformation ti = node->targetInformation();
+        if (!ti.valid)
+            return;
+
+        const QStringList &config = node->variableValue(Variable::Config);
 
         QString destDir = ti.destDir.toString();
         QString workingDir;
@@ -1062,26 +1018,28 @@ void QmakeProject::updateBuildSystemData()
             else
                 workingDir = destDir;
         } else {
-            destDir = ti.buildDir.toString();
             workingDir = ti.buildDir.toString();
         }
 
-        if (HostOsInfo::isMacHost() && config.contains("app_bundle")) {
-            const QString infix = '/' + ti.target + ".app/Contents/MacOS";
-            workingDir += infix;
-            destDir += infix;
-        }
+        if (HostOsInfo::isMacHost() && config.contains("app_bundle"))
+            workingDir += '/' + ti.target + ".app/Contents/MacOS";
 
         BuildTargetInfo bti;
-        bti.targetFilePath = FileName::fromString(executableFor(proFile));
-        bti.projectFilePath = proFile->filePath();
+        bti.targetFilePath = FileName::fromString(executableFor(node->proFile()));
+        bti.projectFilePath = node->filePath();
         bti.workingDirectory = FileName::fromString(workingDir);
-        bti.displayName = proFile->filePath().toFileInfo().completeBaseName();
+        bti.displayName = bti.projectFilePath.toFileInfo().completeBaseName();
+        const FileName relativePathInProject
+                = bti.projectFilePath.relativeChildPath(projectDirectory());
+        if (!relativePathInProject.isEmpty()) {
+            bti.displayNameUniquifier = QString::fromLatin1(" (%1)")
+                    .arg(relativePathInProject.toUserOutput());
+        }
         bti.buildKey = bti.projectFilePath.toString();
         bti.isQtcRunnable = config.contains("qtc_runnable");
 
         if (config.contains("console") && !config.contains("testcase")) {
-            const QStringList qt = proFile->variableValue(Variable::Qt);
+            const QStringList qt = node->variableValue(Variable::Qt);
             bti.usesTerminal = !qt.contains("testlib") && !qt.contains("qmltest");
         }
 
@@ -1090,8 +1048,10 @@ void QmakeProject::updateBuildSystemData()
         // The user could be linking to a library found via a -L/some/dir switch
         // to find those libraries while actually running we explicitly prepend those
         // dirs to the library search path
-        const QStringList libDirectories = proFile->variableValue(Variable::LibDirectories);
+        const QStringList libDirectories = node->variableValue(Variable::LibDirectories);
         if (!libDirectories.isEmpty()) {
+            QmakeProFile *proFile = node->proFile();
+            QTC_ASSERT(proFile, return);
             const QString proDirectory = proFile->buildDir().toString();
             foreach (QString dir, libDirectories) {
                 // Fix up relative entries like "LIBS+=-L.."
@@ -1105,13 +1065,15 @@ void QmakeProject::updateBuildSystemData()
         if (qtVersion)
             libraryPaths.append(qtVersion->librarySearchPath().toString());
 
+        bti.runEnvModifierHash = qHash(libraryPaths);
         bti.runEnvModifier = [libraryPaths](Environment &env, bool useLibrarySearchPath) {
             if (useLibrarySearchPath)
                 env.prependOrSetLibrarySearchPaths(libraryPaths);
         };
 
         appTargetList.list.append(bti);
-    }
+    });
+
     target->setApplicationTargets(appTargetList);
 }
 
@@ -1181,6 +1143,7 @@ void QmakeProject::collectLibraryData(const QmakeProFile *file, DeploymentData &
     const QStringList config = file->variableValue(Variable::Config);
     const bool isStatic = config.contains(QLatin1String("static"));
     const bool isPlugin = config.contains(QLatin1String("plugin"));
+    const bool nameIsVersioned = !isPlugin && !config.contains("unversioned_libname");
     switch (toolchain->targetAbi().os()) {
     case Abi::WindowsOS: {
         QString targetVersionExt = file->singleVariableValue(Variable::TargetVersionExt);
@@ -1205,7 +1168,7 @@ void QmakeProject::collectLibraryData(const QmakeProFile *file, DeploymentData &
             if (!(isPlugin && config.contains(QLatin1String("no_plugin_name_prefix"))))
                 targetFileName.prepend(QLatin1String("lib"));
 
-            if (!isPlugin) {
+            if (nameIsVersioned) {
                 targetFileName += QLatin1Char('.');
                 const QString version = file->singleVariableValue(Variable::Version);
                 QString majorVersion = version.left(version.indexOf(QLatin1Char('.')));
@@ -1233,7 +1196,7 @@ void QmakeProject::collectLibraryData(const QmakeProFile *file, DeploymentData &
         } else {
             targetFileName += QLatin1String("so");
             deploymentData.addFile(destDirFor(ti).toString() + '/' + targetFileName, targetPath);
-            if (!isPlugin) {
+            if (nameIsVersioned) {
                 QString version = file->singleVariableValue(Variable::Version);
                 if (version.isEmpty())
                     version = QLatin1String("1.0.0");
@@ -1292,30 +1255,38 @@ void QmakeProject::testToolChain(ToolChain *tc, const Utils::FileName &path) con
     const Utils::FileName expected = tc->compilerCommand();
 
     Environment env = Environment::systemEnvironment();
+    Kit *k = nullptr;
     if (Target *t = activeTarget()) {
+        k = t->kit();
         if (BuildConfiguration *bc = t->activeBuildConfiguration())
             env = bc->environment();
         else
-            t->kit()->addToEnvironment(env);
+            k->addToEnvironment(env);
     }
+    QTC_ASSERT(k, return);
 
-    if (!env.isSameExecutable(path.toString(), expected.toString())) {
-        const QPair<Utils::FileName, Utils::FileName> pair = qMakePair(expected, path);
-        if (!m_toolChainWarnings.contains(pair)) {
-            // Suppress warnings on Apple machines where compilers in /usr/bin point into Xcode.
-            // This will suppress some valid warnings, but avoids annoying Apple users with
-            // spurious warnings all the time!
-            if (!pair.first.toString().startsWith("/usr/bin/")
-                    || !pair.second.toString().contains("/Contents/Developer/Toolchains/")) {
-                TaskHub::addTask(Task(Task::Warning,
-                                      QCoreApplication::translate("QmakeProjectManager", "\"%1\" is used by qmake, but \"%2\" is configured in the kit.\n"
-                                                                                         "Please update your kit or choose a mkspec for qmake that matches your target environment better.").
-                                      arg(path.toUserOutput()).arg(expected.toUserOutput()),
-                                      Utils::FileName(), -1, ProjectExplorer::Constants::TASK_CATEGORY_BUILDSYSTEM));
-                m_toolChainWarnings.insert(pair);
-            }
-        }
+    if (env.isSameExecutable(path.toString(), expected.toString()))
+        return;
+    const QPair<Utils::FileName, Utils::FileName> pair = qMakePair(expected, path);
+    if (m_toolChainWarnings.contains(pair))
+        return;
+    // Suppress warnings on Apple machines where compilers in /usr/bin point into Xcode.
+    // This will suppress some valid warnings, but avoids annoying Apple users with
+    // spurious warnings all the time!
+    if (pair.first.toString().startsWith("/usr/bin/")
+            && pair.second.toString().contains("/Contents/Developer/Toolchains/")) {
+        return;
     }
+    TaskHub::addTask(
+                Task(Task::Warning,
+                     QCoreApplication::translate(
+                         "QmakeProjectManager",
+                         "\"%1\" is used by qmake, but \"%2\" is configured in the kit.\n"
+                         "Please update your kit (%3) or choose a mkspec for qmake that matches "
+                         "your target environment better.")
+                     .arg(path.toUserOutput()).arg(expected.toUserOutput()).arg(k->displayName()),
+                     Utils::FileName(), -1, ProjectExplorer::Constants::TASK_CATEGORY_BUILDSYSTEM));
+    m_toolChainWarnings.insert(pair);
 }
 
 void QmakeProject::warnOnToolChainMismatch(const QmakeProFile *pro) const
@@ -1341,12 +1312,17 @@ QString QmakeProject::executableFor(const QmakeProFile *file)
     TargetInformation ti = file->targetInformation();
     QString target;
 
+    QTC_ASSERT(file, return QString());
+
     if (tc->targetAbi().os() == Abi::DarwinOS
             && file->variableValue(Variable::Config).contains("app_bundle")) {
         target = ti.target + ".app/Contents/MacOS/" + ti.target;
     } else {
-        QString extension = file->singleVariableValue(Variable::TargetExt);
-        target = ti.target + extension;
+        const QString extension = file->singleVariableValue(Variable::TargetExt);
+        if (extension.isEmpty())
+            target = OsSpecificAspects::withExecutableSuffix(Abi::abiOsToOsType(tc->targetAbi().os()), ti.target);
+        else
+            target = ti.target + extension;
     }
     return QDir(destDirFor(ti).toString()).absoluteFilePath(target);
 }
@@ -1372,6 +1348,13 @@ QString QmakeProject::mapProFilePathToTarget(const FileName &proFilePath)
 {
     const QmakeProFile *pro = rootProFile()->findProFile(proFilePath);
     return pro ? pro->targetInformation().target : QString();
+}
+
+QVariant QmakeProject::additionalData(Core::Id id, const Target *target) const
+{
+    if (id == "QmlDesignerImportPath")
+        return rootProjectNode()->variableValue(Variable::QmlDesignerImportPath);
+    return Project::additionalData(id, target);
 }
 
 } // namespace QmakeProjectManager

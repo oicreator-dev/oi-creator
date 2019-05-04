@@ -148,7 +148,7 @@ public:
             } else {
                 result = NotFound;
                 m_contPos = -1;
-                m_widget->highlightSearchResults(QByteArray(), 0);
+                m_widget->highlightSearchResults(QByteArray(), nullptr);
             }
         }
         return result;
@@ -228,8 +228,7 @@ public:
 
     ReloadBehavior reloadBehavior(ChangeTrigger state, ChangeType type) const override
     {
-        Q_UNUSED(state)
-        return type == TypeRemoved ? BehaviorSilent : BehaviorAsk;
+        return type == TypeRemoved ? BehaviorSilent : IDocument::reloadBehavior(state, type);
     }
 
     bool save(QString *errorString, const QString &fn, bool autoSave) override
@@ -314,7 +313,7 @@ public:
     void provideNewRange(quint64 offset)
     {
         if (filePath().exists())
-            openImpl(0, filePath().toString(), offset);
+            openImpl(nullptr, filePath().toString(), offset);
     }
 
 public:
@@ -395,7 +394,7 @@ public:
         delete m_widget;
     }
 
-    IDocument *document() override { return m_file; }
+    IDocument *document() const override { return m_file; }
 
     QWidget *toolBar() override { return m_toolBar; }
 
@@ -405,13 +404,13 @@ private:
     }
 
     void jumpToAddress() {
-        editorWidget()->jumpToAddress(m_addressEdit->text().toULongLong(0, 16));
+        editorWidget()->jumpToAddress(m_addressEdit->text().toULongLong(nullptr, 16));
         updateCursorPosition(editorWidget()->cursorPosition());
     }
 
     BinEditorWidget *editorWidget() const
     {
-        QTC_ASSERT(qobject_cast<BinEditorWidget *>(m_widget.data()), return 0);
+        QTC_ASSERT(qobject_cast<BinEditorWidget *>(m_widget.data()), return nullptr);
         return static_cast<BinEditorWidget *>(m_widget.data());
     }
 
@@ -427,7 +426,7 @@ class BinEditorPluginPrivate : public QObject
 {
 public:
     BinEditorPluginPrivate();
-    ~BinEditorPluginPrivate();
+    ~BinEditorPluginPrivate() override;
 
     QAction *m_undoAction = nullptr;
     QAction *m_redoAction = nullptr;
@@ -443,8 +442,8 @@ BinEditorPluginPrivate::BinEditorPluginPrivate()
     ExtensionSystem::PluginManager::addObject(&m_factoryService);
     ExtensionSystem::PluginManager::addObject(&m_editorFactory);
 
-    m_undoAction = new QAction(tr("&Undo"), this);
-    m_redoAction = new QAction(tr("&Redo"), this);
+    m_undoAction = new QAction(BinEditorPlugin::tr("&Undo"), this);
+    m_redoAction = new QAction(BinEditorPlugin::tr("&Redo"), this);
     m_copyAction = new QAction(this);
     m_selectAllAction = new QAction(this);
 
@@ -512,7 +511,7 @@ EditorService *FactoryServiceImpl::createEditorService(const QString &title0, bo
         IEditor *editor = EditorManager::openEditorWithContents(
                     Core::Constants::K_DEFAULT_BINARY_EDITOR_ID, &title);
         if (!editor)
-            return 0;
+            return nullptr;
         widget = qobject_cast<BinEditorWidget *>(editor->widget());
         widget->setEditor(editor);
     } else {

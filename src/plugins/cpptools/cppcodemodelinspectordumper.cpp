@@ -89,50 +89,53 @@ QString Utils::toString(CPlusPlus::Document::DiagnosticMessage::Level level)
     return QString();
 }
 
-QString Utils::toString(ProjectPartHeaderPath::Type type)
+QString Utils::toString(ProjectExplorer::HeaderPathType type)
 {
-#define CASE_LANGUAGEVERSION(x) case ProjectPartHeaderPath::x: return QLatin1String(#x)
+#define CASE_LANGUAGEVERSION(x) case ProjectExplorer::HeaderPathType::x: return QLatin1String(#x"Path")
     switch (type) {
-    CASE_LANGUAGEVERSION(InvalidPath);
-    CASE_LANGUAGEVERSION(IncludePath);
-    CASE_LANGUAGEVERSION(FrameworkPath);
+    CASE_LANGUAGEVERSION(User);
+    CASE_LANGUAGEVERSION(System);
+    CASE_LANGUAGEVERSION(Framework);
+    CASE_LANGUAGEVERSION(BuiltIn);
     // no default to get a compiler warning if anything is added
     }
 #undef CASE_LANGUAGEVERSION
     return QString();
 }
 
-QString Utils::toString(ProjectPart::LanguageVersion languageVersion)
+QString Utils::toString(::Utils::LanguageVersion languageVersion)
 {
-#define CASE_LANGUAGEVERSION(x) case ProjectPart::x: return QLatin1String(#x)
+#define CASE_LANGUAGEVERSION(x) case ::Utils::LanguageVersion::x: return QLatin1String(#x)
     switch (languageVersion) {
     CASE_LANGUAGEVERSION(C89);
     CASE_LANGUAGEVERSION(C99);
     CASE_LANGUAGEVERSION(C11);
+    CASE_LANGUAGEVERSION(C18);
     CASE_LANGUAGEVERSION(CXX98);
     CASE_LANGUAGEVERSION(CXX03);
     CASE_LANGUAGEVERSION(CXX11);
     CASE_LANGUAGEVERSION(CXX14);
     CASE_LANGUAGEVERSION(CXX17);
+    CASE_LANGUAGEVERSION(CXX2a);
     // no default to get a compiler warning if anything is added
     }
 #undef CASE_LANGUAGEVERSION
     return QString();
 }
 
-QString Utils::toString(ProjectPart::LanguageExtensions languageExtension)
+QString Utils::toString(::Utils::LanguageExtensions languageExtension)
 {
     QString result;
 
-#define CASE_LANGUAGE_EXTENSION(ext) if (languageExtension & ProjectPart::ext) \
+#define CASE_LANGUAGE_EXTENSION(ext) if (languageExtension & ::Utils::LanguageExtension::ext) \
     result += QLatin1String(#ext ", ");
 
-    CASE_LANGUAGE_EXTENSION(NoExtensions);
-    CASE_LANGUAGE_EXTENSION(GnuExtensions);
-    CASE_LANGUAGE_EXTENSION(MicrosoftExtensions);
-    CASE_LANGUAGE_EXTENSION(BorlandExtensions);
-    CASE_LANGUAGE_EXTENSION(OpenMPExtensions);
-    CASE_LANGUAGE_EXTENSION(ObjectiveCExtensions);
+    CASE_LANGUAGE_EXTENSION(None);
+    CASE_LANGUAGE_EXTENSION(Gnu);
+    CASE_LANGUAGE_EXTENSION(Microsoft);
+    CASE_LANGUAGE_EXTENSION(Borland);
+    CASE_LANGUAGE_EXTENSION(OpenMP);
+    CASE_LANGUAGE_EXTENSION(ObjectiveC);
 #undef CASE_LANGUAGE_EXTENSION
     if (result.endsWith(QLatin1String(", ")))
         result.chop(2);
@@ -145,8 +148,7 @@ QString Utils::toString(ProjectPart::QtVersion qtVersion)
     switch (qtVersion) {
     CASE_QTVERSION(UnknownQt);
     CASE_QTVERSION(NoQt);
-    CASE_QTVERSION(Qt4_8_6AndOlder);
-    CASE_QTVERSION(Qt4Latest);
+    CASE_QTVERSION(Qt4);
     CASE_QTVERSION(Qt5);
     // no default to get a compiler warning if anything is added
     }
@@ -409,14 +411,12 @@ QString Utils::pathListToString(const QStringList &pathList)
     return result.join(QLatin1Char('\n'));
 }
 
-QString Utils::pathListToString(const ProjectPartHeaderPaths &pathList)
+QString Utils::pathListToString(const ProjectExplorer::HeaderPaths &pathList)
 {
     QStringList result;
-    foreach (const ProjectPartHeaderPath &path, pathList) {
+    foreach (const ProjectExplorer::HeaderPath &path, pathList) {
         result << QString(QLatin1String("%1 (%2 path)")).arg(
-                      QDir::toNativeSeparators(path.path),
-                      path.isFrameworkPath() ? QLatin1String("framework") : QLatin1String("include")
-                      );
+                      QDir::toNativeSeparators(path.path), toString(path.type));
     }
     return result.join(QLatin1Char('\n'));
 }
@@ -467,6 +467,17 @@ Dumper::~Dumper()
     m_out << "*** END Code Model Inspection Report\n";
 }
 
+static void printIncludeType(QTextStream &out, ProjectExplorer::HeaderPathType type)
+{
+    using ProjectExplorer::HeaderPathType;
+    switch (type) {
+        case HeaderPathType::User: out << "(user include path)"; break;
+        case HeaderPathType::System: out << "(system include path)"; break;
+        case HeaderPathType::Framework: out << "(framework path)"; break;
+        case HeaderPathType::BuiltIn: out << "(built-in include path)"; break;
+    }
+}
+
 void Dumper::dumpProjectInfos( const QList<ProjectInfo> &projectInfos)
 {
     const QByteArray i1 = indent(1);
@@ -494,6 +505,7 @@ void Dumper::dumpProjectInfos( const QList<ProjectInfo> &projectInfos)
             m_out << i3 << "Project Part Name    : " << part->displayName << "\n";
             m_out << i3 << "Project Name         : " << projectName << "\n";
             m_out << i3 << "Project File         : " << projectFilePath << "\n";
+            m_out << i3 << "Compiler Flags       : " << part->compilerFlags.join(", ") << "\n";
             m_out << i3 << "Selected For Building: " << part->selectedForBuilding << "\n";
             m_out << i3 << "Build Target Type    : " << Utils::toString(part->buildTargetType) << "\n";
             m_out << i3 << "Lanugage Version     : " << Utils::toString(part->languageVersion)<<"\n";
@@ -504,8 +516,10 @@ void Dumper::dumpProjectInfos( const QList<ProjectInfo> &projectInfos)
             if (!part->files.isEmpty()) {
                 m_out << i3 << "Files:{{{4\n";
                 foreach (const ProjectFile &projectFile, part->files) {
-                    m_out << i4 << Utils::toString(projectFile.kind) << ": " << projectFile.path
-                          << "\n";
+                    m_out << i4 << Utils::toString(projectFile.kind) << ": " << projectFile.path;
+                    if (!projectFile.active)
+                        m_out << " (inactive)";
+                    m_out << "\n";
                 }
             }
 
@@ -526,12 +540,11 @@ void Dumper::dumpProjectInfos( const QList<ProjectInfo> &projectInfos)
 
             if (!part->headerPaths.isEmpty()) {
                 m_out << i3 << "Header Paths:{{{4\n";
-                foreach (const ProjectPartHeaderPath &headerPath, part->headerPaths)
-                    m_out << i4 << headerPath.path
-                          << (headerPath.type == ProjectPartHeaderPath::IncludePath
-                              ? "(include path)"
-                              : "(framework path)")
-                          << "\n";
+                foreach (const ProjectExplorer::HeaderPath &headerPath, part->headerPaths) {
+                    m_out << i4 << headerPath.path;
+                    printIncludeType(m_out, headerPath.type);
+                    m_out << "\n";
+                }
             }
 
             if (!part->precompiledHeaders.isEmpty()) {
@@ -593,7 +606,7 @@ void Dumper::dumpWorkingCopy(const WorkingCopy &workingCopy)
     }
 }
 
-void Dumper::dumpMergedEntities(const ProjectPartHeaderPaths &mergedHeaderPaths,
+void Dumper::dumpMergedEntities(const ProjectExplorer::HeaderPaths &mergedHeaderPaths,
                                 const QByteArray &mergedMacros)
 {
     m_out << "Merged Entities{{{1\n";
@@ -601,10 +614,11 @@ void Dumper::dumpMergedEntities(const ProjectPartHeaderPaths &mergedHeaderPaths,
     const QByteArray i3 = indent(3);
 
     m_out << i2 << "Merged Header Paths{{{2\n";
-    foreach (const ProjectPartHeaderPath &hp, mergedHeaderPaths)
-        m_out << i3 << hp.path
-              << (hp.isFrameworkPath() ? " (framework path)" : " (include path)")
-              << "\n";
+    foreach (const ProjectExplorer::HeaderPath &hp, mergedHeaderPaths) {
+        m_out << i3 << hp.path;
+        printIncludeType(m_out, hp.type);
+        m_out << "\n";
+    }
     m_out << i2 << "Merged Defines{{{2\n";
     m_out << mergedMacros;
 }
@@ -651,8 +665,8 @@ void Dumper::dumpDocuments(const QList<CPlusPlus::Document::Ptr> &documents, boo
         if (!diagnosticMessages.isEmpty()) {
             m_out << i3 << "Diagnostic Messages:{{{4\n";
             foreach (const CPlusPlus::Document::DiagnosticMessage &msg, diagnosticMessages) {
-                const CPlusPlus::Document::DiagnosticMessage::Level level
-                        = static_cast<CPlusPlus::Document::DiagnosticMessage::Level>(msg.level());
+                const auto level =
+                    static_cast<CPlusPlus::Document::DiagnosticMessage::Level>(msg.level());
                 m_out << i4 << "at " << msg.line() << ":" << msg.column() << ", " << Utils::toString(level)
                       << ": " << msg.text() << "\n";
             }

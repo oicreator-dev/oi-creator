@@ -48,6 +48,7 @@
 #include <QRegularExpression>
 
 namespace ClangCodeModel {
+namespace Internal {
 
 ClangCurrentDocumentFilter::ClangCurrentDocumentFilter()
 {
@@ -69,11 +70,6 @@ static QString addType(const QString &signature, const ClangBackEnd::ExtraInfo &
     return signature + QLatin1String(" -> ", 4) + extraInfo.typeSpelling.toString();
 }
 
-static QString addTypeToVariableName(const QString &name, const ClangBackEnd::ExtraInfo &extraInfo)
-{
-    return extraInfo.typeSpelling.toString() + QLatin1String(" ") + name;
-}
-
 static Core::LocatorFilterEntry makeEntry(Core::ILocatorFilter *filter,
                                           const ClangBackEnd::TokenInfoContainer &info)
 {
@@ -84,20 +80,18 @@ static Core::LocatorFilterEntry makeEntry(Core::ILocatorFilter *filter,
     QString extra;
     ClangBackEnd::HighlightingType mainType = info.types.mainHighlightingType;
     if (mainType == ClangBackEnd::HighlightingType::VirtualFunction
-            || mainType == ClangBackEnd::HighlightingType::Function) {
+            || mainType == ClangBackEnd::HighlightingType::Function
+            || mainType == ClangBackEnd::HighlightingType::GlobalVariable
+            || mainType == ClangBackEnd::HighlightingType::Field
+            || mainType == ClangBackEnd::HighlightingType::QtProperty) {
         displayName = addType(displayName, extraInfo);
-        extra = extraInfo.semanticParentTypeSpelling.toString();
-    } else if (mainType == ClangBackEnd::HighlightingType::GlobalVariable
-               || mainType == ClangBackEnd::HighlightingType::Field
-               || mainType == ClangBackEnd::HighlightingType::QtProperty) {
-        displayName = addTypeToVariableName(displayName, extraInfo);
         extra = extraInfo.semanticParentTypeSpelling.toString();
     } else {
         extra = extraInfo.typeSpelling.toString();
     }
     entry.displayName = displayName;
     entry.extraInfo = extra;
-    entry.displayIcon = CPlusPlus::Icons::iconForType(Utils::iconTypeForToken(info));
+    entry.displayIcon = ::Utils::CodeModelIcon::iconForType(Utils::iconTypeForToken(info));
     return entry;
 }
 
@@ -115,7 +109,6 @@ QList<Core::LocatorFilterEntry> ClangCurrentDocumentFilter::matchesFor(
     if (!regexp.isValid())
         return goodEntries;
 
-    using Internal::ClangEditorDocumentProcessor;
     ClangEditorDocumentProcessor *processor = ClangEditorDocumentProcessor::get(m_currentPath);
     if (!processor)
         return goodEntries;
@@ -177,4 +170,5 @@ void ClangCurrentDocumentFilter::onCurrentEditorChanged(Core::IEditor *newCurren
     reset();
 }
 
+} // namespace Internal
 } // namespace ClangCodeModel

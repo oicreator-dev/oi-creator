@@ -24,9 +24,11 @@
 ****************************************************************************/
 
 #include "branchadddialog.h"
+#include "branchmodel.h"
 #include "ui_branchadddialog.h"
 #include "gitplugin.h"
 
+#include <utils/fancylineedit.h>
 #include <utils/hostosinfo.h>
 
 #include <QPushButton>
@@ -46,7 +48,7 @@ namespace Internal {
 class BranchNameValidator : public QValidator
 {
 public:
-    BranchNameValidator(const QStringList &localBranches, QObject *parent = 0) :
+    BranchNameValidator(const QStringList &localBranches, QObject *parent = nullptr) :
         QValidator(parent),
         m_invalidChars(GitPlugin::invalidBranchAndRemoteNamePattern()),
         m_localBranches(localBranches)
@@ -87,12 +89,28 @@ private:
     QStringList m_localBranches;
 };
 
+BranchValidationDelegate::BranchValidationDelegate(QWidget *parent, BranchModel *model)
+    : QItemDelegate(parent)
+    , m_model(model)
+{
+}
+
+QWidget *BranchValidationDelegate::createEditor(QWidget *parent,
+                                                const QStyleOptionViewItem & /*option*/,
+                                                const QModelIndex & /*index*/) const
+{
+    auto lineEdit = new Utils::FancyLineEdit(parent);
+    BranchNameValidator *validator = new BranchNameValidator(m_model->localBranchNames(), lineEdit);
+    lineEdit->setValidator(validator);
+    return lineEdit;
+}
 
 BranchAddDialog::BranchAddDialog(const QStringList &localBranches, bool addBranch, QWidget *parent) :
     QDialog(parent),
     m_ui(new Ui::BranchAddDialog)
 {
     m_ui->setupUi(this);
+    setCheckoutVisible(false);
     setWindowTitle(addBranch ? tr("Add Branch") : tr("Rename Branch"));
     m_ui->branchNameEdit->setValidator(new BranchNameValidator(localBranches, this));
     connect(m_ui->branchNameEdit, &QLineEdit::textChanged, this, &BranchAddDialog::updateButtonStatus);
@@ -130,6 +148,17 @@ void BranchAddDialog::setTrackedBranchName(const QString &name, bool remote)
 bool BranchAddDialog::track() const
 {
     return m_ui->trackingCheckBox->isChecked();
+}
+
+void BranchAddDialog::setCheckoutVisible(bool visible)
+{
+    m_ui->checkoutCheckBox->setVisible(visible);
+    m_ui->checkoutCheckBox->setChecked(visible);
+}
+
+bool BranchAddDialog::checkout() const
+{
+    return m_ui->checkoutCheckBox->isChecked();
 }
 
 /*! Updates the ok button enabled state of the dialog according to the validity of the branch name. */

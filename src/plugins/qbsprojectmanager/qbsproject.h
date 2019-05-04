@@ -29,8 +29,6 @@
 
 #include "qbsnodes.h"
 
-#include <cpptools/projectinfo.h>
-
 #include <projectexplorer/extracompiler.h>
 #include <projectexplorer/project.h>
 #include <projectexplorer/projectnodes.h>
@@ -96,7 +94,6 @@ public:
     qbs::Project qbsProject() const;
     qbs::ProjectData qbsProjectData() const;
 
-    bool needsSpecialDeployment() const override;
     void generateErrors(const qbs::ErrorInfo &e);
 
     static QString uniqueProductName(const qbs::ProductData &product);
@@ -135,6 +132,7 @@ private:
 
     void projectLoaded() override;
     ProjectExplorer::ProjectImporter *projectImporter() const override;
+    QVariant additionalData(Core::Id id, const ProjectExplorer::Target *target) const final;
 
     static bool ensureWriteableQbsFile(const QString &file);
 
@@ -146,25 +144,24 @@ private:
     qbs::ProjectData m_projectData; // Cached m_qbsProject.projectData()
     QSet<Core::IDocument *> m_qbsDocuments;
 
-    QbsProjectParser *m_qbsProjectParser;
+    QbsProjectParser *m_qbsProjectParser = nullptr;
 
-    QFutureInterface<bool> *m_qbsUpdateFutureInterface;
-    bool m_parsingScheduled;
+    QFutureInterface<bool> *m_qbsUpdateFutureInterface = nullptr;
+    bool m_parsingScheduled = false;
 
     enum CancelStatus {
         CancelStatusNone,
         CancelStatusCancelingForReparse,
         CancelStatusCancelingAltoghether
-    } m_cancelStatus;
+    } m_cancelStatus = CancelStatusNone;
 
     CppTools::CppProjectUpdater *m_cppCodeModelUpdater = nullptr;
-    CppTools::ProjectInfo m_cppCodeModelProjectInfo;
 
     mutable ProjectExplorer::ProjectImporter *m_importer = nullptr;
 
     QTimer m_parsingDelay;
     QList<ProjectExplorer::ExtraCompiler *> m_extraCompilers;
-    bool m_extraCompilersPending;
+    bool m_extraCompilersPending = false;
 };
 
 } // namespace Internal

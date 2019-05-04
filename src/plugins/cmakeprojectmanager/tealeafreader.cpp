@@ -131,8 +131,8 @@ TeaLeafReader::TeaLeafReader()
     connect(EditorManager::instance(), &EditorManager::aboutToSave,
             this, [this](const IDocument *document) {
         if (m_cmakeFiles.contains(document->filePath())
-                || !m_parameters.cmakeTool
-                || !m_parameters.cmakeTool->isAutoRun())
+                || !m_parameters.cmakeTool()
+                || !m_parameters.cmakeTool()->isAutoRun())
             emit dirty();
     });
 
@@ -154,9 +154,9 @@ TeaLeafReader::~TeaLeafReader()
 
 bool TeaLeafReader::isCompatible(const BuildDirParameters &p)
 {
-    if (!p.cmakeTool)
+    if (!p.cmakeTool())
         return false;
-    return !p.cmakeTool->hasServerMode();
+    return !p.cmakeTool()->hasServerMode();
 }
 
 void TeaLeafReader::resetData()
@@ -287,7 +287,7 @@ void TeaLeafReader::generateProjectTree(CMakeProjectNode *root, const QList<cons
     QSet<FileName> toAdd = toWatch;
     toAdd.subtract(currentWatched);
     foreach (const FileName &fn, toAdd) {
-        CMakeFile *cm = new CMakeFile(this, fn);
+        auto cm = new CMakeFile(this, fn);
         DocumentManager::addDocument(cm);
         m_watchedFiles.insert(cm);
     }
@@ -334,20 +334,21 @@ static void processCMakeIncludes(const CMakeBuildTarget &cbt, const ToolChain *t
     if (!tc)
         return;
 
-    foreach (const HeaderPath &hp, tc->systemHeaderPaths(flags, sysroot))
-        tcIncludes.insert(FileName::fromString(hp.path()));
+    foreach (const HeaderPath &hp, tc->builtInHeaderPaths(flags, sysroot))
+        tcIncludes.insert(FileName::fromString(hp.path));
     foreach (const FileName &i, cbt.includeFiles) {
         if (!tcIncludes.contains(i))
             includePaths.append(i.toString());
     }
 }
 
-void TeaLeafReader::updateCodeModel(CppTools::RawProjectParts &rpps)
+CppTools::RawProjectParts TeaLeafReader::createRawProjectParts() const
 {
     const ToolChain *tcCxx = ToolChainManager::findToolChain(m_parameters.cxxToolChainId);
     const ToolChain *tcC = ToolChainManager::findToolChain(m_parameters.cToolChainId);
     const FileName sysroot = m_parameters.sysRoot;
 
+    CppTools::RawProjectParts rpps;
     QHash<QString, QStringList> targetDataCacheCxx;
     QHash<QString, QStringList> targetDataCacheC;
     foreach (const CMakeBuildTarget &cbt, m_buildTargets) {
@@ -390,6 +391,8 @@ void TeaLeafReader::updateCodeModel(CppTools::RawProjectParts &rpps)
                                             : CppTools::ProjectPart::Library);
         rpps.append(rpp);
     }
+
+    return rpps;
 }
 
 void TeaLeafReader::cleanUpProcess()
@@ -409,7 +412,8 @@ void TeaLeafReader::cleanUpProcess()
 
 void TeaLeafReader::extractData()
 {
-    QTC_ASSERT(m_parameters.isValid() && m_parameters.cmakeTool, return);
+    CMakeTool *cmake = m_parameters.cmakeTool();
+    QTC_ASSERT(m_parameters.isValid() && cmake, return);
 
     const FileName srcDir = m_parameters.sourceDirectory;
     const FileName bldDir = m_parameters.workDirectory;
@@ -436,7 +440,7 @@ void TeaLeafReader::extractData()
     // setFolderName
     CMakeCbpParser cbpparser;
     // Parsing
-    if (!cbpparser.parseCbpFile(m_parameters.cmakeTool->pathMapper(), cbpFile, srcDir))
+    if (!cbpparser.parseCbpFile(cmake->pathMapper(), cbpFile, srcDir))
         return;
 
     m_projectName = cbpparser.projectName();
@@ -461,7 +465,8 @@ void TeaLeafReader::extractData()
 
 void TeaLeafReader::startCMake(const QStringList &configurationArguments)
 {
-    QTC_ASSERT(m_parameters.isValid() && m_parameters.cmakeTool, return);
+    CMakeTool *cmake = m_parameters.cmakeTool();
+    QTC_ASSERT(m_parameters.isValid() && cmake, return);
 
     const FileName workDirectory = m_parameters.workDirectory;
     QTC_ASSERT(!m_cmakeProcess, return);
@@ -506,7 +511,7 @@ void TeaLeafReader::startCMake(const QStringList &configurationArguments)
     TaskHub::clearTasks(ProjectExplorer::Constants::TASK_CATEGORY_BUILDSYSTEM);
 
     MessageManager::write(tr("Running \"%1 %2\" in %3.")
-                          .arg(m_parameters.cmakeTool->cmakeExecutable().toUserOutput())
+                          .arg(cmake->cmakeExecutable().toUserOutput())
                           .arg(args)
                           .arg(workDirectory.toUserOutput()));
 
@@ -516,7 +521,7 @@ void TeaLeafReader::startCMake(const QStringList &configurationArguments)
                              tr("Configuring \"%1\"").arg(m_parameters.projectName),
                              "CMake.Configure");
 
-    m_cmakeProcess->setCommand(m_parameters.cmakeTool->cmakeExecutable().toString(), args);
+    m_cmakeProcess->setCommand(cmake->cmakeExecutable().toString(), args);
     emit configurationStarted();
     m_cmakeProcess->start();
 }
@@ -573,7 +578,7 @@ void TeaLeafReader::processCMakeError()
 
 QStringList TeaLeafReader::getFlagsFor(const CMakeBuildTarget &buildTarget,
                                        QHash<QString, QStringList> &cache,
-                                       Id lang)
+                                       Id lang) const
 {
     // check cache:
     auto it = cache.constFind(buildTarget.title);
@@ -592,7 +597,7 @@ QStringList TeaLeafReader::getFlagsFor(const CMakeBuildTarget &buildTarget,
 
 bool TeaLeafReader::extractFlagsFromMake(const CMakeBuildTarget &buildTarget,
                                          QHash<QString, QStringList> &cache,
-                                         Id lang)
+                                         Id lang) const
 {
     QString flagsPrefix;
 
@@ -647,7 +652,7 @@ bool TeaLeafReader::extractFlagsFromMake(const CMakeBuildTarget &buildTarget,
 
 bool TeaLeafReader::extractFlagsFromNinja(const CMakeBuildTarget &buildTarget,
                                           QHash<QString, QStringList> &cache,
-                                          Id lang)
+                                          Id lang) const
 {
     Q_UNUSED(buildTarget)
     if (!cache.isEmpty()) // We fill the cache in one go!
@@ -665,7 +670,7 @@ bool TeaLeafReader::extractFlagsFromNinja(const CMakeBuildTarget &buildTarget,
     // found
     // Get "all" target's working directory
     QByteArray ninjaFile;
-    QString buildNinjaFile = takeBuildTargets().at(0).workingDirectory.toString();
+    QString buildNinjaFile = m_buildTargets.at(0).workingDirectory.toString();
     buildNinjaFile += "/build.ninja";
     QFile buildNinja(buildNinjaFile);
     if (buildNinja.exists()) {

@@ -200,12 +200,9 @@ namespace Internal {
   \internal
 */
 Action::Action(Id id)
-    : m_attributes(0),
+    : m_attributes({}),
       m_id(id),
-      m_isKeyInitialized(false),
-      m_action(new Utils::ProxyAction(this)),
-      m_active(false),
-      m_contextInitialized(false)
+      m_action(new Utils::ProxyAction(this))
 {
     m_action->setShortcutVisibleInToolTip(true);
     connect(m_action, &QAction::changed, this, &Action::updateActiveState);
@@ -276,9 +273,9 @@ void Action::setCurrentContext(const Context &context)
 {
     m_context = context;
 
-    QAction *currentAction = 0;
+    QAction *currentAction = nullptr;
     for (int i = 0; i < m_context.size(); ++i) {
-        if (QAction *a = m_contextActionMap.value(m_context.at(i), 0)) {
+        if (QAction *a = m_contextActionMap.value(m_context.at(i), nullptr)) {
             currentAction = a;
             break;
         }
@@ -316,10 +313,9 @@ void Action::addOverrideAction(QAction *action, const Context &context, bool scr
     if (context.isEmpty()) {
         m_contextActionMap.insert(Constants::C_GLOBAL, action);
     } else {
-        for (int i = 0; i < context.size(); ++i) {
-            Id id = context.at(i);
+        for (const Id &id : context) {
             if (m_contextActionMap.contains(id))
-                qWarning("%s", qPrintable(msgActionWarning(action, id, m_contextActionMap.value(id, 0))));
+                qWarning("%s", qPrintable(msgActionWarning(action, id, m_contextActionMap.value(id, nullptr))));
             m_contextActionMap.insert(id, action);
         }
     }
@@ -332,7 +328,7 @@ void Action::removeOverrideAction(QAction *action)
     QMutableMapIterator<Id, QPointer<QAction> > it(m_contextActionMap);
     while (it.hasNext()) {
         it.next();
-        if (it.value() == 0)
+        if (it.value() == nullptr)
             it.remove();
         else if (it.value() == action)
             it.remove();
@@ -369,7 +365,7 @@ bool Action::isScriptable(const Context &context) const
         return m_scriptableMap.value(m_action->action());
 
     for (int i = 0; i < context.size(); ++i) {
-        if (QAction *a = m_contextActionMap.value(context.at(i), 0)) {
+        if (QAction *a = m_contextActionMap.value(context.at(i), nullptr)) {
             if (m_scriptableMap.contains(a) && m_scriptableMap.value(a))
                 return true;
         }
@@ -418,6 +414,44 @@ bool Action::hasAttribute(Command::CommandAttribute attr) const
     return (m_attributes & attr);
 }
 
+void Action::setTouchBarText(const QString &text)
+{
+    m_touchBarText = text;
+}
+
+QString Action::touchBarText() const
+{
+    return m_touchBarText;
+}
+
+void Action::setTouchBarIcon(const QIcon &icon)
+{
+    m_touchBarIcon = icon;
+}
+
+QIcon Action::touchBarIcon() const
+{
+    return m_touchBarIcon;
+}
+
+QAction *Action::touchBarAction() const
+{
+    if (!m_touchBarAction) {
+        m_touchBarAction = std::make_unique<Utils::ProxyAction>();
+        m_touchBarAction->initialize(m_action);
+        m_touchBarAction->setIcon(m_touchBarIcon);
+        m_touchBarAction->setText(m_touchBarText);
+        // the touch bar action should be hidden if the command is not valid for the context
+        m_touchBarAction->setAttribute(Utils::ProxyAction::Hide);
+        m_touchBarAction->setAction(m_action->action());
+        connect(m_action,
+                &Utils::ProxyAction::currentActionChanged,
+                m_touchBarAction.get(),
+                &Utils::ProxyAction::setAction);
+    }
+    return m_touchBarAction.get();
+}
+
 } // namespace Internal
 
 void Command::augmentActionWithShortcutToolTip(QAction *a) const
@@ -433,7 +467,7 @@ void Command::augmentActionWithShortcutToolTip(QAction *a) const
 
 QToolButton *Command::toolButtonWithAppendedShortcut(QAction *action, Command *cmd)
 {
-    QToolButton *button = new QToolButton;
+    auto button = new QToolButton;
     button->setDefaultAction(action);
     if (cmd)
         cmd->augmentActionWithShortcutToolTip(action);

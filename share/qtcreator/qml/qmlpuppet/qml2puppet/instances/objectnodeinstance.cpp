@@ -44,6 +44,7 @@
 #include <QQmlParserStatus>
 #include <QTextDocument>
 #include <QLibraryInfo>
+#include <QJSValue>
 
 static bool isSimpleExpression(const QString &expression)
 {
@@ -264,11 +265,17 @@ static bool isList(const QQmlProperty &property)
     return property.propertyTypeCategory() == QQmlProperty::List;
 }
 
+static bool isQJSValue(const QQmlProperty &property)
+{
+    return property.isValid() && !strcmp(property.propertyTypeName(), "QJSValue");
+}
+
 static bool isObject(const QQmlProperty &property)
 {
-    return (property.propertyTypeCategory() == QQmlProperty::Object) ||
-            //QVariant can also store QObjects. Lets trust our model.
-           (QLatin1String(property.propertyTypeName()) == QLatin1String("QVariant"));
+    /* QVariant and QJSValue can also store QObjects. Lets trust our model. */
+    return property.isValid() && (property.propertyTypeCategory() == QQmlProperty::Object
+            || !strcmp(property.propertyTypeName(), "QVariant")
+            || isQJSValue(property));
 }
 
 static QVariant objectToVariant(QObject *object)
@@ -337,7 +344,10 @@ void ObjectNodeInstance::addToNewProperty(QObject *object, QObject *newParent, c
 
         list.append(object);
     } else if (isObject(property)) {
-        property.write(objectToVariant(object));
+        if (isQJSValue(property)) /* In this case we have to explcitly generate and convert a QJSValue */
+            property.write(QVariant::fromValue(engine()->newQObject(object)));
+        else
+            property.write(objectToVariant(object));
 
         if (QQuickItem *item = qobject_cast<QQuickItem *>(object))
             if (QQuickItem *newParentItem = qobject_cast<QQuickItem *>(newParent))
@@ -396,7 +406,7 @@ QVariant ObjectNodeInstance::convertEnumToValue(const QVariant &value, const Pro
         QQmlExpression expression(context(), object(), enumeration.toString());
         adjustedValue =  expression.evaluate();
         if (expression.hasError())
-            qDebug() << "Enumeration can not be evaluated:" << object() << name << enumeration;
+            qDebug() << "Enumeration cannot be evaluated:" << object() << name << enumeration;
     }
     return adjustedValue;
 }
@@ -612,10 +622,12 @@ QObject *ObjectNodeInstance::createPrimitive(const QString &typeName, int majorN
             || typeName == "QtQuick.Controls/Drawer"
             || typeName == "QtQuick.Controls/Dialog"
             || typeName == "QtQuick.Controls/Menu"
+            || typeName == "QtQuick.Controls/Pane"
             || typeName == "QtQuick.Controls/ToolTip")
         polishTypeName = "QtQuick/Item";
 
-    const QHash<QString, QString> mockHash = {{"QtQuick.Controls/SwipeView","qrc:/qtquickplugin/mockfiles/SwipeView.qml"}};
+    const QHash<QString, QString> mockHash = {{"QtQuick.Controls/SwipeView","qrc:/qtquickplugin/mockfiles/SwipeView.qml"},
+                                             {"QtQuick.Dialogs/Dialog","qrc:/qtquickplugin/mockfiles/Dialog.qml"}};
 
     QObject *object = nullptr;
 
@@ -646,7 +658,9 @@ QObject *ObjectNodeInstance::createPrimitiveFromSource(const QString &typeName, 
     if (parts.isEmpty())
         return 0;
 
-    const QString importString = parts.join(".") + " " + QString::number(majorNumber) + "." + QString::number(minorNumber);
+    QString importString = parts.join(".") + " " + QString::number(majorNumber) + "." + QString::number(minorNumber);
+    if (importString == "QtQuick 1.0") /* Workaround for implicit QQml import */
+        importString = "QtQuick 2.0";
     QString source = "import " + importString + "\n" + unqualifiedTypeName + " {\n" + "}\n";
     return createCustomParserObject(source, "", context);
 }
@@ -685,7 +699,7 @@ static inline QString fixComponentPathForIncompatibleQt(const QString &component
     if (componentPath.contains(importString)) {
         int index = componentPath.indexOf(importString) + 8;
         const QString relativeImportPath = componentPath.right(componentPath.length() - index);
-        QString fixedComponentPath = QLibraryInfo::location(QLibraryInfo::ImportsPath) + relativeImportPath;
+        QString fixedComponentPath = QLibraryInfo::location(QLibraryInfo::Qml2ImportsPath) + relativeImportPath;
         fixedComponentPath.replace(QLatin1Char('\\'), QLatin1Char('/'));
         if (QFileInfo::exists(fixedComponentPath))
             return fixedComponentPath;

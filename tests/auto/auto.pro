@@ -10,9 +10,9 @@ SUBDIRS += \
     extensionsystem \
     externaltool \
     environment \
-    generichighlighter \
     pointeralgorithm \
     profilewriter \
+    ssh \
     treeviewfind \
     toolchaincache \
     qtcprocess \
@@ -21,6 +21,7 @@ SUBDIRS += \
     filesearch \
     mapreduce \
     runextensions \
+    languageserverprotocol \
     sdktool \
     valgrind
 

@@ -25,12 +25,12 @@
 ****************************************************************************/
 
 #include "androidbuildapkstep.h"
+
 #include "androidbuildapkwidget.h"
 #include "androidconfigurations.h"
 #include "androidconstants.h"
 #include "androidmanager.h"
 #include "androidsdkmanager.h"
-#include "androidqtsupport.h"
 #include "certificatesmodel.h"
 
 #include "javaparser.h"
@@ -39,19 +39,28 @@
 #include <coreplugin/icore.h>
 
 #include <projectexplorer/buildconfiguration.h>
+#include <projectexplorer/buildsteplist.h>
+#include <projectexplorer/processparameters.h>
 #include <projectexplorer/project.h>
+#include <projectexplorer/projectexplorerconstants.h>
+#include <projectexplorer/projectnodes.h>
+#include <projectexplorer/runconfiguration.h>
 #include <projectexplorer/target.h>
 
 #include <qtsupport/qtkitinformation.h>
 
 #include <utils/algorithm.h>
+#include <utils/qtcprocess.h>
 #include <utils/synchronousprocess.h>
 #include <utils/utilsicons.h>
+
+#include <qmakeprojectmanager/qmakeprojectmanagerconstants.h>
 
 #include <QDialogButtonBox>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QLoggingCategory>
 #include <QMessageBox>
 #include <QProcess>
 #include <QPushButton>
@@ -59,14 +68,34 @@
 
 #include <memory>
 
+using namespace ProjectExplorer;
+using namespace Android::Internal;
+
+namespace {
+Q_LOGGING_CATEGORY(buildapkstepLog, "qtc.android.build.androidbuildapkstep", QtWarningMsg)
+}
+
 namespace Android {
-using namespace Internal;
 
 const QVersionNumber gradleScriptRevokedSdkVersion(25, 3, 0);
 const char KeystoreLocationKey[] = "KeystoreLocation";
 const char BuildTargetSdkKey[] = "BuildTargetSdk";
 const char VerboseOutputKey[] = "VerboseOutput";
 const char UseMinistroKey[] = "UseMinistro";
+
+static void setupProcessParameters(ProcessParameters *pp,
+                                   BuildConfiguration *bc,
+                                   const QStringList &arguments,
+                                   const QString &command)
+{
+    pp->setMacroExpander(bc->macroExpander());
+    pp->setWorkingDirectory(bc->buildDirectory().toString());
+    Utils::Environment env = bc->environment();
+    pp->setEnvironment(env);
+    pp->setCommand(command);
+    pp->setArguments(Utils::QtcProcess::joinArgs(arguments));
+    pp->resolveAll();
+}
 
 class PasswordInputDialog : public QDialog
 {
@@ -95,23 +124,36 @@ private:
                                                        this);
 };
 
-AndroidBuildApkStep::AndroidBuildApkStep(ProjectExplorer::BuildStepList *parent, Core::Id id)
-    : ProjectExplorer::AbstractProcessStep(parent, id),
+AndroidBuildApkStep::AndroidBuildApkStep(BuildStepList *parent)
+    : AbstractProcessStep(parent, Constants::ANDROID_BUILD_APK_ID),
       m_buildTargetSdk(AndroidConfig::apiLevelNameFor(AndroidConfigurations::
                                          sdkManager()->latestAndroidSdkPlatform()))
 {
     //: AndroidBuildApkStep default display name
     setDefaultDisplayName(tr("Build Android APK"));
+    setImmutable(true);
 }
 
-bool AndroidBuildApkStep::init(QList<const BuildStep *> &earlierSteps)
+AndroidBuildApkStep *AndroidBuildApkStep::findInBuild(const BuildConfiguration *bc)
+{
+    if (!bc)
+        return nullptr;
+    BuildStepList *bsl = bc->stepList(ProjectExplorer::Constants::BUILDSTEPS_BUILD);
+    QTC_ASSERT(bsl, return nullptr);
+    return bsl->firstOfType<AndroidBuildApkStep>();
+}
+
+bool AndroidBuildApkStep::init()
 {
     ProjectExplorer::BuildConfiguration *bc = buildConfiguration();
 
     if (m_signPackage) {
+        qCDebug(buildapkstepLog) << "Signing enabled";
         // check keystore and certificate passwords
-        if (!verifyKeystorePassword() || !verifyCertificatePassword())
+        if (!verifyKeystorePassword() || !verifyCertificatePassword()) {
+            qCDebug(buildapkstepLog) << "Init failed. Keystore/Certificate password verification failed.";
             return false;
+        }
 
         if (bc->buildType() != ProjectExplorer::BuildConfiguration::Release)
             emit addOutput(tr("Warning: Signing a debug or profile package."),
@@ -145,20 +187,94 @@ bool AndroidBuildApkStep::init(QList<const BuildStep *> &earlierSteps)
         return false;
     }
 
-    JavaParser *parser = new JavaParser;
+    auto parser = new JavaParser;
     parser->setProjectFileList(Utils::transform(target()->project()->files(ProjectExplorer::Project::AllFiles),
                                                 &Utils::FileName::toString));
 
-    parser->setSourceDirectory(AndroidManager::androidQtSupport(target())->packageSourceDir(target()));
+    RunConfiguration *rc = target()->activeRunConfiguration();
+    const ProjectNode *node = rc ? target()->project()->findNodeForBuildKey(rc->buildKey()) : nullptr;
+
+    QFileInfo sourceDirInfo(node ? node->data(Constants::AndroidPackageSourceDir).toString() : QString());
+    parser->setSourceDirectory(Utils::FileName::fromString(sourceDirInfo.canonicalFilePath()));
     parser->setBuildDirectory(Utils::FileName::fromString(bc->buildDirectory().appendPath(Constants::ANDROID_BUILDDIRECTORY).toString()));
     setOutputParser(parser);
 
     m_openPackageLocationForRun = m_openPackageLocation;
-    m_apkPath = AndroidManager::androidQtSupport(target())->apkPath(target()).toString();
+    m_apkPath = AndroidManager::apkPath(target()).toString();
+    qCDebug(buildapkstepLog) << "APK path:" << m_apkPath;
 
-    bool result = AbstractProcessStep::init(earlierSteps);
-    if (!result)
+    if (!AbstractProcessStep::init())
         return false;
+
+    QString command = version->qmakeProperty("QT_HOST_BINS");
+    if (!command.endsWith('/'))
+        command += '/';
+    command += "androiddeployqt";
+    if (Utils::HostOsInfo::isWindowsHost())
+        command += ".exe";
+
+    QString outputDir = bc->buildDirectory().appendPath(Constants::ANDROID_BUILDDIRECTORY).toString();
+
+    QString inputFile;
+    if (node)
+        inputFile = node->data(Constants::AndroidDeploySettingsFile).toString();
+
+    if (inputFile.isEmpty()) {
+        m_skipBuilding = true;
+        return true;
+    }
+
+    QString buildTargetSdk = AndroidManager::buildTargetSDK(target());
+    if (buildTargetSdk.isEmpty()) {
+        emit addOutput(tr("Android build SDK not defined. Check Android settings."),
+                       OutputFormat::Stderr);
+        return false;
+    }
+
+    QStringList arguments = {"--input", inputFile,
+                             "--output", outputDir,
+                             "--android-platform", AndroidManager::buildTargetSDK(target()),
+                             "--jdk", AndroidConfigurations::currentConfig().openJDKLocation().toString()};
+
+    if (m_verbose)
+        arguments << "--verbose";
+
+    arguments << "--gradle";
+
+    if (m_useMinistro)
+        arguments << "--deployment" << "ministro";
+
+    QStringList argumentsPasswordConcealed = arguments;
+
+    if (m_signPackage) {
+        arguments << "--sign" << m_keystorePath.toString() << m_certificateAlias
+                  << "--storepass" << m_keystorePasswd;
+        argumentsPasswordConcealed << "--sign" << "******"
+                                   << "--storepass" << "******";
+        if (!m_certificatePasswd.isEmpty()) {
+            arguments << "--keypass" << m_certificatePasswd;
+            argumentsPasswordConcealed << "--keypass" << "******";
+        }
+
+    }
+
+    // Must be the last option, otherwise androiddeployqt might use the other
+    // params (e.g. --sign) to choose not to add gdbserver
+    if (version->qtVersion() >= QtSupport::QtVersionNumber(5, 6, 0)) {
+        if (m_addDebugger || bc->buildType() == ProjectExplorer::BuildConfiguration::Debug)
+            arguments << "--gdbserver";
+        else
+            arguments << "--no-gdbserver";
+    }
+
+    ProjectExplorer::ProcessParameters *pp = processParameters();
+    setupProcessParameters(pp, bc, arguments, command);
+
+    // Generate arguments with keystore password concealed
+    ProjectExplorer::ProcessParameters pp2;
+    setupProcessParameters(&pp2, bc, argumentsPasswordConcealed, command);
+    m_command = pp2.effectiveCommand();
+    m_argumentsPasswordConcealed = pp2.prettyArguments();
 
     return true;
 }
@@ -183,8 +299,8 @@ void AndroidBuildApkStep::processFinished(int exitCode, QProcess::ExitStatus sta
 bool AndroidBuildApkStep::verifyKeystorePassword()
 {
     if (!m_keystorePath.exists()) {
-        addOutput(tr("Cannot sign the package. Invalid keystore path (%1).")
-                  .arg(m_keystorePath.toString()), OutputFormat::ErrorMessage);
+        emit addOutput(tr("Cannot sign the package. Invalid keystore path (%1).")
+                           .arg(m_keystorePath.toString()), OutputFormat::ErrorMessage);
         return false;
     }
 
@@ -203,8 +319,8 @@ bool AndroidBuildApkStep::verifyCertificatePassword()
 {
     if (!AndroidManager::checkCertificateExists(m_keystorePath.toString(), m_keystorePasswd,
                                                  m_certificateAlias)) {
-        addOutput(tr("Cannot sign the package. Certificate alias %1 does not exist.")
-                  .arg(m_certificateAlias), OutputFormat::ErrorMessage);
+        emit addOutput(tr("Cannot sign the package. Certificate alias %1 does not exist.")
+                           .arg(m_certificateAlias), OutputFormat::ErrorMessage);
         return false;
     }
 
@@ -222,6 +338,24 @@ bool AndroidBuildApkStep::verifyCertificatePassword()
                                                            verifyCallback, m_certificateAlias,
                                                            &success);
     return success;
+}
+
+void AndroidBuildApkStep::doRun()
+{
+    if (m_skipBuilding) {
+        emit addOutput(tr("No application .pro file found, not building an APK."), BuildStep::OutputFormat::ErrorMessage);
+        emit finished(true);
+        return;
+    }
+    AbstractProcessStep::doRun();
+}
+
+void AndroidBuildApkStep::processStarted()
+{
+    emit addOutput(tr("Starting: \"%1\" %2")
+                   .arg(QDir::toNativeSeparators(m_command),
+                        m_argumentsPasswordConcealed),
+                   BuildStep::OutputFormat::NormalMessage);
 }
 
 bool AndroidBuildApkStep::fromMap(const QVariantMap &map)
@@ -351,7 +485,7 @@ QAbstractItemModel *AndroidBuildApkStep::keystoreCertificates()
     const Utils::SynchronousProcessResponse response
             = keytoolProc.run(AndroidConfigurations::currentConfig().keytoolPath().toString(), params);
     if (response.result > Utils::SynchronousProcessResponse::FinishedError)
-        QMessageBox::critical(0, tr("Error"), tr("Failed to run keytool."));
+        QMessageBox::critical(nullptr, tr("Error"), tr("Failed to run keytool."));
     else
         model = new CertificatesModel(response.stdOut(), this);
 
@@ -426,6 +560,22 @@ QString PasswordInputDialog::getPassword(Context context, std::function<bool (co
     return isAccepted ? dlg->inputEdit->text() : "";
 }
 
+
+namespace Internal {
+
+// AndroidBuildApkStepFactory
+
+AndroidBuildApkStepFactory::AndroidBuildApkStepFactory()
+{
+    registerStep<AndroidBuildApkStep>(Constants::ANDROID_BUILD_APK_ID);
+    setSupportedProjectType(QmakeProjectManager::Constants::QMAKEPROJECT_ID);
+    setSupportedDeviceType(Constants::ANDROID_DEVICE_TYPE);
+    setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_BUILD);
+    setDisplayName(AndroidBuildApkStep::tr("Build Android APK"));
+    setRepeatable(false);
+}
+
+} // namespace Internal
 } // namespace Android
 
 #include "androidbuildapkstep.moc"

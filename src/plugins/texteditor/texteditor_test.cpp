@@ -51,7 +51,7 @@ struct TestBlockSelection
     TestBlockSelection(int positionBlock, int positionColumn, int anchorBlock, int anchorColumn)
         : positionBlock(positionBlock), positionColumn(positionColumn)
         , anchorBlock(anchorBlock), anchorColumn(anchorColumn) {}
-    TestBlockSelection() {}
+    TestBlockSelection() = default;
 };
 
 Q_DECLARE_METATYPE(TransFormationType)
@@ -126,9 +126,9 @@ void Internal::TextEditorPlugin::testBlockSelectionTransformation()
 
     // open editor
     Core::IEditor *editor = Core::EditorManager::openEditorWithContents(
-                Core::Constants::K_DEFAULT_TEXT_EDITOR_ID, 0, input.toLatin1());
+                Core::Constants::K_DEFAULT_TEXT_EDITOR_ID, nullptr, input.toLatin1());
     QVERIFY(editor);
-    if (BaseTextEditor *textEditor = qobject_cast<BaseTextEditor*>(editor)) {
+    if (auto textEditor = qobject_cast<BaseTextEditor*>(editor)) {
         TextEditorWidget *editorWidget = textEditor->editorWidget();
         editorWidget->setBlockSelection(selection.positionBlock,
                                         selection.positionColumn,
@@ -349,9 +349,9 @@ void Internal::TextEditorPlugin::testBlockSelectionInsert()
 
     // open editor
     Core::IEditor *editor = Core::EditorManager::openEditorWithContents(
-                Core::Constants::K_DEFAULT_TEXT_EDITOR_ID, 0, text);
+                Core::Constants::K_DEFAULT_TEXT_EDITOR_ID, nullptr, text);
     QVERIFY(editor);
-    if (BaseTextEditor *textEditor = qobject_cast<BaseTextEditor*>(editor)) {
+    if (auto textEditor = qobject_cast<BaseTextEditor*>(editor)) {
         TextEditorWidget *editorWidget = textEditor->editorWidget();
         editorWidget->setBlockSelection(selection.positionBlock,
                                         selection.positionColumn,
@@ -427,9 +427,9 @@ void Internal::TextEditorPlugin::testBlockSelectionRemove()
 
     // open editor
     Core::IEditor *editor = Core::EditorManager::openEditorWithContents(
-                Core::Constants::K_DEFAULT_TEXT_EDITOR_ID, 0, text);
+                Core::Constants::K_DEFAULT_TEXT_EDITOR_ID, nullptr, text);
     QVERIFY(editor);
-    if (BaseTextEditor *textEditor = qobject_cast<BaseTextEditor*>(editor)) {
+    if (auto textEditor = qobject_cast<BaseTextEditor*>(editor)) {
         TextEditorWidget *editorWidget = textEditor->editorWidget();
         editorWidget->setBlockSelection(selection.positionBlock,
                                         selection.positionColumn,
@@ -482,9 +482,9 @@ void Internal::TextEditorPlugin::testBlockSelectionCopy()
 
     // open editor
     Core::IEditor *editor = Core::EditorManager::openEditorWithContents(
-                Core::Constants::K_DEFAULT_TEXT_EDITOR_ID, 0, text);
+                Core::Constants::K_DEFAULT_TEXT_EDITOR_ID, nullptr, text);
     QVERIFY(editor);
-    if (BaseTextEditor *textEditor = qobject_cast<BaseTextEditor*>(editor)) {
+    if (auto textEditor = qobject_cast<BaseTextEditor*>(editor)) {
         TextEditorWidget *editorWidget = textEditor->editorWidget();
         editorWidget->setBlockSelection(selection.positionBlock,
                                         selection.positionColumn,
@@ -529,23 +529,25 @@ struct TabSettingsFlags{
     TabSettings::ContinuationAlignBehavior behavior;
 };
 
-typedef std::function<bool(TabSettingsFlags)> IsClean;
-void generateTestRows(QLatin1String name, QString text, IsClean isClean)
+using IsClean = std::function<bool (TabSettingsFlags)>;
+void generateTestRows(const QLatin1String &name, const QString &text, IsClean isClean)
 {
-    QList<TabSettings::TabPolicy> allPolicys;
-    allPolicys << TabSettings::SpacesOnlyTabPolicy
-               << TabSettings::TabsOnlyTabPolicy
-               << TabSettings::MixedTabPolicy;
-    QList<TabSettings::ContinuationAlignBehavior> allbehavior;
-    allbehavior << TabSettings::NoContinuationAlign
-                << TabSettings::ContinuationAlignWithSpaces
-                << TabSettings::ContinuationAlignWithIndent;
+    const QVector<TabSettings::TabPolicy> allPolicies = {
+        TabSettings::SpacesOnlyTabPolicy,
+        TabSettings::TabsOnlyTabPolicy,
+        TabSettings::MixedTabPolicy
+    };
+    const QVector<TabSettings::ContinuationAlignBehavior> allbehaviors = {
+        TabSettings::NoContinuationAlign,
+        TabSettings::ContinuationAlignWithSpaces,
+        TabSettings::ContinuationAlignWithIndent
+    };
 
     const QLatin1Char splitter('_');
     const int indentSize = 3;
 
-    foreach (TabSettings::TabPolicy policy, allPolicys) {
-        foreach (TabSettings::ContinuationAlignBehavior behavior, allbehavior) {
+    for (auto policy : allPolicies) {
+        for (auto behavior : allbehaviors) {
             const QString tag = tabPolicyToString(policy) + splitter
                     + continuationAlignBehaviorToString(behavior) + splitter
                     + name;

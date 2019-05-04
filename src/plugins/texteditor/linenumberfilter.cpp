@@ -36,7 +36,7 @@
 #include <QPair>
 #include <QVariant>
 
-typedef QPair<int,int> LineColumn;
+using LineColumn = QPair<int, int>;
 Q_DECLARE_METATYPE(LineColumn)
 
 using namespace Core;
@@ -56,7 +56,7 @@ LineNumberFilter::LineNumberFilter(QObject *parent)
 void LineNumberFilter::prepareSearch(const QString &entry)
 {
     Q_UNUSED(entry)
-    m_hasCurrentEditor = EditorManager::currentEditor() != 0;
+    m_hasCurrentEditor = EditorManager::currentEditor() != nullptr;
 }
 
 QList<LocatorFilterEntry> LineNumberFilter::matchesFor(QFutureInterface<LocatorFilterEntry> &, const QString &entry)

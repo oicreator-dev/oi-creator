@@ -12,9 +12,7 @@ SOURCES += qnxplugin.cpp \
     qnxdebugsupport.cpp \
     qnxqtversionfactory.cpp \
     qnxqtversion.cpp \
-    qnxdeployconfiguration.cpp \
     qnxdevice.cpp \
-    pathchooserdelegate.cpp \
     qnxdevicetester.cpp \
     qnxdeviceprocesssignaloperation.cpp \
     qnxdeviceprocesslist.cpp \
@@ -39,9 +37,7 @@ HEADERS += qnxplugin.h\
     qnxdebugsupport.h \
     qnxqtversionfactory.h \
     qnxqtversion.h \
-    qnxdeployconfiguration.h \
     qnxdevice.h \
-    pathchooserdelegate.h \
     qnxdevicetester.h \
     qnxdeviceprocesssignaloperation.h \
     qnxdeviceprocesslist.h \

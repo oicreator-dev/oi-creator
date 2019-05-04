@@ -28,40 +28,47 @@
 #include "clangpathwatcherinterface.h"
 #include "clangpathwatchernotifier.h"
 #include "pchcreatorinterface.h"
-#include "pchgeneratornotifierinterface.h"
 #include "pchmanagerserverinterface.h"
-#include "projectpartsinterface.h"
+#include "projectpartsmanagerinterface.h"
+#include "toolchainargumentscache.h"
 
+#include <generatedfilesinterface.h>
 #include <ipcclientprovider.h>
 
 namespace ClangBackEnd {
 
 class SourceRangesAndDiagnosticsForQueryMessage;
+class PchTaskGeneratorInterface;
 
 class PchManagerServer : public PchManagerServerInterface,
                          public ClangPathWatcherNotifier,
-                         public PchGeneratorNotifierInterface,
                          public IpcClientProvider<PchManagerClientInterface>
 
 {
 public:
     PchManagerServer(ClangPathWatcherInterface &fileSystemWatcher,
-                     PchCreatorInterface &pchCreator,
-                     ProjectPartsInterface &projectParts);
-
+                     PchTaskGeneratorInterface &pchTaskGenerator,
+                     ProjectPartsManagerInterface &projectParts,
+                     GeneratedFilesInterface &generatedFiles);
 
     void end() override;
     void updateProjectParts(UpdateProjectPartsMessage &&message) override;
     void removeProjectParts(RemoveProjectPartsMessage &&message) override;
+    void updateGeneratedFiles(UpdateGeneratedFilesMessage &&message) override;
+    void removeGeneratedFiles(RemoveGeneratedFilesMessage &&message) override;
 
-    void pathsWithIdsChanged(const Utils::SmallStringVector &ids) override;
+    void pathsWithIdsChanged(const ProjectPartIds &ids) override;
     void pathsChanged(const FilePathIds &filePathIds) override;
-    void taskFinished(TaskFinishStatus status, const ProjectPartPch &projectPartPch) override;
+
+    void setPchCreationProgress(int progress, int total);
+    void setDependencyCreationProgress(int progress, int total);
 
 private:
     ClangPathWatcherInterface &m_fileSystemWatcher;
-    PchCreatorInterface &m_pchCreator;
-    ProjectPartsInterface &m_projectParts;
+    PchTaskGeneratorInterface &m_pchTaskGenerator;
+    ProjectPartsManagerInterface &m_projectPartsManager;
+    GeneratedFilesInterface &m_generatedFiles;
+    ToolChainsArgumentsCache m_toolChainsArgumentsCache;
 };
 
 } // namespace ClangBackEnd

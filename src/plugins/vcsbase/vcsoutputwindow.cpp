@@ -52,6 +52,8 @@
 #include <QPoint>
 #include <QFileInfo>
 
+using namespace Utils;
+
 /*!
     \class VcsBase::VcsBaseOutputWindow
 
@@ -89,46 +91,38 @@ private:
 class OutputWindowPlainTextEdit : public Core::OutputWindow
 {
 public:
-    explicit OutputWindowPlainTextEdit(QWidget *parent = 0);
-    ~OutputWindowPlainTextEdit();
+    explicit OutputWindowPlainTextEdit(QWidget *parent = nullptr);
+    ~OutputWindowPlainTextEdit() override;
 
     void appendLines(QString const& s, const QString &repository = QString());
     void appendLinesWithStyle(QString const& s, enum VcsOutputWindow::MessageStyle style, const QString &repository = QString());
 
 protected:
-    virtual void contextMenuEvent(QContextMenuEvent *event);
+    void contextMenuEvent(QContextMenuEvent *event) override;
 
 private:
     void setFormat(enum VcsOutputWindow::MessageStyle style);
-    QString identifierUnderCursor(const QPoint &pos, QString *repository = 0) const;
+    QString identifierUnderCursor(const QPoint &pos, QString *repository = nullptr) const;
 
+    Utils::OutputFormat m_format;
     const QTextCharFormat m_defaultFormat;
     QTextCharFormat m_errorFormat;
     QTextCharFormat m_warningFormat;
     QTextCharFormat m_commandFormat;
     QTextCharFormat m_messageFormat;
-    Utils::OutputFormatter *m_formatter;
+    OutputFormatter *m_formatter;
 };
 
 OutputWindowPlainTextEdit::OutputWindowPlainTextEdit(QWidget *parent) :
-    Core::OutputWindow(Core::Context(C_VCS_OUTPUT_PANE), parent),
-    m_defaultFormat(currentCharFormat()),
-    m_errorFormat(m_defaultFormat),
-    m_warningFormat(m_defaultFormat),
-    m_commandFormat(m_defaultFormat),
-    m_messageFormat(m_defaultFormat)
+    Core::OutputWindow(Core::Context(C_VCS_OUTPUT_PANE), parent)
 {
-    using Utils::Theme;
     setReadOnly(true);
     setUndoRedoEnabled(false);
     setFrameStyle(QFrame::NoFrame);
-    m_errorFormat.setForeground(Utils::creatorTheme()->color(Theme::OutputPanes_ErrorMessageTextColor));
-    m_warningFormat.setForeground(Utils::creatorTheme()->color(Theme::OutputPanes_WarningMessageTextColor));
-    m_commandFormat.setFontWeight(QFont::Bold);
-    m_messageFormat.setForeground(Utils::creatorTheme()->color(Theme::OutputPanes_MessageOutput));
-    m_formatter = new Utils::OutputFormatter;
+    m_formatter = new OutputFormatter;
+    m_formatter->setBoldFontEnabled(false);
     m_formatter->setPlainTextEdit(this);
-    Aggregation::Aggregate *agg = new Aggregation::Aggregate;
+    auto agg = new Aggregation::Aggregate;
     agg->add(this);
     agg->add(new Core::BaseTextFind(this));
 }
@@ -183,7 +177,7 @@ void OutputWindowPlainTextEdit::contextMenuEvent(QContextMenuEvent *event)
     // Add 'open file'
     QString repository;
     const QString token = identifierUnderCursor(event->pos(), &repository);
-    QAction *openAction = 0;
+    QAction *openAction = nullptr;
     if (!token.isEmpty()) {
         // Check for a file, expand via repository if relative
         QFileInfo fi(token);
@@ -225,7 +219,7 @@ void OutputWindowPlainTextEdit::appendLines(QString const& s, const QString &rep
     const QChar newLine(QLatin1Char('\n'));
     const QChar lastChar = s.at(s.size() - 1);
     const bool appendNewline = (lastChar != QLatin1Char('\r') && lastChar != newLine);
-    m_formatter->appendMessage(appendNewline ? s + newLine : s, currentCharFormat());
+    m_formatter->appendMessage(appendNewline ? s + newLine : s, m_format);
 
     // Scroll down
     moveCursor(QTextCursor::End);
@@ -249,28 +243,28 @@ void OutputWindowPlainTextEdit::appendLinesWithStyle(QString const& s, enum VcsO
     else {
         appendLines(s, repository);
     }
-
-    setCurrentCharFormat(m_defaultFormat);
 }
 
 void OutputWindowPlainTextEdit::setFormat(enum VcsOutputWindow::MessageStyle style)
 {
+    m_formatter->setBoldFontEnabled(style == VcsOutputWindow::Command);
+
     switch (style) {
     case VcsOutputWindow::Warning:
-        setCurrentCharFormat(m_warningFormat);
+        m_format = LogMessageFormat;
         break;
     case VcsOutputWindow::Error:
-        setCurrentCharFormat(m_errorFormat);
+        m_format = ErrorMessageFormat;
         break;
     case VcsOutputWindow::Message:
-        setCurrentCharFormat(m_messageFormat);
+        m_format = NormalMessageFormat;
         break;
     case VcsOutputWindow::Command:
-        setCurrentCharFormat(m_commandFormat);
+        m_format = NormalMessageFormat;
         break;
     default:
     case VcsOutputWindow::None:
-        setCurrentCharFormat(m_defaultFormat);
+        m_format = OutputFormat::StdOutFormat;
         break;
     }
 }
@@ -286,8 +280,8 @@ public:
     QRegExp passwordRegExp;
 };
 
-static VcsOutputWindow *m_instance = 0;
-static VcsOutputWindowPrivate *d = 0;
+static VcsOutputWindow *m_instance = nullptr;
+static VcsOutputWindowPrivate *d = nullptr;
 
 VcsOutputWindow::VcsOutputWindow()
 {
@@ -304,7 +298,7 @@ static QString filterPasswordFromUrls(const QString &input)
     while ((pos = d->passwordRegExp.indexIn(result, pos)) >= 0) {
         QString tmp = result.left(pos + 3) + d->passwordRegExp.cap(1) + QLatin1String(":***@");
         int newStart = tmp.count();
-        tmp += result.mid(pos + d->passwordRegExp.matchedLength());
+        tmp += result.midRef(pos + d->passwordRegExp.matchedLength());
         result = tmp;
         pos = newStart;
     }
@@ -313,7 +307,7 @@ static QString filterPasswordFromUrls(const QString &input)
 
 VcsOutputWindow::~VcsOutputWindow()
 {
-    m_instance = 0;
+    m_instance = nullptr;
     delete d;
 }
 
@@ -352,16 +346,17 @@ void VcsOutputWindow::visibilityChanged(bool visible)
 
 void VcsOutputWindow::setFocus()
 {
+    d->widget.setFocus();
 }
 
 bool VcsOutputWindow::hasFocus() const
 {
-    return false;
+    return d->widget.hasFocus();
 }
 
 bool VcsOutputWindow::canFocus() const
 {
-    return false;
+    return true;
 }
 
 bool VcsOutputWindow::canNavigate() const
@@ -435,12 +430,12 @@ static inline QString formatArguments(const QStringList &args)
         if (i)
             str << ' ';
         if (arg.startsWith(QString::fromLatin1(passwordOptionC) + QLatin1Char('='))) {
-            str << Utils::QtcProcess::quoteArg("--password=********");
+            str << QtcProcess::quoteArg("--password=********");
             continue;
         }
-        str << Utils::QtcProcess::quoteArg(arg);
+        str << QtcProcess::quoteArg(arg);
         if (arg == QLatin1String(passwordOptionC)) {
-            str << ' ' << Utils::QtcProcess::quoteArg("********");
+            str << ' ' << QtcProcess::quoteArg("********");
             i++;
         }
     }
@@ -448,11 +443,11 @@ static inline QString formatArguments(const QStringList &args)
 }
 
 QString VcsOutputWindow::msgExecutionLogEntry(const QString &workingDir,
-                                                  const Utils::FileName &executable,
-                                                  const QStringList &arguments)
+                                              const FileName &executable,
+                                              const QStringList &arguments)
 {
     const QString args = formatArguments(arguments);
-    const QString nativeExecutable = Utils::QtcProcess::quoteArg(executable.toUserOutput());
+    const QString nativeExecutable = QtcProcess::quoteArg(executable.toUserOutput());
     if (workingDir.isEmpty())
         return tr("Running: %1 %2").arg(nativeExecutable, args) + QLatin1Char('\n');
     return tr("Running in %1: %2 %3").
@@ -465,7 +460,7 @@ void VcsOutputWindow::appendShellCommandLine(const QString &text)
 }
 
 void VcsOutputWindow::appendCommand(const QString &workingDirectory,
-                                    const Utils::FileName &binary,
+                                    const FileName &binary,
                                     const QStringList &args)
 {
     appendShellCommandLine(msgExecutionLogEntry(workingDirectory, binary, args));

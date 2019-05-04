@@ -62,9 +62,9 @@ class FunctionGraphicsTextItem : public QAbstractGraphicsShapeItem
 public:
     FunctionGraphicsTextItem(const QString &text, QGraphicsItem *parent);
 
-    virtual void paint(QPainter *painter,
-                       const QStyleOptionGraphicsItem *option, QWidget *widget);
-    virtual QRectF boundingRect() const;
+    void paint(QPainter *painter,
+               const QStyleOptionGraphicsItem *option, QWidget *widget) override;
+    QRectF boundingRect() const override;
 
 private:
     QString m_text;
@@ -80,14 +80,14 @@ public:
     };
 
     FunctionGraphicsItem(const QString &text, qreal x, qreal y,
-                         qreal width, qreal height, QGraphicsItem *parent = 0);
+                         qreal width, qreal height, QGraphicsItem *parent = nullptr);
 
-    virtual void paint(QPainter *painter,
-                       const QStyleOptionGraphicsItem *option, QWidget *widget);
+    void paint(QPainter *painter,
+               const QStyleOptionGraphicsItem *option, QWidget *widget) override;
     FunctionGraphicsTextItem *textItem() const;
 
 private:
-    FunctionGraphicsTextItem *m_text;
+    FunctionGraphicsTextItem *m_text = nullptr;
 };
 
 FunctionGraphicsTextItem::FunctionGraphicsTextItem(const QString &text,
@@ -97,7 +97,7 @@ FunctionGraphicsTextItem::FunctionGraphicsTextItem(const QString &text,
     , m_previousViewportDimension(0)
 {
     setFlag(QGraphicsItem::ItemIgnoresTransformations);
-    setAcceptedMouseButtons(0); // do not steal focus from parent item
+    setAcceptedMouseButtons(nullptr); // do not steal focus from parent item
     setToolTip(text);
 }
 
@@ -155,7 +155,6 @@ QRectF FunctionGraphicsTextItem::boundingRect() const
 FunctionGraphicsItem::FunctionGraphicsItem(const QString &text,
         qreal x, qreal y, qreal width, qreal height, QGraphicsItem *parent)
     : QGraphicsRectItem(x, y, width, height, parent)
-    , m_text(0)
 {
     setFlag(QGraphicsItem::ItemIsSelectable);
     setFlag(QGraphicsItem::ItemClipsToShape);
@@ -204,40 +203,40 @@ void FunctionGraphicsItem::paint(QPainter *painter,
     painter->restore();
 }
 
-class Visualisation::Private
+class Visualization::Private
 {
 public:
-    Private(Visualisation *qq);
+    Private(Visualization *qq);
 
     void handleMousePressEvent(QMouseEvent *event, bool doubleClicked);
     qreal sceneHeight() const;
     qreal sceneWidth() const;
 
-    Visualisation *q;
+    Visualization *q;
     DataProxyModel *m_model;
     QGraphicsScene m_scene;
 };
 
-Visualisation::Private::Private(Visualisation *qq)
+Visualization::Private::Private(Visualization *qq)
     : q(qq)
     , m_model(new DataProxyModel(qq))
 {
     // setup scene
-    m_scene.setObjectName(QLatin1String("Visualisation Scene"));
+    m_scene.setObjectName("Visualisation Scene");
     ///NOTE: with size 100x100 the Qt-internal mouse selection fails...
     m_scene.setSceneRect(0, 0, 1024, 1024);
 
     // setup model
     m_model->setMinimumInclusiveCostRatio(0.1);
     connect(m_model, &DataProxyModel::filterFunctionChanged,
-            qq, &Visualisation::populateScene);
+            qq, &Visualization::populateScene);
 }
 
-void Visualisation::Private::handleMousePressEvent(QMouseEvent *event,
+void Visualization::Private::handleMousePressEvent(QMouseEvent *event,
                                                    bool doubleClicked)
 {
     // find the first item that accepts mouse presses under the cursor position
-    QGraphicsItem *itemAtPos = 0;
+    QGraphicsItem *itemAtPos = nullptr;
     foreach (QGraphicsItem *item, q->items(event->pos())) {
         if (!(item->acceptedMouseButtons() & event->button()))
             continue;
@@ -251,109 +250,109 @@ void Visualisation::Private::handleMousePressEvent(QMouseEvent *event,
         const Function *func = q->functionForItem(itemAtPos);
 
         if (doubleClicked) {
-            q->functionActivated(func);
+            emit q->functionActivated(func);
         } else {
             q->scene()->clearSelection();
             itemAtPos->setSelected(true);
-            q->functionSelected(func);
+            emit q->functionSelected(func);
         }
     }
 
 }
 
-qreal Visualisation::Private::sceneHeight() const
+qreal Visualization::Private::sceneHeight() const
 {
     return m_scene.height() - FIT_IN_VIEW_MARGIN;
 }
 
-qreal Visualisation::Private::sceneWidth() const
+qreal Visualization::Private::sceneWidth() const
 {
     // Magic number to improve margins appearance
     return m_scene.width() + 1;
 }
 
-Visualisation::Visualisation(QWidget *parent)
+Visualization::Visualization(QWidget *parent)
     : QGraphicsView(parent)
     , d(new Private(this))
 {
-    setObjectName(QLatin1String("Visualisation View"));
+    setObjectName("Visualisation View");
     setScene(&d->m_scene);
     setRenderHint(QPainter::Antialiasing);
 }
 
-Visualisation::~Visualisation()
+Visualization::~Visualization()
 {
     delete d;
 }
 
-const Function *Visualisation::functionForItem(QGraphicsItem *item) const
+const Function *Visualization::functionForItem(QGraphicsItem *item) const
 {
     return item->data(FunctionGraphicsItem::FunctionCallKey).value<const Function *>();
 }
 
-QGraphicsItem *Visualisation::itemForFunction(const Function *function) const
+QGraphicsItem *Visualization::itemForFunction(const Function *function) const
 {
     foreach (QGraphicsItem *item, items()) {
         if (functionForItem(item) == function)
             return item;
     }
-    return 0;
+    return nullptr;
 }
 
-void Visualisation::setFunction(const Function *function)
+void Visualization::setFunction(const Function *function)
 {
     d->m_model->setFilterFunction(function);
 }
 
-const Function *Visualisation::function() const
+const Function *Visualization::function() const
 {
     return d->m_model->filterFunction();
 }
 
-void Visualisation::setMinimumInclusiveCostRatio(double ratio)
+void Visualization::setMinimumInclusiveCostRatio(double ratio)
 {
     d->m_model->setMinimumInclusiveCostRatio(ratio);
 }
 
-void Visualisation::setModel(QAbstractItemModel *model)
+void Visualization::setModel(QAbstractItemModel *model)
 {
     QTC_ASSERT(!d->m_model->sourceModel() && model, return); // only set once!
     d->m_model->setSourceModel(model);
 
     connect(model, &QAbstractItemModel::columnsInserted,
-            this, &Visualisation::populateScene);
+            this, &Visualization::populateScene);
     connect(model, &QAbstractItemModel::columnsMoved,
-            this, &Visualisation::populateScene);
+            this, &Visualization::populateScene);
     connect(model, &QAbstractItemModel::columnsRemoved,
-            this, &Visualisation::populateScene);
+            this, &Visualization::populateScene);
     connect(model, &QAbstractItemModel::dataChanged,
-            this, &Visualisation::populateScene);
+            this, &Visualization::populateScene);
     connect(model, &QAbstractItemModel::headerDataChanged,
-            this, &Visualisation::populateScene);
-    connect(model, &QAbstractItemModel::layoutChanged, this, &Visualisation::populateScene);
-    connect(model, &QAbstractItemModel::modelReset, this, &Visualisation::populateScene);
+            this, &Visualization::populateScene);
+    connect(model, &QAbstractItemModel::layoutChanged, this, &Visualization::populateScene);
+    connect(model, &QAbstractItemModel::modelReset, this, &Visualization::populateScene);
     connect(model, &QAbstractItemModel::rowsInserted,
-            this, &Visualisation::populateScene);
+            this, &Visualization::populateScene);
     connect(model, &QAbstractItemModel::rowsMoved,
-            this, &Visualisation::populateScene);
+            this, &Visualization::populateScene);
     connect(model, &QAbstractItemModel::rowsRemoved,
-            this, &Visualisation::populateScene);
+            this, &Visualization::populateScene);
 
     populateScene();
 }
 
-void Visualisation::setText(const QString &message)
+void Visualization::setText(const QString &message)
 {
     d->m_scene.clear();
 
     QGraphicsSimpleTextItem *textItem = d->m_scene.addSimpleText(message);
-    textItem->setBrush(palette().foreground());
+    textItem->setBrush(palette().windowText());
     textItem->setPos((d->sceneWidth() - textItem->boundingRect().width()) / 2,
                      (d->sceneHeight() - textItem->boundingRect().height()) / 2);
     textItem->setFlag(QGraphicsItem::ItemIgnoresTransformations);
 }
 
-void Visualisation::populateScene()
+void Visualization::populateScene()
 {
     // reset scene first
     d->m_scene.clear();
@@ -364,7 +363,7 @@ void Visualisation::populateScene()
     // cache costs of each element, calculate total costs
     qreal total = 0;
 
-    typedef QPair<QModelIndex, qreal> Pair;
+    using Pair = QPair<QModelIndex, qreal>;
     QLinkedList<Pair> costs;
     for (int row = 0; row < d->m_model->rowCount(); ++row) {
         const QModelIndex index = d->m_model->index(row, DataModel::InclusiveCostColumn);
@@ -388,12 +387,11 @@ void Visualisation::populateScene()
             ratioPercentString.append(QLocale::system().percent());
             const int hiddenFunctions = d->m_model->sourceModel()->rowCount() - d->m_model->rowCount();
             text = tr("All functions with an inclusive cost ratio higher than %1 (%2 are hidden)")
-                    .arg(ratioPercentString)
-                    .arg(hiddenFunctions);
+                    .arg(ratioPercentString, hiddenFunctions);
         }
 
         const qreal height = sceneHeight * (costs.isEmpty() ? 1.0 : 0.1);
-        FunctionGraphicsItem *item = new FunctionGraphicsItem(text, 0, 0, sceneWidth, height);
+        auto item = new FunctionGraphicsItem(text, 0, 0, sceneWidth, height);
         const QColor background = CallgrindHelper::colorForString(text);
         item->setBrush(background);
         item->setData(FunctionGraphicsItem::FunctionCallKey, QVariant::fromValue(d->m_model->filterFunction()));
@@ -410,7 +408,7 @@ void Visualisation::populateScene()
 
         const qreal height = (sceneHeight * 0.9 * cost.second) / total;
 
-        FunctionGraphicsItem *item = new FunctionGraphicsItem(text, 0, used, sceneWidth, height);
+        auto item = new FunctionGraphicsItem(text, 0, used, sceneWidth, height);
         const QColor background = CallgrindHelper::colorForString(text);
         item->setBrush(background);
         item->setData(FunctionGraphicsItem::FunctionCallKey, index.data(DataModel::FunctionRole));
@@ -419,21 +417,21 @@ void Visualisation::populateScene()
     }
 }
 
-void Visualisation::mousePressEvent(QMouseEvent *event)
+void Visualization::mousePressEvent(QMouseEvent *event)
 {
     d->handleMousePressEvent(event, false);
 
     QGraphicsView::mousePressEvent(event);
 }
 
-void Visualisation::mouseDoubleClickEvent(QMouseEvent *event)
+void Visualization::mouseDoubleClickEvent(QMouseEvent *event)
 {
     d->handleMousePressEvent(event, true);
 
     QGraphicsView::mouseDoubleClickEvent(event);
 }
 
-void Visualisation::resizeEvent(QResizeEvent *event)
+void Visualization::resizeEvent(QResizeEvent *event)
 {
     fitInView(sceneRect());
 

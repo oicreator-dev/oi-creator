@@ -54,7 +54,7 @@
 
 #define PARSE_RULE_AND_ADD_RESULT_AS_CHILD(nodeType) \
     PARSE_RULE_AND_ADD_RESULT_AS_CHILD_TO_THIS(nodeType, parseState())
-#define CHILD_AT(obj, index) obj->childAt(index, QLatin1String(Q_FUNC_INFO), QLatin1String(__FILE__), __LINE__)
+#define CHILD_AT(obj, index) obj->childAt(index, Q_FUNC_INFO, __FILE__, __LINE__)
 #define MY_CHILD_AT(index) CHILD_AT(this, index)
 #define CHILD_TO_BYTEARRAY(index) MY_CHILD_AT(index)->toByteArray()
 
@@ -72,13 +72,11 @@ template<int base> static int getNonNegativeNumber(GlobalParseState *parseState)
 
 ParseTreeNode::ParseTreeNode(const ParseTreeNode &other) : m_parseState(other.m_parseState)
 {
-    foreach (const ParseTreeNode::Ptr &child, other.m_children)
+    for (const ParseTreeNode::Ptr &child : other.m_children)
         addChild(child->clone());
 }
 
-ParseTreeNode::~ParseTreeNode()
-{
-}
+ParseTreeNode::~ParseTreeNode() = default;
 
 ParseTreeNode::Ptr ParseTreeNode::childAt(int i, const QString &func, const QString &file,
         int line) const
@@ -91,7 +89,7 @@ ParseTreeNode::Ptr ParseTreeNode::childAt(int i, const QString &func, const QStr
 QByteArray ParseTreeNode::pasteAllChildren() const
 {
     QByteArray repr;
-    foreach (const ParseTreeNode::Ptr &node, m_children)
+    for (const ParseTreeNode::Ptr &node : m_children)
         repr += node->toByteArray();
     return repr;
 }
@@ -100,8 +98,8 @@ void ParseTreeNode::print(int indentation) const
 {
     for (int i = 0; i < indentation; ++i)
         std::cerr << ' ';
-    std::cerr << description().data() << std::endl;
-    foreach (const ParseTreeNode::Ptr &n, m_children)
+    std::cerr << description().constData() << std::endl;
+    for (const ParseTreeNode::Ptr &n : m_children)
         n->print(indentation + 2);
 }
 
@@ -155,7 +153,7 @@ QByteArray ArrayTypeNode::toByteArray() const
 
 
 BareFunctionTypeNode::BareFunctionTypeNode(GlobalParseState *parseState)
-        : ParseTreeNode(parseState), m_hasReturnType(false)
+        : ParseTreeNode(parseState)
 {
 }
 
@@ -440,12 +438,7 @@ void DiscriminatorRule::parse(GlobalParseState *parseState)
 }
 
 
-CtorDtorNameNode::CtorDtorNameNode(const CtorDtorNameNode &other)
-        : ParseTreeNode(other),
-          m_isDestructor(other.m_isDestructor),
-          m_representation(other.m_representation)
-{
-}
+CtorDtorNameNode::CtorDtorNameNode(const CtorDtorNameNode &other) = default;
 
 bool CtorDtorNameNode::mangledRepresentationStartsWith(char c)
 {
@@ -504,14 +497,11 @@ QByteArray CtorDtorNameNode::toByteArray() const
 
 
 CvQualifiersNode::CvQualifiersNode(GlobalParseState *parseState)
-        : ParseTreeNode(parseState), m_hasConst(false), m_hasVolatile(false)
+        : ParseTreeNode(parseState)
 {
 }
 
-CvQualifiersNode::CvQualifiersNode(const CvQualifiersNode &other)
-        : ParseTreeNode(other), m_hasConst(other.m_hasConst), m_hasVolatile(other.m_hasVolatile)
-{
-}
+CvQualifiersNode::CvQualifiersNode(const CvQualifiersNode &other) = default;
 
 bool CvQualifiersNode::mangledRepresentationStartsWith(char c)
 {
@@ -524,12 +514,12 @@ void CvQualifiersNode::parse()
     while (true) {
         if (PEEK() == 'V') {
             if (hasQualifiers())
-                throw ParseException(QLatin1String("Invalid qualifiers: unexpected 'volatile'"));
+                throw ParseException("Invalid qualifiers: unexpected 'volatile'");
             m_hasVolatile = true;
             ADVANCE();
         } else if (PEEK() == 'K') {
             if (m_hasConst)
-                throw ParseException(QLatin1String("Invalid qualifiers: 'const' appears twice"));
+                throw ParseException("Invalid qualifiers: 'const' appears twice");
             m_hasConst = true;
             ADVANCE();
         } else {
@@ -601,14 +591,11 @@ QByteArray EncodingNode::toByteArray() const
 
 
 ExpressionNode::ExpressionNode(GlobalParseState *parseState)
-        : ParseTreeNode(parseState), m_type(OtherType), m_globalNamespace(false)
+        : ParseTreeNode(parseState), m_type(OtherType)
 {
 }
 
-ExpressionNode::ExpressionNode(const ExpressionNode &other)
-        : ParseTreeNode(other), m_type(other.m_type), m_globalNamespace(other.m_globalNamespace)
-{
-}
+ExpressionNode::ExpressionNode(const ExpressionNode &other) = default;
 
 bool ExpressionNode::mangledRepresentationStartsWith(char c)
 {
@@ -697,7 +684,7 @@ void ExpressionNode::parse()
         while (ExpressionNode::mangledRepresentationStartsWith(PEEK()))
             PARSE_RULE_AND_ADD_RESULT_AS_CHILD(ExpressionNode);
         if (ADVANCE() != '_')
-            throw ParseException(QLatin1String("Invalid expression"));
+            throw ParseException("Invalid expression");
         PARSE_RULE_AND_ADD_RESULT_AS_CHILD(TypeNode);
         if (PEEK() == 'E')
             ADVANCE();
@@ -1000,10 +987,7 @@ QByteArray ExpressionNode::toByteArray() const
 }
 
 
-OperatorNameNode::OperatorNameNode(const OperatorNameNode &other)
-        : ParseTreeNode(other), m_type(other.m_type)
-{
-}
+OperatorNameNode::OperatorNameNode(const OperatorNameNode &other) = default;
 
 bool OperatorNameNode::mangledRepresentationStartsWith(char c)
 {
@@ -1253,14 +1237,11 @@ QByteArray OperatorNameNode::toByteArray() const
 
 
 ExprPrimaryNode::ExprPrimaryNode(GlobalParseState *parseState)
-        : ParseTreeNode(parseState), m_isNullPtr(false)
+        : ParseTreeNode(parseState)
 {
 }
 
-ExprPrimaryNode::ExprPrimaryNode(const ExprPrimaryNode &other)
-        : ParseTreeNode(other), m_suffix(other.m_suffix), m_isNullPtr(other.m_isNullPtr)
-{
-}
+ExprPrimaryNode::ExprPrimaryNode(const ExprPrimaryNode &other) = default;
 
 bool ExprPrimaryNode::mangledRepresentationStartsWith(char c)
 {
@@ -1288,7 +1269,7 @@ void ExprPrimaryNode::parse()
                 ? BuiltinTypeNode::Ptr()
                 : CHILD_AT(topLevelTypeNode, 0).dynamicCast<BuiltinTypeNode>();
         if (!typeNode)
-            throw ParseException(QLatin1String("Invalid type in expr-primary"));
+            throw ParseException("Invalid type in expr-primary");
 
         switch (typeNode->type()) {
         case BuiltinTypeNode::UnsignedShortType:
@@ -1353,7 +1334,7 @@ QByteArray ExprPrimaryNode::toByteArray() const
 
 
 FunctionTypeNode::FunctionTypeNode(GlobalParseState *parseState)
-        : ParseTreeNode(parseState), m_isExternC(false)
+        : ParseTreeNode(parseState)
 {
 }
 
@@ -1395,16 +1376,11 @@ QByteArray FunctionTypeNode::toByteArray() const
 
 
 LocalNameNode::LocalNameNode(GlobalParseState *parseState)
-        : ParseTreeNode(parseState), m_isStringLiteral(false), m_isDefaultArg(false)
+        : ParseTreeNode(parseState)
 {
 }
 
-LocalNameNode::LocalNameNode(const LocalNameNode &other)
-        : ParseTreeNode(other),
-          m_isStringLiteral(other.m_isStringLiteral),
-          m_isDefaultArg(other.m_isDefaultArg)
-{
-}
+LocalNameNode::LocalNameNode(const LocalNameNode &other) = default;
 
 bool LocalNameNode::mangledRepresentationStartsWith(char c)
 {
@@ -1538,10 +1514,7 @@ void MangledNameRule::parse(GlobalParseState *parseState, const ParseTreeNode::P
 }
 
 
-SourceNameNode::SourceNameNode(const SourceNameNode &other)
-        : ParseTreeNode(other), m_name(other.m_name)
-{
-}
+SourceNameNode::SourceNameNode(const SourceNameNode &other) = default;
 
 bool SourceNameNode::mangledRepresentationStartsWith(char c)
 {
@@ -1609,14 +1582,11 @@ void UnqualifiedNameNode::parse()
 
 
 UnscopedNameNode::UnscopedNameNode(GlobalParseState *parseState)
-        : ParseTreeNode(parseState), m_inStdNamespace(false)
+        : ParseTreeNode(parseState)
 {
 }
 
-UnscopedNameNode::UnscopedNameNode(const UnscopedNameNode &other)
-        : ParseTreeNode(other), m_inStdNamespace(other.m_inStdNamespace)
-{
-}
+UnscopedNameNode::UnscopedNameNode(const UnscopedNameNode &other) = default;
 
 bool UnscopedNameNode::mangledRepresentationStartsWith(char c)
 {
@@ -1972,10 +1942,7 @@ QByteArray TemplateArgsNode::toByteArray() const
 }
 
 
-SpecialNameNode::SpecialNameNode(const SpecialNameNode &other)
-        : ParseTreeNode(other), m_type(other.m_type)
-{
-}
+SpecialNameNode::SpecialNameNode(const SpecialNameNode &other) = default;
 
 bool SpecialNameNode::mangledRepresentationStartsWith(char c)
 {
@@ -2063,14 +2030,11 @@ QByteArray SpecialNameNode::toByteArray() const
 
 
 NumberNode::NumberNode(GlobalParseState *parseState)
-        : ParseTreeNode(parseState), m_isNegative(false)
+        : ParseTreeNode(parseState)
 {
 }
 
-NumberNode::NumberNode(const NumberNode &other)
-        : ParseTreeNode(other), m_isNegative(other.m_isNegative)
-{
-}
+NumberNode::NumberNode(const NumberNode &other) = default;
 
 bool NumberNode::mangledRepresentationStartsWith(char c)
 {
@@ -2082,7 +2046,7 @@ void NumberNode::parse()
 {
     const char next = PEEK();
     if (!mangledRepresentationStartsWith(next))
-        throw ParseException(QLatin1String("Invalid number"));
+        throw ParseException("Invalid number");
 
     if (next == 'n') {
         m_isNegative = true;
@@ -2118,7 +2082,7 @@ template<int base> void NonNegativeNumberNode<base>::parse()
         numberRepr += ADVANCE();
     if (numberRepr.count() == 0)
         throw ParseException(QString::fromLatin1("Invalid non-negative number"));
-    m_number = numberRepr.toULongLong(0, base);
+    m_number = numberRepr.toULongLong(nullptr, base);
 }
 
 template<int base> QByteArray NonNegativeNumberNode<base>::description() const
@@ -2225,14 +2189,11 @@ void NameNode::parse()
 
 
 TemplateArgNode::TemplateArgNode(GlobalParseState *parseState)
-        : ParseTreeNode(parseState), m_isTemplateArgumentPack(false)
+        : ParseTreeNode(parseState)
 {
 }
 
-TemplateArgNode::TemplateArgNode(const TemplateArgNode &other)
-        : ParseTreeNode(other), m_isTemplateArgumentPack(other.m_isTemplateArgumentPack)
-{
-}
+TemplateArgNode::TemplateArgNode(const TemplateArgNode &other) = default;
 
 bool TemplateArgNode::mangledRepresentationStartsWith(char c)
 {
@@ -2679,8 +2640,8 @@ QByteArray TypeNode::toByteArrayQualPointerRef(const TypeNode *typeNode,
 QByteArray TypeNode::qualPtrRefListToByteArray(const QList<const ParseTreeNode *> &nodeList) const
 {
     QByteArray repr;
-    foreach (const ParseTreeNode * const n, nodeList) {
-        const TypeNode * const typeNode = dynamic_cast<const TypeNode *>(n);
+    for (const ParseTreeNode * const n : nodeList) {
+        const auto typeNode = dynamic_cast<const TypeNode*>(n);
         if (typeNode) {
             switch (typeNode->m_type) {
             case PointerType:
@@ -2712,10 +2673,7 @@ QByteArray TypeNode::qualPtrRefListToByteArray(const QList<const ParseTreeNode *
 }
 
 
-FloatValueNode::FloatValueNode(const FloatValueNode &other)
-        : ParseTreeNode(other), m_value(other.m_value)
-{
-}
+FloatValueNode::FloatValueNode(const FloatValueNode &other) = default;
 
 bool FloatValueNode::mangledRepresentationStartsWith(char c)
 {
@@ -2798,15 +2756,15 @@ QByteArray LambdaSigNode::toByteArray() const
 void ClosureTypeNameNode::parse()
 {
     if (parseState()->readAhead(2) != "Ul")
-        throw ParseException(QLatin1String("Invalid closure-type-name"));
+        throw ParseException("Invalid closure-type-name");
     parseState()->advance(2);
     PARSE_RULE_AND_ADD_RESULT_AS_CHILD(LambdaSigNode);
     if (ADVANCE() != 'E')
-        throw ParseException(QLatin1String("invalid closure-type-name"));
+        throw ParseException("invalid closure-type-name");
     if (NonNegativeNumberNode<10>::mangledRepresentationStartsWith(PEEK()))
         PARSE_RULE_AND_ADD_RESULT_AS_CHILD(NonNegativeNumberNode<10>);
     if (ADVANCE() != '_')
-        throw ParseException(QLatin1String("Invalid closure-type-name"));
+        throw ParseException("Invalid closure-type-name");
 }
 
 QByteArray ClosureTypeNameNode::toByteArray() const
@@ -2840,7 +2798,7 @@ void UnnamedTypeNameNode::parse()
         if (NonNegativeNumberNode<10>::mangledRepresentationStartsWith(PEEK()))
             PARSE_RULE_AND_ADD_RESULT_AS_CHILD(NonNegativeNumberNode<10>);
         if (ADVANCE() != '_')
-            throw ParseException(QLatin1String("Invalid unnamed-type-node"));
+            throw ParseException("Invalid unnamed-type-node");
     } else {
         PARSE_RULE_AND_ADD_RESULT_AS_CHILD(ClosureTypeNameNode);
     }
@@ -2876,7 +2834,7 @@ void DeclTypeNode::parse()
 {
     const QByteArray start = parseState()->readAhead(2);
     if (start != "DT" && start != "Dt")
-        throw ParseException(QLatin1String("Invalid decltype"));
+        throw ParseException("Invalid decltype");
     parseState()->advance(2);
     PARSE_RULE_AND_ADD_RESULT_AS_CHILD(ExpressionNode);
     if (ADVANCE() != 'E')
@@ -2912,7 +2870,7 @@ void UnresolvedTypeRule::parse(GlobalParseState *parseState)
     else if (SubstitutionNode::mangledRepresentationStartsWith(next))
         PARSE_RULE_AND_ADD_RESULT_AS_CHILD_TO_NODE(SubstitutionNode, parseState, parentNode);
     else
-        throw ParseException(QLatin1String("Invalid unresolved-type"));
+        throw ParseException("Invalid unresolved-type");
 }
 
 
@@ -2953,7 +2911,7 @@ void DestructorNameNode::parse()
     else if (SimpleIdNode::mangledRepresentationStartsWith(next))
         PARSE_RULE_AND_ADD_RESULT_AS_CHILD(SimpleIdNode);
     else
-        throw ParseException(QLatin1String("Invalid destructor-name"));
+        throw ParseException("Invalid destructor-name");
 }
 
 QByteArray DestructorNameNode::toByteArray() const
@@ -2975,14 +2933,11 @@ bool UnresolvedQualifierLevelRule::mangledRepresentationStartsWith(char c)
 
 
 BaseUnresolvedNameNode::BaseUnresolvedNameNode(GlobalParseState *parseState)
-        : ParseTreeNode(parseState), m_isOperator(false)
+        : ParseTreeNode(parseState)
 {
 }
 
-BaseUnresolvedNameNode::BaseUnresolvedNameNode(const BaseUnresolvedNameNode &other)
-        : ParseTreeNode(other), m_isOperator(other.m_isOperator)
-{
-}
+BaseUnresolvedNameNode::BaseUnresolvedNameNode(const BaseUnresolvedNameNode &other) = default;
 
 bool BaseUnresolvedNameNode::mangledRepresentationStartsWith(char c)
 {
@@ -3010,7 +2965,7 @@ void BaseUnresolvedNameNode::parse()
         parseState()->advance(2);
         PARSE_RULE_AND_ADD_RESULT_AS_CHILD(DestructorNameNode);
     } else {
-        throw ParseException(QLatin1String("Invalid <base-unresolved-name>"));
+        throw ParseException("Invalid <base-unresolved-name>");
     }
 }
 
@@ -3037,12 +2992,12 @@ bool InitializerNode::mangledRepresentationStartsWith(char c)
 void InitializerNode::parse()
 {
     if (parseState()->readAhead(2) != "pi")
-        throw ParseException(QLatin1String("Invalid initializer"));
+        throw ParseException("Invalid initializer");
     parseState()->advance(2);
     while (ExpressionNode::mangledRepresentationStartsWith(PEEK()))
         PARSE_RULE_AND_ADD_RESULT_AS_CHILD(ExpressionNode);
     if (ADVANCE() != 'E')
-        throw ParseException(QLatin1String("Invalid initializer"));
+        throw ParseException("Invalid initializer");
 }
 
 QByteArray InitializerNode::toByteArray() const
@@ -3057,10 +3012,7 @@ QByteArray InitializerNode::toByteArray() const
 }
 
 
-UnresolvedNameNode::UnresolvedNameNode(const UnresolvedNameNode &other)
-        : ParseTreeNode(other), m_globalNamespace(other.m_globalNamespace)
-{
-}
+UnresolvedNameNode::UnresolvedNameNode(const UnresolvedNameNode &other) = default;
 
 bool UnresolvedNameNode::mangledRepresentationStartsWith(char c)
 {
@@ -3092,20 +3044,20 @@ void UnresolvedNameNode::parse()
                 UnresolvedQualifierLevelRule::parse(parseState());
             while (UnresolvedQualifierLevelRule::mangledRepresentationStartsWith(PEEK()));
             if (ADVANCE() != 'E')
-                throw ParseException(QLatin1String("Invalid unresolved-name"));
+                throw ParseException("Invalid unresolved-name");
             PARSE_RULE_AND_ADD_RESULT_AS_CHILD(BaseUnresolvedNameNode);
         } else if (UnresolvedTypeRule::mangledRepresentationStartsWith(PEEK())) {
             if (m_globalNamespace)
-                throw ParseException(QLatin1String("Invalid unresolved-name"));
+                throw ParseException("Invalid unresolved-name");
             UnresolvedTypeRule::parse(parseState());
             PARSE_RULE_AND_ADD_RESULT_AS_CHILD(BaseUnresolvedNameNode);
         } else {
             if (!UnresolvedQualifierLevelRule::mangledRepresentationStartsWith(PEEK()))
-                throw ParseException(QLatin1String("Invalid unresolved-name"));
+                throw ParseException("Invalid unresolved-name");
             while (UnresolvedQualifierLevelRule::mangledRepresentationStartsWith(PEEK()))
                 UnresolvedQualifierLevelRule::parse(parseState());
             if (ADVANCE() != 'E')
-                throw ParseException(QLatin1String("Invalid unresolved-name"));
+                throw ParseException("Invalid unresolved-name");
             PARSE_RULE_AND_ADD_RESULT_AS_CHILD(BaseUnresolvedNameNode);
         }
     } else {
@@ -3151,19 +3103,19 @@ void FunctionParamNode::parse()
         if (NonNegativeNumberNode<10>::mangledRepresentationStartsWith(PEEK()))
             PARSE_RULE_AND_ADD_RESULT_AS_CHILD(NonNegativeNumberNode<10>);
         if (ADVANCE() != '_')
-            throw ParseException(QLatin1String("Invalid function-param"));
+            throw ParseException("Invalid function-param");
     } else if (parseState()->readAhead(2) == "fL") {
         parseState()->advance(2);
         PARSE_RULE_AND_ADD_RESULT_AS_CHILD(NonNegativeNumberNode<10>);
         if (ADVANCE() != 'p')
-            throw ParseException(QLatin1String("Invalid function-param"));
+            throw ParseException("Invalid function-param");
         PARSE_RULE_AND_ADD_RESULT_AS_CHILD(CvQualifiersNode);
         if (NonNegativeNumberNode<10>::mangledRepresentationStartsWith(PEEK()))
             PARSE_RULE_AND_ADD_RESULT_AS_CHILD(NonNegativeNumberNode<10>);
         if (ADVANCE() != '_')
-            throw ParseException(QLatin1String("Invalid function-param"));
+            throw ParseException("Invalid function-param");
     } else {
-        throw ParseException(QLatin1String("Invalid function-param"));
+        throw ParseException("Invalid function-param");
     }
 }
 

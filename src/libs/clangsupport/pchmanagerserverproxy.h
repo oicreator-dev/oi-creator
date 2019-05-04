@@ -47,11 +47,14 @@ class CLANGSUPPORT_EXPORT PchManagerServerProxy final : public BaseServerProxy,
                                                         public PchManagerServerInterface
 {
 public:
+    explicit PchManagerServerProxy(PchManagerClientInterface *client, QLocalSocket *localSocket);
     explicit PchManagerServerProxy(PchManagerClientInterface *client, QIODevice *ioDevice);
 
     void end() override;
     void updateProjectParts(UpdateProjectPartsMessage &&message) override;
     void removeProjectParts(RemoveProjectPartsMessage &&message) override;
+    void updateGeneratedFiles(UpdateGeneratedFilesMessage &&message) override;
+    void removeGeneratedFiles(RemoveGeneratedFilesMessage &&message) override;
 };
 
 } // namespace ClangBackEnd

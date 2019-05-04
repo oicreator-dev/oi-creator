@@ -41,6 +41,7 @@ DoubleTabWidget2ndTabInactiveTextColor=ff000000
 EditorPlaceholderColor=ffe0dcd8
 FancyToolBarSeparatorColor=60ffffff
 FancyTabBarBackgroundColor=ffff0000
+FancyTabBarSelectedBackgroundColor=ffff0000
 FancyTabWidgetDisabledSelectedTextColor=textDisabled
 FancyTabWidgetDisabledUnselectedTextColor=textDisabled
 FancyTabWidgetEnabledSelectedTextColor=ff3c3c3c
@@ -108,7 +109,7 @@ ProgressBarColorNormal=b4ffffff
 ProgressBarTitleColor=ffffffff
 ProgressBarBackgroundColor=18ffffff
 SplitterColor=splitterColor
-TextColorDisabled=ff000000
+TextColorDisabled=55000000
 TextColorError=ffff0000
 TextColorHighlight=ffa0a0a4
 TextColorHighlightBackground=ffef0b
@@ -216,6 +217,7 @@ FlatProjectsMode=false
 FlatMenuBar=false
 ToolBarIconShadow=true
 WindowColorAsBase=false
+DarkUserInterface=false
 
 [Gradients]
 DetailsWidgetHeaderGradient\1\color=ffffffff

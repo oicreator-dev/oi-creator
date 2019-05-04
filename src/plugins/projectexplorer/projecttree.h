@@ -75,10 +75,11 @@ public:
     static bool hasNode(const Node *node);
     static void forEachNode(const std::function<void(Node *)> &task);
 
-    static Project *projectForNode(Node *node);
+    static Project *projectForNode(const Node *node);
     static Node *nodeForFile(const Utils::FileName &fileName);
 
     void collapseAll();
+    void expandAll();
 
     // for nodes to emit signals, do not call unless you are a node
     static void emitSubtreeChanged(FolderNode *node);

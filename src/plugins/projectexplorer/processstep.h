@@ -33,8 +33,6 @@ namespace Internal {
 
 class ProcessStepFactory : public BuildStepFactory
 {
-    Q_OBJECT
-
 public:
     ProcessStepFactory();
 };
@@ -47,11 +45,7 @@ class ProcessStep : public AbstractProcessStep
 public:
     explicit ProcessStep(BuildStepList *bsl);
 
-    bool init(QList<const BuildStep *> &earlierSteps) override;
-    void run(QFutureInterface<bool> &) override;
-
     BuildStepConfigWidget *createConfigWidget() override;
-    bool immutable() const override;
 
     QString command() const;
     QString arguments() const;
@@ -61,9 +55,10 @@ public:
     void setArguments(const QString &arguments);
     void setWorkingDirectory(const QString &workingDirectory);
 
-    QVariantMap toMap() const override;
-
 private:
+    bool init() override;
+    void doRun() override;
+    QVariantMap toMap() const override;
     bool fromMap(const QVariantMap &map) override;
 
     QString m_command;

@@ -35,8 +35,6 @@
 
 #include <vector>
 
-class Utf8String;
-
 namespace ClangBackEnd {
 
 class SourceLocation;
@@ -74,11 +72,12 @@ public:
     bool hasFinalFunctionAttribute() const;
     bool hasFinalClassAttribute() const;
     bool isUnexposed() const;
+    bool isAnonymous() const;
 
+    Utf8String displayName() const;
     ClangString unifiedSymbolResolution() const;
     ClangString mangling() const;
     ClangString spelling() const;
-    ClangString displayName() const;
     ClangString briefComment() const;
     ClangString rawComment() const;
     int argumentCount() const;
@@ -127,7 +126,7 @@ public:
     CXCursor cx() const;
 
 private:
-    CXCursor cxCursor;
+    CXCursor m_cxCursor;
 };
 
 template <class VisitorCallback>
@@ -139,7 +138,7 @@ void Cursor::visit(VisitorCallback visitorCallback) const
         return visitorCallback(cursor, parent);
     };
 
-    clang_visitChildren(cxCursor, visitor, &visitorCallback);
+    clang_visitChildren(m_cxCursor, visitor, &visitorCallback);
 }
 
 bool operator==(const Cursor &first, const Cursor &second);

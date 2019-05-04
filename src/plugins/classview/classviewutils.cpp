@@ -43,38 +43,36 @@ namespace Constants {
 
 //! Default icon sort order
 const int IconSortOrder[] = {
-    CPlusPlus::Icons::NamespaceIconType,
-    CPlusPlus::Icons::EnumIconType,
-    CPlusPlus::Icons::ClassIconType,
-    CPlusPlus::Icons::FuncPublicIconType,
-    CPlusPlus::Icons::FuncProtectedIconType,
-    CPlusPlus::Icons::FuncPrivateIconType,
-    CPlusPlus::Icons::FuncPublicStaticIconType,
-    CPlusPlus::Icons::FuncProtectedStaticIconType,
-    CPlusPlus::Icons::FuncPrivateStaticIconType,
-    CPlusPlus::Icons::SignalIconType,
-    CPlusPlus::Icons::SlotPublicIconType,
-    CPlusPlus::Icons::SlotProtectedIconType,
-    CPlusPlus::Icons::SlotPrivateIconType,
-    CPlusPlus::Icons::VarPublicIconType,
-    CPlusPlus::Icons::VarProtectedIconType,
-    CPlusPlus::Icons::VarPrivateIconType,
-    CPlusPlus::Icons::VarPublicStaticIconType,
-    CPlusPlus::Icons::VarProtectedStaticIconType,
-    CPlusPlus::Icons::VarPrivateStaticIconType,
-    CPlusPlus::Icons::EnumeratorIconType,
-    CPlusPlus::Icons::KeywordIconType,
-    CPlusPlus::Icons::MacroIconType,
-    CPlusPlus::Icons::UnknownIconType
+    Utils::CodeModelIcon::Namespace,
+    Utils::CodeModelIcon::Enum,
+    Utils::CodeModelIcon::Class,
+    Utils::CodeModelIcon::FuncPublic,
+    Utils::CodeModelIcon::FuncProtected,
+    Utils::CodeModelIcon::FuncPrivate,
+    Utils::CodeModelIcon::FuncPublicStatic,
+    Utils::CodeModelIcon::FuncProtectedStatic,
+    Utils::CodeModelIcon::FuncPrivateStatic,
+    Utils::CodeModelIcon::Signal,
+    Utils::CodeModelIcon::SlotPublic,
+    Utils::CodeModelIcon::SlotProtected,
+    Utils::CodeModelIcon::SlotPrivate,
+    Utils::CodeModelIcon::VarPublic,
+    Utils::CodeModelIcon::VarProtected,
+    Utils::CodeModelIcon::VarPrivate,
+    Utils::CodeModelIcon::VarPublicStatic,
+    Utils::CodeModelIcon::VarProtectedStatic,
+    Utils::CodeModelIcon::VarPrivateStatic,
+    Utils::CodeModelIcon::Enumerator,
+    Utils::CodeModelIcon::Keyword,
+    Utils::CodeModelIcon::Macro,
+    Utils::CodeModelIcon::Unknown
 };
 
 } // namespace Constants
 
 namespace Internal {
 
-Utils::Utils()
-{
-}
+Utils::Utils() = default;
 
 /*!
     Converts internal location container to QVariant compatible.
@@ -120,9 +118,8 @@ int Utils::iconTypeSortOrder(int icon)
 
     // initialization
     if (sortOrder.isEmpty()) {
-        for (unsigned i = 0 ;
-             i < sizeof(Constants::IconSortOrder) / sizeof(Constants::IconSortOrder[0]) ; ++i)
-            sortOrder.insert(Constants::IconSortOrder[i], sortOrder.count());
+        for (int i : Constants::IconSortOrder)
+            sortOrder.insert(i, sortOrder.count());
     }
 
     // if it is missing - return the same value

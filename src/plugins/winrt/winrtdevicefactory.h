@@ -35,14 +35,7 @@ class WinRtDeviceFactory : public ProjectExplorer::IDeviceFactory
 {
     Q_OBJECT
 public:
-    WinRtDeviceFactory();
-    QString displayNameForId(Core::Id type) const;
-    QList<Core::Id> availableCreationIds() const;
-    QIcon iconForId(Core::Id type) const;
-    bool canCreate() const { return false; }
-    ProjectExplorer::IDevice::Ptr create(Core::Id id) const;
-    bool canRestore(const QVariantMap &map) const;
-    ProjectExplorer::IDevice::Ptr restore(const QVariantMap &map) const;
+    explicit WinRtDeviceFactory(Core::Id deviceType);
 
     void autoDetect();
     void onPrerequisitesLoaded();
@@ -55,8 +48,8 @@ private:
     QString findRunnerFilePath() const;
     void parseRunnerOutput(const QByteArray &output) const;
 
-    Utils::QtcProcess *m_process;
-    bool m_initialized;
+    Utils::QtcProcess *m_process = nullptr;
+    bool m_initialized = false;
 };
 
 } // Internal

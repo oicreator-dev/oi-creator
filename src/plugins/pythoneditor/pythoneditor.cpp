@@ -49,11 +49,12 @@ PythonEditorFactory::PythonEditorFactory()
     addMimeType(Constants::C_PY_MIMETYPE);
 
     setEditorActionHandlers(TextEditorActionHandler::Format
-                       | TextEditorActionHandler::UnCommentSelection
-                       | TextEditorActionHandler::UnCollapseAll);
+                            | TextEditorActionHandler::UnCommentSelection
+                            | TextEditorActionHandler::UnCollapseAll
+                            | TextEditorActionHandler::FollowSymbolUnderCursor);
 
     setDocumentCreator([] { return new TextDocument(Constants::C_PYTHONEDITOR_ID); });
-    setIndenterCreator([] { return new PythonIndenter; });
+    setIndenterCreator([](QTextDocument *doc) { return new PythonIndenter(doc); });
     setSyntaxHighlighterCreator([] { return new PythonHighlighter; });
     setCommentDefinition(Utils::CommentDefinition::HashStyle);
     setParenthesesMatchingEnabled(true);

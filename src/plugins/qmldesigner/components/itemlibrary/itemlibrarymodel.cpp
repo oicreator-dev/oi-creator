@@ -30,6 +30,7 @@
 #include "itemlibrarysection.h"
 
 #include <model.h>
+#include <nodehints.h>
 #include <nodemetainfo.h>
 
 #include <utils/algorithm.h>
@@ -42,7 +43,7 @@
 #include <QPen>
 #include <qdebug.h>
 
-static Q_LOGGING_CATEGORY(itemlibraryPopulate, "qtc.itemlibrary.populate")
+static Q_LOGGING_CATEGORY(itemlibraryPopulate, "qtc.itemlibrary.populate", QtWarningMsg)
 
 static bool inline registerItemLibrarySortedModel() {
     qmlRegisterType<QmlDesigner::ItemLibrarySectionModel>();
@@ -88,11 +89,11 @@ QVariant ItemLibraryModel::data(const QModelIndex &index, int role) const
     if (m_roleNames.contains(role)) {
         QVariant value = m_sections.at(index.row())->property(m_roleNames.value(role));
 
-        ItemLibrarySectionModel* model = qobject_cast<ItemLibrarySectionModel *>(value.value<QObject*>());
+        auto model = qobject_cast<ItemLibrarySectionModel *>(value.value<QObject*>());
         if (model)
             return QVariant::fromValue(model);
 
-        ItemLibraryModel* model2 = qobject_cast<ItemLibraryModel *>(value.value<QObject*>());
+        auto model2 = qobject_cast<ItemLibraryModel *>(value.value<QObject*>());
         if (model2)
             return QVariant::fromValue(model2);
 
@@ -126,7 +127,7 @@ void ItemLibraryModel::setSearchText(const QString &searchText)
         bool changed = false;
         updateVisibility(&changed);
         if (changed)
-            dataChanged(QModelIndex(), QModelIndex());
+            emit dataChanged(QModelIndex(), QModelIndex());
     }
 }
 
@@ -184,21 +185,23 @@ void ItemLibraryModel::update(ItemLibraryInfo *itemLibraryInfo, Model *model)
             qDebug() << Utils::transform(metaInfo.superClasses(), &NodeMetaInfo::typeName);
         }
 
+        bool forceVisiblity = valid && NodeHints::fromItemLibraryEntry(entry).visibleInLibrary();
+
         if (valid
-                && isItem //We can change if the navigator does support pure QObjects
+                && (isItem || forceVisiblity) //We can change if the navigator does support pure QObjects
                 && (entry.requiredImport().isEmpty()
                     || model->hasImport(entryToImport(entry), true, true))) {
             QString itemSectionName = entry.category();
             qCInfo(itemlibraryPopulate) << "Adding:" << entry.typeName() << "to:" << entry.category();
             ItemLibrarySection *sectionModel = sectionByName(itemSectionName);
 
-            if (sectionModel == 0) {
+            if (sectionModel == nullptr) {
                 sectionModel = new ItemLibrarySection(itemSectionName, this);
                 m_sections.append(sectionModel);
                 sectionModel->setSectionExpanded(sectionExapanded(itemSectionName));
             }
 
-            ItemLibraryItem *item = new ItemLibraryItem(sectionModel);
+            auto item = new ItemLibraryItem(sectionModel);
             item->setItemLibraryEntry(entry);
             sectionModel->addSectionEntry(item);
         }
@@ -212,7 +215,7 @@ void ItemLibraryModel::update(ItemLibraryInfo *itemLibraryInfo, Model *model)
 
 QMimeData *ItemLibraryModel::getMimeData(const ItemLibraryEntry &itemLibraryEntry)
 {
-    QMimeData *mimeData = new QMimeData();
+    auto mimeData = new QMimeData();
 
     QByteArray data;
     QDataStream stream(&data, QIODevice::WriteOnly);
@@ -248,7 +251,7 @@ ItemLibrarySection *ItemLibraryModel::sectionByName(const QString &sectionName)
             return itemLibrarySection;
     }
 
-    return 0;
+    return nullptr;
 }
 
 void ItemLibraryModel::updateVisibility(bool *changed)

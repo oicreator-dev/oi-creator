@@ -25,6 +25,9 @@
 
 #include "qmljslocatordata.h"
 
+#include <projectexplorer/project.h>
+#include <projectexplorer/session.h>
+
 #include <qmljs/qmljsmodelmanagerinterface.h>
 #include <qmljs/qmljsutils.h>
 //#include <qmljs/qmljsinterpreter.h>
@@ -40,14 +43,28 @@ LocatorData::LocatorData()
 {
     ModelManagerInterface *manager = ModelManagerInterface::instance();
 
+    // Force the updating of source file when updating a project (they could be cached, in such
+    // case LocatorData::onDocumentUpdated will not be called.
+    connect(manager, &ModelManagerInterface::projectInfoUpdated,
+            [manager](const ModelManagerInterface::ProjectInfo &info) {
+        QStringList files;
+        for (const Utils::FileName &f: info.project->files(ProjectExplorer::Project::SourceFiles))
+            files << f.toString();
+        manager->updateSourceFiles(files, true);
+    });
+
     connect(manager, &ModelManagerInterface::documentUpdated,
             this, &LocatorData::onDocumentUpdated);
     connect(manager, &ModelManagerInterface::aboutToRemoveFiles,
             this, &LocatorData::onAboutToRemoveFiles);
+
+    ProjectExplorer::SessionManager *session = ProjectExplorer::SessionManager::instance();
+    if (session)
+        connect(session, &ProjectExplorer::SessionManager::projectRemoved,
+                [this] (ProjectExplorer::Project*) { m_entries.clear(); });
 }
 
-LocatorData::~LocatorData()
-{}
+LocatorData::~LocatorData() = default;
 
 namespace {
 
@@ -59,9 +76,6 @@ class FunctionFinder : protected AST::Visitor
     QString m_documentContext;
 
 public:
-    FunctionFinder()
-    {}
-
     QList<LocatorData::Entry> run(const Document::Ptr &doc)
     {
         m_doc = doc;
@@ -98,12 +112,12 @@ protected:
         m_context = old;
     }
 
-    bool visit(FunctionDeclaration *ast)
+    bool visit(FunctionDeclaration *ast) override
     {
         return visit(static_cast<FunctionExpression *>(ast));
     }
 
-    bool visit(FunctionExpression *ast)
+    bool visit(FunctionExpression *ast) override
     {
         if (ast->name.isEmpty())
             return true;
@@ -116,8 +130,8 @@ protected:
         for (FormalParameterList *it = ast->formals; it; it = it->next) {
             if (it != ast->formals)
                 entry.displayName += QLatin1String(", ");
-            if (!it->name.isEmpty())
-                entry.displayName += it->name.toString();
+            if (!it->element->bindingIdentifier.isEmpty())
+                entry.displayName += it->element->bindingIdentifier.toString();
         }
         entry.displayName += QLatin1Char(')');
         entry.symbolName = entry.displayName;
@@ -128,7 +142,7 @@ protected:
         return false;
     }
 
-    bool visit(UiScriptBinding *ast)
+    bool visit(UiScriptBinding *ast) override
     {
         if (!ast->qualifiedId)
             return true;
@@ -145,7 +159,7 @@ protected:
         return false;
     }
 
-    bool visit(UiObjectBinding *ast)
+    bool visit(UiObjectBinding *ast) override
     {
         if (!ast->qualifiedTypeNameId)
             return true;
@@ -158,7 +172,7 @@ protected:
         return false;
     }
 
-    bool visit(UiObjectDefinition *ast)
+    bool visit(UiObjectDefinition *ast) override
     {
         if (!ast->qualifiedTypeNameId)
             return true;
@@ -171,7 +185,7 @@ protected:
         return false;
     }
 
-    bool visit(AST::BinaryExpression *ast)
+    bool visit(AST::BinaryExpression *ast) override
     {
         auto fieldExpr = AST::cast<AST::FieldMemberExpression *>(ast->left);
         auto funcExpr = AST::cast<AST::FunctionExpression *>(ast->right);
@@ -196,8 +210,8 @@ protected:
             for (FormalParameterList *it = funcExpr->formals; it; it = it->next) {
                 if (it != funcExpr->formals)
                     entry.displayName += QLatin1String(", ");
-                if (!it->name.isEmpty())
-                    entry.displayName += it->name.toString();
+                if (!it->element->bindingIdentifier.isEmpty())
+                    entry.displayName += it->element->bindingIdentifier.toString();
             }
             entry.displayName += QLatin1Char(')');
             entry.symbolName = entry.displayName;
@@ -233,4 +247,3 @@ void LocatorData::onAboutToRemoveFiles(const QStringList &files)
         m_entries.remove(file);
     }
 }
-

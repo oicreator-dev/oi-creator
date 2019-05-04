@@ -38,6 +38,7 @@
 
 #include <projectexplorer/projectexplorericons.h>
 #include <projectexplorer/runconfiguration.h>
+#include <projectexplorer/runconfigurationaspects.h>
 
 #include <QApplication>
 
@@ -57,8 +58,8 @@ ValgrindToolRunner::ValgrindToolRunner(RunControl *runControl)
     runControl->setIcon(ProjectExplorer::Icons::ANALYZER_START_SMALL_TOOLBAR);
     setSupportsReRunning(false);
 
-    if (IRunConfigurationAspect *aspect = runControl->runConfiguration()->extraAspect(ANALYZER_VALGRIND_SETTINGS))
-        m_settings = qobject_cast<ValgrindBaseSettings *>(aspect->currentSettings());
+    m_settings = runControl->runConfiguration()
+            ->currentSettings<ValgrindBaseSettings>(ANALYZER_VALGRIND_SETTINGS);
 
     if (!m_settings)
         m_settings = ValgrindPlugin::globalSettings();
@@ -75,7 +76,7 @@ void ValgrindToolRunner::start()
     m_progress.reportStarted();
 
 #if VALGRIND_DEBUG_OUTPUT
-    emit outputReceived(tr("Valgrind options: %1").arg(toolArguments().join(QLatin1Char(' '))), DebugFormat);
+    emit outputReceived(tr("Valgrind options: %1").arg(toolArguments().join(' ')), DebugFormat);
     emit outputReceived(tr("Working directory: %1").arg(runnable().workingDirectory), DebugFormat);
     emit outputReceived(tr("Command line arguments: %1").arg(runnable().debuggeeArgs), DebugFormat);
 #endif
@@ -84,6 +85,9 @@ void ValgrindToolRunner::start()
     m_runner.setValgrindArguments(genericToolArguments() + toolArguments());
     m_runner.setDevice(device());
     m_runner.setDebuggee(runnable());
+
+    if (auto aspect = runControl()->runConfiguration()->aspect<TerminalAspect>())
+        m_runner.setUseTerminal(aspect->useTerminal());
 
     connect(&m_runner, &ValgrindRunner::processOutputReceived,
             this, &ValgrindToolRunner::receiveProcessOutput);
@@ -122,17 +126,17 @@ QStringList ValgrindToolRunner::genericToolArguments() const
     QString smcCheckValue;
     switch (m_settings->selfModifyingCodeDetection()) {
     case ValgrindBaseSettings::DetectSmcNo:
-        smcCheckValue = QLatin1String("none");
+        smcCheckValue = "none";
         break;
     case ValgrindBaseSettings::DetectSmcEverywhere:
-        smcCheckValue = QLatin1String("all");
+        smcCheckValue = "all";
         break;
     case ValgrindBaseSettings::DetectSmcEverywhereButFile:
-        smcCheckValue = QLatin1String("all-non-file");
+        smcCheckValue = "all-non-file";
         break;
     case ValgrindBaseSettings::DetectSmcStackOnly:
     default:
-        smcCheckValue = QLatin1String("stack");
+        smcCheckValue = "stack";
         break;
     }
     return {"--smc-check=" + smcCheckValue};
@@ -185,8 +189,8 @@ void ValgrindToolRunner::receiveProcessError(const QString &message, QProcess::P
     if (m_isStopping)
         return;
 
-    QObject *obj = ExtensionSystem::PluginManager::getObjectByName(QLatin1String("AppOutputPane"));
-    if (IOutputPane *pane = qobject_cast<IOutputPane *>(obj))
+    QObject *obj = ExtensionSystem::PluginManager::getObjectByName("AppOutputPane");
+    if (auto pane = qobject_cast<IOutputPane *>(obj))
         pane->popup(IOutputPane::NoModeSwitch);
 }
 

@@ -29,8 +29,8 @@
 
 #include "kit.h"
 
-#include <coreplugin/id.h>
 #include <coreplugin/featureprovider.h>
+#include <coreplugin/id.h>
 
 #include <QObject>
 #include <QPair>
@@ -41,7 +41,7 @@ namespace Utils {
 class Environment;
 class FileName;
 class MacroExpander;
-}
+} // namespace Utils
 
 namespace ProjectExplorer {
 class Task;
@@ -66,8 +66,8 @@ class PROJECTEXPLORER_EXPORT KitInformation : public QObject
     Q_OBJECT
 
 public:
-    typedef QPair<QString, QString> Item;
-    typedef QList<Item> ItemList;
+    using Item = QPair<QString, QString>;
+    using ItemList = QList<Item>;
 
     Core::Id id() const { return m_id; }
     int priority() const { return m_priority; }
@@ -124,19 +124,19 @@ public:
 
     static Internal::KitManagerConfigWidget *createConfigWidget(Kit *k);
 
-    static void deleteKit(Kit *k);
-
-    static bool registerKit(Kit *k);
+    static bool registerKit(std::unique_ptr<Kit> &&k);
     static void deregisterKit(Kit *k);
     static void setDefaultKit(Kit *k);
 
-    static void registerKitInformation(KitInformation *ki);
-    static void deregisterKitInformation(KitInformation *ki);
+    template<typename KI, typename... Args>
+    static void registerKitInformation(Args&&... args) {
+        registerKitInformation(std::make_unique<KI>(std::forward<Args>(args)...));
+    }
 
     static QSet<Core::Id> supportedPlatforms();
     static QSet<Core::Id> availableFeatures(Core::Id platformId);
 
-    static QList<Kit *> sortKits(const QList<Kit *> kits); // Avoid sorting whenever possible!
+    static QList<Kit *> sortKits(const QList<Kit *> &kits); // Avoid sorting whenever possible!
 
     static void saveKits();
 
@@ -159,20 +159,21 @@ signals:
 private:
     explicit KitManager(QObject *parent = nullptr);
 
+    static void registerKitInformation(std::unique_ptr<KitInformation> &&ki);
+
     // Make sure the this is only called after all
     // KitInformation are registered!
     void restoreKits();
     class KitList
     {
     public:
-        KitList() { }
         Core::Id defaultKit;
-        QList<Kit *> kits;
+        std::vector<std::unique_ptr<Kit>> kits;
     };
     KitList restoreKits(const Utils::FileName &fileName);
 
     static void notifyAboutUpdate(Kit *k);
-    void addKit(Kit *k);
+    static void completeKit(Kit *k);
 
     friend class ProjectExplorerPlugin; // for constructor
     friend class Kit;

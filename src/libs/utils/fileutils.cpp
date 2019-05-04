@@ -82,7 +82,7 @@ bool FileUtils::removeRecursively(const FileName &filePath, QString *error)
     QFile::setPermissions(filePath.toString(), fileInfo.permissions() | QFile::WriteUser);
     if (fileInfo.isDir()) {
         QDir dir(filePath.toString());
-        dir = dir.canonicalPath();
+        dir.setPath(dir.canonicalPath());
         if (dir.isRoot()) {
             if (error) {
                 *error = QCoreApplication::translate("Utils::FileUtils",
@@ -305,15 +305,16 @@ QString FileUtils::normalizePathName(const QString &name)
 {
 #ifdef Q_OS_WIN
     const QString nativeSeparatorName(QDir::toNativeSeparators(name));
-    const LPCTSTR nameC = reinterpret_cast<LPCTSTR>(nativeSeparatorName.utf16()); // MinGW
+    const auto nameC = reinterpret_cast<LPCTSTR>(nativeSeparatorName.utf16()); // MinGW
     PIDLIST_ABSOLUTE file;
     HRESULT hr = SHParseDisplayName(nameC, NULL, &file, 0, NULL);
     if (FAILED(hr))
         return name;
     TCHAR buffer[MAX_PATH];
-    if (!SHGetPathFromIDList(file, buffer))
-        return name;
-    return QDir::fromNativeSeparators(QString::fromUtf16(reinterpret_cast<const ushort *>(buffer)));
+    const bool success = SHGetPathFromIDList(file, buffer);
+    ILFree(file);
+    return success ? QDir::fromNativeSeparators(QString::fromUtf16(reinterpret_cast<const ushort *>(buffer)))
+                   : name;
 #elif defined(Q_OS_OSX)
     return Internal::normalizePathName(name);
 #else // do not try to handle case-insensitive file systems on Linux
@@ -346,6 +347,13 @@ QString FileUtils::resolvePath(const QString &baseDir, const QString &fileName)
     return QDir::cleanPath(baseDir + QLatin1Char('/') + fileName);
 }
 
+FileName FileUtils::commonPath(const FileName &oldCommonPath, const FileName &fileName)
+{
+    FileName newCommonPath = oldCommonPath;
+    while (!newCommonPath.isEmpty() && !fileName.isChildOf(newCommonPath))
+        newCommonPath = newCommonPath.parentDir();
+    return canonicalPath(newCommonPath);
+}
 
 QByteArray FileReader::fetchQrc(const QString &fileName)
 {
@@ -395,10 +403,7 @@ bool FileReader::fetch(const QString &fileName, QIODevice::OpenMode mode, QWidge
 }
 #endif // QT_GUI_LIB
 
-FileSaverBase::FileSaverBase()
-    : m_hasError(false)
-{
-}
+FileSaverBase::FileSaverBase() = default;
 
 FileSaverBase::~FileSaverBase() = default;
 
@@ -514,7 +519,7 @@ bool FileSaver::finalize()
     if (!m_isSafe)
         return FileSaverBase::finalize();
 
-    SaveFile *sf = static_cast<SaveFile *>(m_file.get());
+    auto sf = static_cast<SaveFile *>(m_file.get());
     if (m_hasError) {
         if (sf->isOpen())
             sf->rollback();
@@ -526,10 +531,9 @@ bool FileSaver::finalize()
 }
 
 TempFileSaver::TempFileSaver(const QString &templ)
-    : m_autoRemove(true)
 {
     m_file.reset(new QTemporaryFile{});
-    QTemporaryFile *tempFile = static_cast<QTemporaryFile *>(m_file.get());
+    auto tempFile = static_cast<QTemporaryFile *>(m_file.get());
     if (!templ.isEmpty())
         tempFile->setFileTemplate(templ);
     tempFile->setAutoRemove(false);
@@ -635,6 +639,7 @@ FileName FileName::parentDir() const
 
     const QString path = basePath + QLatin1String("/..");
     const QString parent = QDir::cleanPath(path);
+    QTC_ASSERT(parent != path, return FileName());
 
     return FileName::fromString(parent);
 }

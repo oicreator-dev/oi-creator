@@ -31,6 +31,7 @@ namespace Mercurial {
 namespace Constants {
 
 enum { debug = 0 };
+const char MERCURIAL_PLUGIN[] = "MercurialPlugin";
 const char MERCURIALREPO[] = ".hg";
 const char MERCURIALDEFAULT[] = "hg";
 const char MERCURIAL_CONTEXT[] = "Mercurial Context";
@@ -85,9 +86,6 @@ const char INCOMING[] = "Mercurial.Action.Incoming";
 const char OUTGOING[] = "Mercurial.Action.Outgoing";
 const char COMMIT[] = "Mercurial.Action.Commit";
 const char CREATE_REPOSITORY[] = "Mercurial.Action.CreateRepository";
-
-// Submit editor actions
-const char DIFFEDITOR[] = "Mercurial.Action.Editor.Diff";
 
 } // namespace Constants
 } // namespace mercurial

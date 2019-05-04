@@ -33,6 +33,8 @@
 #include <projectexplorer/project.h>
 #include <projectexplorer/projecttree.h>
 
+#include <texteditor/tabsettings.h>
+
 #include <cplusplus/Overview.h>
 
 #include <utils/qtcassert.h>
@@ -65,30 +67,7 @@ using namespace CppTools;
 
 // ------------------ CppCodeStyleSettingsWidget
 
-CppCodeStyleSettings::CppCodeStyleSettings() :
-    indentBlockBraces(false)
-  , indentBlockBody(true)
-  , indentClassBraces(false)
-  , indentEnumBraces(false)
-  , indentNamespaceBraces(false)
-  , indentNamespaceBody(false)
-  , indentAccessSpecifiers(false)
-  , indentDeclarationsRelativeToAccessSpecifiers(true)
-  , indentFunctionBody(true)
-  , indentFunctionBraces(false)
-  , indentSwitchLabels(false)
-  , indentStatementsRelativeToSwitchLabels(true)
-  , indentBlocksRelativeToSwitchLabels(false)
-  , indentControlFlowRelativeToSwitchLabels(true)
-  , bindStarToIdentifier(true)
-  , bindStarToTypeName(false)
-  , bindStarToLeftSpecifier(false)
-  , bindStarToRightSpecifier(false)
-  , extraPaddingForConditionsIfConfusingAlign(true)
-  , alignAssignments(false)
-  , preferGetterNameWithoutGetPrefix(true)
-{
-}
+CppCodeStyleSettings::CppCodeStyleSettings() = default;
 
 void CppCodeStyleSettings::toSettings(const QString &category, QSettings *s) const
 {
@@ -198,22 +177,23 @@ bool CppCodeStyleSettings::equals(const CppCodeStyleSettings &rhs) const
            ;
 }
 
-CppCodeStyleSettings CppCodeStyleSettings::currentProjectCodeStyle()
+Utils::optional<CppCodeStyleSettings> CppCodeStyleSettings::currentProjectCodeStyle()
 {
     ProjectExplorer::Project *project = ProjectExplorer::ProjectTree::currentProject();
     if (!project)
-        return currentGlobalCodeStyle();
+        return {};
 
     ProjectExplorer::EditorConfiguration *editorConfiguration = project->editorConfiguration();
-    QTC_ASSERT(editorConfiguration, return currentGlobalCodeStyle());
+    QTC_ASSERT(editorConfiguration, return {});
 
     TextEditor::ICodeStylePreferences *codeStylePreferences
         = editorConfiguration->codeStyle(Constants::CPP_SETTINGS_ID);
-    QTC_ASSERT(codeStylePreferences, return currentGlobalCodeStyle());
+    QTC_ASSERT(codeStylePreferences, return {});
 
-    CppCodeStylePreferences *cppCodeStylePreferences
-        = dynamic_cast<CppCodeStylePreferences *>(codeStylePreferences);
-    QTC_ASSERT(cppCodeStylePreferences, return currentGlobalCodeStyle());
+    auto cppCodeStylePreferences =
+            dynamic_cast<const CppCodeStylePreferences *>(codeStylePreferences);
+    if (!cppCodeStylePreferences)
+        return {};
 
     return cppCodeStylePreferences->currentCodeStyleSettings();
 }
@@ -226,10 +206,35 @@ CppCodeStyleSettings CppCodeStyleSettings::currentGlobalCodeStyle()
     return cppCodeStylePreferences->currentCodeStyleSettings();
 }
 
+TextEditor::TabSettings CppCodeStyleSettings::currentProjectTabSettings()
+{
+    ProjectExplorer::Project *project = ProjectExplorer::ProjectTree::currentProject();
+    if (!project)
+        return currentGlobalTabSettings();
+
+    ProjectExplorer::EditorConfiguration *editorConfiguration = project->editorConfiguration();
+    QTC_ASSERT(editorConfiguration, return currentGlobalTabSettings());
+
+    TextEditor::ICodeStylePreferences *codeStylePreferences
+        = editorConfiguration->codeStyle(CppTools::Constants::CPP_SETTINGS_ID);
+    QTC_ASSERT(codeStylePreferences, return currentGlobalTabSettings());
+    return codeStylePreferences->currentTabSettings();
+}
+
+TextEditor::TabSettings CppCodeStyleSettings::currentGlobalTabSettings()
+{
+    CppTools::CppCodeStylePreferences *cppCodeStylePreferences
+            = CppTools::CppToolsSettings::instance()->cppCodeStyle();
+    QTC_ASSERT(cppCodeStylePreferences, return TextEditor::TabSettings());
+
+    return cppCodeStylePreferences->currentTabSettings();
+}
+
+
 static void configureOverviewWithCodeStyleSettings(CPlusPlus::Overview &overview,
                                                    const CppCodeStyleSettings &settings)
 {
-    overview.starBindFlags = CPlusPlus::Overview::StarBindFlags(0);
+    overview.starBindFlags = CPlusPlus::Overview::StarBindFlags(nullptr);
     if (settings.bindStarToIdentifier)
         overview.starBindFlags |= CPlusPlus::Overview::BindToIdentifier;
     if (settings.bindStarToTypeName)
@@ -243,7 +248,9 @@ static void configureOverviewWithCodeStyleSettings(CPlusPlus::Overview &overview
 CPlusPlus::Overview CppCodeStyleSettings::currentProjectCodeStyleOverview()
 {
     CPlusPlus::Overview overview;
-    configureOverviewWithCodeStyleSettings(overview, currentProjectCodeStyle());
+    const Utils::optional<CppCodeStyleSettings> codeStyleSettings = currentProjectCodeStyle();
+    configureOverviewWithCodeStyleSettings(overview,
+                                           codeStyleSettings.value_or(currentGlobalCodeStyle()));
     return overview;
 }
 

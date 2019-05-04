@@ -48,7 +48,7 @@ class GerritPushDialog : public QDialog
 public:
     GerritPushDialog(const QString &workingDir, const QString &reviewerList,
                      QSharedPointer<GerritParameters> parameters, QWidget *parent);
-    ~GerritPushDialog();
+    ~GerritPushDialog() override;
 
     QString selectedCommit() const;
     QString selectedRemoteName() const;
@@ -66,8 +66,8 @@ private:
     void updateCommits(int index);
     void validate();
 
-    typedef QPair<QString, QDate> BranchDate;
-    typedef QMultiMap<QString, BranchDate> RemoteBranchesMap;
+    using BranchDate = QPair<QString, QDate>;
+    using RemoteBranchesMap = QMultiMap<QString, BranchDate>;
 
     QString determineRemoteBranch(const QString &localBranch);
     void initRemoteBranches();

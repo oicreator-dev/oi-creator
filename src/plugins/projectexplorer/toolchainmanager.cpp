@@ -27,6 +27,7 @@
 
 #include "abi.h"
 #include "kitinformation.h"
+#include "msvctoolchain.h"
 #include "toolchain.h"
 #include "toolchainsettingsaccessor.h"
 
@@ -76,7 +77,7 @@ ToolChainManagerPrivate::~ToolChainManagerPrivate()
 }
 
 static ToolChainManager *m_instance = nullptr;
-static ToolChainManagerPrivate *d;
+static ToolChainManagerPrivate *d = nullptr;
 
 } // namespace Internal
 
@@ -103,8 +104,9 @@ ToolChainManager::ToolChainManager(QObject *parent) :
 
 ToolChainManager::~ToolChainManager()
 {
-    delete d;
     m_instance = nullptr;
+    delete d;
+    d = nullptr;
 }
 
 ToolChainManager *ToolChainManager::instance()
@@ -246,6 +248,13 @@ QString ToolChainManager::displayNameOfLanguageId(const Core::Id &id)
 bool ToolChainManager::isLanguageSupported(const Core::Id &id)
 {
     return Utils::contains(d->m_languages, Utils::equal(&LanguageDisplayPair::id, id));
+}
+
+void ToolChainManager::aboutToShutdown()
+{
+#ifdef Q_OS_WIN
+    MsvcToolChain::cancelMsvcToolChainDetection();
+#endif
 }
 
 } // namespace ProjectExplorer

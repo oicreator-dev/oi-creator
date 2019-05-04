@@ -42,9 +42,9 @@ def tempDir():
 def deleteDirIfExists(path):
     shutil.rmtree(path, True)
 
-def verifyChecked(objectName):
+def verifyChecked(objectName, checked=True):
     object = waitForObject(objectName)
-    test.compare(object.checked, True)
+    test.compare(object.checked, checked)
     return object
 
 def ensureChecked(objectName, shouldBeChecked = True, timeout=20000):
@@ -109,7 +109,7 @@ def selectFromLocator(filter, itemName = None):
         itemName = filter
     itemName = itemName.replace(".", "\\.").replace("_", "\\_")
     locator = waitForObject(":*Qt Creator_Utils::FilterLineEdit")
-    mouseClick(locator, 5, 5, 0, Qt.LeftButton)
+    mouseClick(locator)
     replaceEditorContent(locator, filter)
     # clicking the wanted item
     # if you replace this by pressing ENTER, be sure that something is selected
@@ -457,8 +457,7 @@ def iterateQtVersions(keepOptionsOpen=False, alreadyOnOptionsDialog=False,
                         else:
                             currResult = additionalFunction(target, version, *argsForAdditionalFunc)
                     except:
-                        import sys
-                        t,v,tb = sys.exc_info()
+                        t,v,_ = sys.exc_info()
                         currResult = None
                         test.fatal("Function to additionally execute on Options Dialog could not be found or "
                                    "an exception occurred while executing it.", "%s(%s)" % (str(t), str(v)))
@@ -520,8 +519,7 @@ def iterateKits(keepOptionsOpen=False, alreadyOnOptionsDialog=False,
                     else:
                         currResult = additionalFunction(item, kitName, *argsForAdditionalFunc)
                 except:
-                    import sys
-                    t,v,tb = sys.exc_info()
+                    t,v,_ = sys.exc_info()
                     currResult = None
                     test.fatal("Function to additionally execute on Options Dialog could not be "
                                "found or an exception occurred while executing it.", "%s(%s)" %
@@ -605,10 +603,8 @@ def progressBarWait(timeout=60000, warn=True):
     checkIfObjectExists(":Qt Creator_Core::Internal::ProgressBar", False, timeout)
 
 def readFile(filename):
-    f = open(filename, "r")
-    content = f.read()
-    f.close()
-    return content
+    with open(filename, "r") as f:
+        return f.read()
 
 def simpleFileName(navigatorFileName):
     # try to find the last part of the given name, assume it's inside a (folder) structure

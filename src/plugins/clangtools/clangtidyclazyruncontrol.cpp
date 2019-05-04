@@ -41,13 +41,13 @@ ClangTidyClazyRunControl::ClangTidyClazyRunControl(
     : ClangToolRunControl(runControl, target, fileInfos)
     , m_diagnosticConfig(diagnosticConfig)
 {
-    setDisplayName("ClangTidyClazyRunner");
+    setId("ClangTidyClazyRunner");
     init();
 }
 
 ClangToolRunner *ClangTidyClazyRunControl::createRunner()
 {
-    QTC_ASSERT(!m_clangExecutable.isEmpty(), return 0);
+    QTC_ASSERT(!m_clangExecutable.isEmpty(), return nullptr);
 
     auto runner = new ClangTidyClazyRunner(m_diagnosticConfig,
                                            m_clangExecutable,

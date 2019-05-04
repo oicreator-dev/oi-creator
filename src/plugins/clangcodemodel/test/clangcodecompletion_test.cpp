@@ -114,8 +114,7 @@ private:
 class TestDocument
 {
 public:
-    TestDocument(const QByteArray &fileName, CppTools::Tests::TemporaryDir *temporaryDir = 0)
-        : cursorPosition(-1)
+    TestDocument(const QByteArray &fileName, CppTools::Tests::TemporaryDir *temporaryDir = nullptr)
     {
         QTC_ASSERT(!fileName.isEmpty(), return);
         const QResource resource(qrcPath(fileName));
@@ -153,10 +152,10 @@ public:
     { return isCreated() && hasValidCursorPosition(); }
 
     QString filePath;
-    int cursorPosition;
+    int cursorPosition = -1;
 
 private:
-    TestDocument() : cursorPosition(-1) {}
+    TestDocument() = default;
     QSharedPointer<CppTools::Tests::TemporaryDir> m_temporaryDir;
 };
 
@@ -278,10 +277,10 @@ public:
     ProjectLoader(const QStringList &projectFiles,
                   const ProjectExplorer::Macros &projectMacros,
                   bool testOnlyForCleanedProjects = false)
-        : m_project(0)
+        : m_project(nullptr)
         , m_projectFiles(projectFiles)
         , m_projectMacros(projectMacros)
-        , m_helper(0, testOnlyForCleanedProjects)
+        , m_helper(nullptr, testOnlyForCleanedProjects)
     {
     }
 
@@ -359,6 +358,20 @@ int indexOfItemWithText(TextEditor::ProposalModelPtr model, const QByteArray &te
 bool hasItem(TextEditor::ProposalModelPtr model, const QByteArray &text)
 {
     return indexOfItemWithText(model, text) != -1;
+}
+
+int itemsWithText(TextEditor::ProposalModelPtr model, const QByteArray &text)
+{
+    if (!model)
+        return 0;
+
+    int amount = 0;
+    for (int i = 0, size = model->size(); i < size; ++i) {
+        if (model->text(i) == QString::fromUtf8(text))
+            ++amount;
+    }
+
+    return amount;
 }
 
 bool hasItem(TextEditor::ProposalModelPtr model, const QByteArray &text, const QByteArray &detail)
@@ -569,6 +582,13 @@ void ClangCodeCompletionTest::testCompleteConstructor()
     QVERIFY(!hasItem(t.proposal, "class"));
     QVERIFY(hasItem(t.proposal, "Foo(int)"));
     QVERIFY(hasItem(t.proposal, "Foo(int, double)"));
+}
+
+void ClangCodeCompletionTest::testCompleteClassAndConstructor()
+{
+    ProjectLessCompletionTest t("classAndConstructorCompletion.cpp");
+
+    QCOMPARE(itemsWithText(t.proposal, "Foo"), 2);
 }
 
 // Explicitly Inserting The Dot

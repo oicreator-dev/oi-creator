@@ -62,8 +62,6 @@ class CppAssistProposalModel : public TextEditor::GenericProposalModel
 public:
     CppAssistProposalModel()
         : TextEditor::GenericProposalModel()
-        , m_completionOperator(CPlusPlus::T_EOF_SYMBOL)
-        , m_replaceDotForArrow(false)
         , m_typeOfExpression(new CPlusPlus::TypeOfExpression)
     {
         m_typeOfExpression->setExpandTemplates(true);
@@ -72,8 +70,8 @@ public:
     bool isSortable(const QString &prefix) const override;
     TextEditor::AssistProposalItemInterface *proposalItem(int index) const override;
 
-    unsigned m_completionOperator;
-    bool m_replaceDotForArrow;
+    unsigned m_completionOperator = CPlusPlus::T_EOF_SYMBOL;
+    bool m_replaceDotForArrow = false;
     QSharedPointer<CPlusPlus::TypeOfExpression> m_typeOfExpression;
 };
 
@@ -98,7 +96,7 @@ class InternalCppCompletionAssistProcessor : public CppCompletionAssistProcessor
 {
 public:
     InternalCppCompletionAssistProcessor();
-    ~InternalCppCompletionAssistProcessor();
+    ~InternalCppCompletionAssistProcessor() override;
 
     TextEditor::IAssistProposal *perform(const TextEditor::AssistInterface *interface) override;
 
@@ -113,7 +111,7 @@ private:
     bool tryObjCCompletion();
     bool objcKeywordsWanted() const;
     int startCompletionInternal(const QString &fileName,
-                                unsigned line, unsigned column,
+                                unsigned line, unsigned positionInBlock,
                                 const QString &expression,
                                 int endOfExpression);
 
@@ -185,7 +183,7 @@ public:
                                  int position,
                                  TextEditor::AssistReason reason,
                                  const CPlusPlus::Snapshot &snapshot,
-                                 const ProjectPartHeaderPaths &headerPaths,
+                                 const ProjectExplorer::HeaderPaths &headerPaths,
                                  const CPlusPlus::LanguageFeatures &features)
         : TextEditor::AssistInterface(textDocument, position, filePath, reason)
         , m_gotCppSpecifics(true)
@@ -195,7 +193,7 @@ public:
     {}
 
     const CPlusPlus::Snapshot &snapshot() const { getCppSpecifics(); return m_snapshot; }
-    const ProjectPartHeaderPaths &headerPaths() const
+    const ProjectExplorer::HeaderPaths &headerPaths() const
     { getCppSpecifics(); return m_headerPaths; }
     CPlusPlus::LanguageFeatures languageFeatures() const
     { getCppSpecifics(); return m_languageFeatures; }
@@ -207,7 +205,7 @@ private:
     mutable bool m_gotCppSpecifics;
     WorkingCopy m_workingCopy;
     mutable CPlusPlus::Snapshot m_snapshot;
-    mutable ProjectPartHeaderPaths m_headerPaths;
+    mutable ProjectExplorer::HeaderPaths m_headerPaths;
     mutable CPlusPlus::LanguageFeatures m_languageFeatures;
 };
 

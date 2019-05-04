@@ -67,9 +67,15 @@ public:
     void destroyKeyframesForTarget(const ModelNode &target);
     static bool hasActiveTimeline(AbstractView *view);
 
+    bool isRecording() const;
+    void toogleRecording(bool b) const;
+
+    void resetGroupRecording() const;
+    bool hasKeyframeGroup(const ModelNode &node, const PropertyName &propertyName) const;
+    bool hasKeyframeGroupForTarget(const ModelNode &node) const;
+
 private:
     void addKeyframeGroupIfNotExists(const ModelNode &node, const PropertyName &propertyName);
-    bool hasKeyframeGroup(const ModelNode &node, const PropertyName &propertyName) const;
     QList<QmlTimelineKeyframeGroup> allKeyframeGroups() const;
 };
 

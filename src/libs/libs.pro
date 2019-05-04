@@ -2,7 +2,7 @@ include(../../qtcreator.pri)
 
 TEMPLATE  = subdirs
 
-SUBDIRS   = \
+SUBDIRS   += \
     aggregation \
     extensionsystem \
     utils \
@@ -15,7 +15,8 @@ SUBDIRS   = \
     glsl \
     ssh \
     sqlite \
-    clangsupport
+    clangsupport \
+    languageserverprotocol
 
 qtHaveModule(quick) {
     SUBDIRS += \
@@ -32,6 +33,26 @@ for(l, SUBDIRS) {
 SUBDIRS += \
     utils/process_stub.pro
 
+isEmpty(KSYNTAXHIGHLIGHTING_LIB_DIR): KSYNTAXHIGHLIGHTING_LIB_DIR=$$(KSYNTAXHIGHLIGHTING_LIB_DIR)
+!isEmpty(KSYNTAXHIGHLIGHTING_LIB_DIR) {
+    # enable short information message
+    KSYNTAX_WARN_ON = 1
+}
+
+include(../shared/syntax/syntax_shared.pri)
+isEmpty(KSYNTAXHIGHLIGHTING_LIB_DIR) {
+    SUBDIRS += \
+        3rdparty/syntax-highlighting \
+        3rdparty/syntax-highlighting/data
+
+    equals(KSYNTAX_WARN_ON, 1) {
+        message("Either KSYNTAXHIGHLIGHTING_LIB_DIR does not exist or include path could not be deduced.")
+        unset(KSYNTAX_WARN_ON)
+    }
+} else {
+    message("Using KSyntaxHighlighting provided at $${KSYNTAXHIGHLIGHTING_LIB_DIR}.")
+}
+
 win32:SUBDIRS += utils/process_ctrlc_stub.pro
 
 # Windows: Compile Qt Creator CDB extension if Debugging tools can be detected.
@@ -45,3 +66,5 @@ win32: isEmpty(QTC_SKIP_CDBEXT) {
         message("environment variable pointing to your CDB installation.")
     }
 }
+
+QMAKE_EXTRA_TARGETS += deployqt # dummy

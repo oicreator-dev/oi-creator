@@ -46,9 +46,7 @@ TreeItemModel::TreeItemModel(QObject *parent)
 {
 }
 
-TreeItemModel::~TreeItemModel()
-{
-}
+TreeItemModel::~TreeItemModel() = default;
 
 QVariant TreeItemModel::data(const QModelIndex &index, int role) const
 {
@@ -62,7 +60,7 @@ QVariant TreeItemModel::data(const QModelIndex &index, int role) const
                 bool ok = false;
                 int type = iconType.toInt(&ok);
                 if (ok && type >= 0)
-                    return CPlusPlus::Icons::iconForType(static_cast<CPlusPlus::Icons::IconType>(type));
+                    return ::Utils::CodeModelIcon::iconForType(static_cast<::Utils::CodeModelIcon::Type>(type));
             }
         }
         break;
@@ -136,7 +134,7 @@ QMimeData *TreeItemModel::mimeData(const QModelIndexList &indexes) const
     }
     if (mimeData->files().isEmpty()) {
         delete mimeData;
-        return 0;
+        return nullptr;
     }
     return mimeData;
 }

@@ -44,6 +44,7 @@
 #include <extensionsystem/pluginmanager.h>
 
 #include <utils/fileutils.h>
+#include <utils/globalfilechangeblocker.h>
 #include <utils/hostosinfo.h>
 #include <utils/mimetypes/mimedatabase.h>
 #include <utils/qtcassert.h>
@@ -65,7 +66,7 @@
 #include <QMenu>
 #include <QMessageBox>
 
-Q_LOGGING_CATEGORY(log, "qtc.core.documentmanager")
+Q_LOGGING_CATEGORY(log, "qtc.core.documentmanager", QtWarningMsg)
 
 /*!
   \class Core::DocumentManager
@@ -105,7 +106,6 @@ static const char editorsKeyC[] = "EditorIds";
 static const char directoryGroupC[] = "Directories";
 static const char projectDirectoryKeyC[] = "Projects";
 static const char useProjectDirectoryKeyC[] = "UseProjectsDirectory";
-static const char buildDirectoryKeyC[] = "BuildDirectory.Template";
 
 using namespace Utils;
 
@@ -155,16 +155,16 @@ public:
     QList<DocumentManager::RecentFile> m_recentFiles;
     static const int m_maxRecentFiles = 7;
 
-    QFileSystemWatcher *m_fileWatcher = nullptr; // Delayed creation.
-    QFileSystemWatcher *m_linkWatcher = nullptr; // Delayed creation (only UNIX/if a link is seen).
     bool m_postponeAutoReload = false;
     bool m_blockActivated = false;
     bool m_checkOnFocusChange = false;
+    bool m_useProjectsDirectory = true;
+
+    QFileSystemWatcher *m_fileWatcher = nullptr; // Delayed creation.
+    QFileSystemWatcher *m_linkWatcher = nullptr; // Delayed creation (only UNIX/if a link is seen).
     QString m_lastVisitedDirectory = QDir::currentPath();
     QString m_defaultLocationForNewFiles;
     FileName m_projectsDirectory;
-    bool m_useProjectsDirectory = true;
-    QString m_buildDirectory;
     // When we are calling into an IDocument
     // we don't want to receive a changed()
     // signal
@@ -215,7 +215,12 @@ void DocumentManagerPrivate::onApplicationFocusChange()
 
 DocumentManagerPrivate::DocumentManagerPrivate()
 {
-    connect(qApp, &QApplication::focusChanged, this, &DocumentManagerPrivate::onApplicationFocusChange);
+    // we do not want to do too much directly in the focus change event, so queue the connection
+    connect(qApp,
+            &QApplication::focusChanged,
+            this,
+            &DocumentManagerPrivate::onApplicationFocusChange,
+            Qt::QueuedConnection);
 }
 
 } // namespace Internal
@@ -230,7 +235,13 @@ DocumentManager::DocumentManager(QObject *parent)
 {
     d = new DocumentManagerPrivate;
     m_instance = this;
-    qApp->installEventFilter(this);
+
+    connect(Utils::GlobalFileChangeBlocker::instance(), &Utils::GlobalFileChangeBlocker::stateChanged,
+            this, [this](bool blocked) {
+        d->m_postponeAutoReload = blocked;
+        if (!blocked)
+            QTimer::singleShot(500, m_instance, &DocumentManager::checkForReload);
+    });
 
     readSettings();
 
@@ -436,7 +447,7 @@ void DocumentManager::renamedFile(const QString &from, const QString &to)
 
 void DocumentManager::filePathChanged(const FileName &oldName, const FileName &newName)
 {
-    IDocument *doc = qobject_cast<IDocument *>(sender());
+    auto doc = qobject_cast<IDocument *>(sender());
     QTC_ASSERT(doc, return);
     if (doc == d->m_blockedIDocument)
         return;
@@ -456,7 +467,7 @@ void DocumentManager::addDocument(IDocument *document, bool addWatcher)
 
 void DocumentManager::documentDestroyed(QObject *obj)
 {
-    IDocument *document = static_cast<IDocument*>(obj);
+    auto document = static_cast<IDocument*>(obj);
     // Check the special unwatched first:
     if (!d->m_documentsWithoutWatch.removeOne(document))
         removeFileInfo(document);
@@ -487,7 +498,7 @@ bool DocumentManager::removeDocument(IDocument *document)
    because the file was saved under different name. */
 void DocumentManager::checkForNewFileName()
 {
-    IDocument *document = qobject_cast<IDocument *>(sender());
+    auto document = qobject_cast<IDocument *>(sender());
     // We modified the IDocument
     // Trust the other code to also update the m_states map
     if (document == d->m_blockedIDocument)
@@ -598,13 +609,6 @@ void DocumentManager::unexpectFileChange(const QString &fileName)
         updateExpectedState(filePathKey(fileName, ResolveLinks));
 }
 
-void DocumentManager::setAutoReloadPostponed(bool postponed)
-{
-    d->m_postponeAutoReload = postponed;
-    if (!postponed)
-        QTimer::singleShot(500, m_instance, &DocumentManager::checkForReload);
-}
-
 static bool saveModifiedFilesHelper(const QList<IDocument *> &documents,
                                     const QString &message, bool *cancelled, bool silently,
                                     const QString &alwaysSaveMessage, bool *alwaysSave,
@@ -614,7 +618,7 @@ static bool saveModifiedFilesHelper(const QList<IDocument *> &documents,
         (*cancelled) = false;
 
     QList<IDocument *> notSaved;
-    QMap<IDocument *, QString> modifiedDocumentsMap;
+    QHash<IDocument *, QString> modifiedDocumentsMap;
     QList<IDocument *> modifiedDocuments;
 
     foreach (IDocument *document, documents) {
@@ -720,7 +724,7 @@ bool DocumentManager::saveDocument(IDocument *document, const QString &fileName,
     return ret;
 }
 
-QString DocumentManager::allDocumentFactoryFiltersString(QString *allFilesFilter = 0)
+QString DocumentManager::allDocumentFactoryFiltersString(QString *allFilesFilter = nullptr)
 {
     QSet<QString> uniqueFilters;
 
@@ -891,7 +895,7 @@ bool DocumentManager::saveModifiedDocumentsSilently(const QList<IDocument *> &do
 bool DocumentManager::saveModifiedDocumentSilently(IDocument *document, bool *canceled,
                                                    QList<IDocument *> *failedToClose)
 {
-    return saveModifiedDocumentsSilently(QList<IDocument *>() << document, canceled, failedToClose);
+    return saveModifiedDocumentsSilently({document}, canceled, failedToClose);
 }
 
 /*!
@@ -953,7 +957,7 @@ bool DocumentManager::saveModifiedDocument(IDocument *document, const QString &m
                                            const QString &alwaysSaveMessage, bool *alwaysSave,
                                            QList<IDocument *> *failedToClose)
 {
-    return saveModifiedDocuments(QList<IDocument *>() << document, message, canceled,
+    return saveModifiedDocuments({document}, message, canceled,
                                  alwaysSaveMessage, alwaysSave, failedToClose);
 }
 
@@ -1023,7 +1027,7 @@ void DocumentManager::checkForReload()
     FileDeletedPromptAnswer previousDeletedAnswer = FileDeletedSave;
 
     QList<IDocument *> documentsToClose;
-    QMap<IDocument*, QString> documentsToSave;
+    QHash<IDocument*, QString> documentsToSave;
 
     // collect file information
     QMap<QString, FileStateItem> currentStates;
@@ -1196,8 +1200,8 @@ void DocumentManager::checkForReload()
                     if (previousDeletedAnswer != FileDeletedCloseAll) {
                         previousDeletedAnswer =
                                 fileDeletedPrompt(document->filePath().toString(),
-                                                         trigger == IDocument::TriggerExternal,
-                                                         QApplication::activeWindow());
+                                                  trigger == IDocument::TriggerExternal,
+                                                  ICore::dialogParent());
                     }
                     switch (previousDeletedAnswer) {
                     case FileDeletedSave:
@@ -1243,7 +1247,7 @@ void DocumentManager::checkForReload()
 
     // handle deleted files
     EditorManager::closeDocuments(documentsToClose, false);
-    QMapIterator<IDocument *, QString> it(documentsToSave);
+    QHashIterator<IDocument *, QString> it(documentsToSave);
     while (it.hasNext()) {
         it.next();
         saveDocument(it.key(), it.value());
@@ -1313,7 +1317,6 @@ void DocumentManager::saveSettings()
     s->beginGroup(QLatin1String(directoryGroupC));
     s->setValue(QLatin1String(projectDirectoryKeyC), d->m_projectsDirectory.toString());
     s->setValue(QLatin1String(useProjectDirectoryKeyC), d->m_useProjectsDirectory);
-    s->setValue(QLatin1String(buildDirectoryKeyC), d->m_buildDirectory);
     s->endGroup();
 }
 
@@ -1345,13 +1348,6 @@ void readSettings()
         d->m_projectsDirectory = FileName::fromString(PathChooser::homePath());
     d->m_useProjectsDirectory = s->value(QLatin1String(useProjectDirectoryKeyC),
                                          d->m_useProjectsDirectory).toBool();
-
-    const QString settingsShadowDir = s->value(QLatin1String(buildDirectoryKeyC),
-                                               QString()).toString();
-    if (!settingsShadowDir.isEmpty())
-        d->m_buildDirectory = settingsShadowDir;
-    else
-        d->m_buildDirectory = QLatin1String(Constants::DEFAULT_BUILD_DIRECTORY);
 
     s->endGroup();
 }
@@ -1423,26 +1419,6 @@ void DocumentManager::setProjectsDirectory(const FileName &directory)
 }
 
 /*!
-    Returns the default build directory.
-
-    \sa setBuildDirectory
-*/
-QString DocumentManager::buildDirectory()
-{
-    return d->m_buildDirectory;
-}
-
-/*!
-    Sets the shadow build directory to \a directory.
-
-    \sa buildDirectory
-*/
-void DocumentManager::setBuildDirectory(const QString &directory)
-{
-    d->m_buildDirectory = directory;
-}
-
-/*!
 
     Returns whether the directory for projects is to be used or whether the user
     chose to use the current directory.
@@ -1497,14 +1473,6 @@ void DocumentManager::setFileDialogLastVisitedDirectory(const QString &directory
 void DocumentManager::notifyFilesChangedInternally(const QStringList &files)
 {
     emit m_instance->filesChangedInternally(files);
-}
-
-bool DocumentManager::eventFilter(QObject *obj, QEvent *e)
-{
-    if (obj == qApp && e->type() == QEvent::ApplicationStateChange) {
-        QTimer::singleShot(0, this, &DocumentManager::checkForReload);
-    }
-    return false;
 }
 
 // -------------- FileChangeBlocker

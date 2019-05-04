@@ -93,7 +93,7 @@ namespace Internal {
 NavigationWidget::NavigationWidget(QWidget *parent) :
     QWidget(parent)
 {
-    QVBoxLayout *verticalLayout = new QVBoxLayout(this);
+    auto verticalLayout = new QVBoxLayout(this);
     verticalLayout->setSpacing(0);
     verticalLayout->setContentsMargins(0, 0, 0, 0);
     treeView = new ::Utils::NavigationTreeView(this);
@@ -136,9 +136,7 @@ NavigationWidget::NavigationWidget(QWidget *parent) :
             manager, &Manager::onRequestTreeDataUpdate);
 }
 
-NavigationWidget::~NavigationWidget()
-{
-}
+NavigationWidget::~NavigationWidget() = default;
 
 void NavigationWidget::hideEvent(QHideEvent *event)
 {
@@ -173,7 +171,7 @@ QList<QToolButton *> NavigationWidget::createToolButtons()
         // create a button
         fullProjectsModeButton = new QToolButton();
         fullProjectsModeButton->setIcon(
-                    CPlusPlus::Icons::iconForType(CPlusPlus::Icons::ClassIconType));
+                    ::Utils::CodeModelIcon::iconForType(::Utils::CodeModelIcon::Class));
         fullProjectsModeButton->setCheckable(true);
         fullProjectsModeButton->setToolTip(tr("Show Subprojects"));
 

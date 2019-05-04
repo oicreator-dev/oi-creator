@@ -60,8 +60,6 @@ public:
     // be updated.
     void registerActions(QAction *editorUndoAction,  QAction *editorRedoAction,
                          QAction *submitAction = nullptr, QAction *diffAction = nullptr);
-    void unregisterActions(QAction *editorUndoAction,  QAction *editorRedoAction,
-                           QAction *submitAction = nullptr, QAction *diffAction = nullptr);
 
     QString descriptionText() const;
     void setDescriptionText(const QString &text);
@@ -96,7 +94,7 @@ public:
     void addSubmitFieldWidget(SubmitFieldWidget *f);
     QList<SubmitFieldWidget *> submitFieldWidgets() const;
 
-    virtual bool canSubmit() const;
+    virtual bool canSubmit(QString *whyNot = nullptr) const;
     void setUpdateInProgress(bool value);
     bool updateInProgress() const;
 

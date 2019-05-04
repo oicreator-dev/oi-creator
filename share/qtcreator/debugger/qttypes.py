@@ -24,6 +24,7 @@
 ############################################################################
 
 import platform
+import re
 from dumper import *
 
 
@@ -193,7 +194,7 @@ def qdump_X_QModelIndex(d, value):
     #gdb.execute('call free($mi)')
 
 def qdump__Qt__ItemDataRole(d, value):
-    d.putEnumValue(value, {
+    d.putEnumValue(value.integer(), {
         0  : "Qt::DisplayRole",
         1  : "Qt::DecorationRole",
         2  : "Qt::EditRole",
@@ -477,12 +478,122 @@ def qdump__QDir(d, value):
                 typ = d.lookupType(ns + 'QString')
                 d.putItem(d.createValue(privAddress + absoluteDirEntryOffset, typ))
             with SubItem(d, 'entryInfoList'):
-                typ = d.lookupType(ns + 'QList<' + ns + 'QFileInfo>')
-                d.putItem(d.createValue(privAddress + fileInfosOffset, typ))
+                typ = d.lookupType(ns + 'QFileInfo')
+                qdumpHelper_QList(d, privAddress + fileInfosOffset, typ)
             with SubItem(d, 'entryList'):
                 typ = d.lookupType(ns + 'QStringList')
                 d.putItem(d.createValue(privAddress + filesOffset, typ))
             d.putFields(value)
+
+
+def qdump__QEvent(d, value):
+    d.putNumChild(1)
+    if d.isExpanded():
+        with Children(d):
+            # Add a sub-item with the event type.
+            with SubItem(d, '[type]'):
+                (vtable, privateD, t, flags) = value.split("pp{short}{short}")
+                event_type_name = d.qtNamespace() + "QEvent::Type"
+                type_value = t.cast(event_type_name)
+                d.putValue(type_value.displayEnum('0x%04x', bitsize=16))
+                d.putType(event_type_name)
+                d.putNumChild(0)
+
+            # Show the rest of the class fields as usual.
+            d.putFields(value)
+
+def qdump__QKeyEvent(d, value):
+    # QEvent fields
+    #   virtual table pointer
+    #   QEventPrivate *d;
+    #   ushort t;
+    #   ushort posted : 1;
+    #   ushort spont : 1;
+    #   ushort m_accept : 1;
+    #   ushort reserved : 13;
+    # QInputEvent fields
+    #   Qt::KeyboardModifiers modState;
+    #   ulong ts;
+    # QKeyEvent fields
+    #   QString txt;
+    #   int k;
+    #   quint32 nScanCode;
+    #   quint32 nVirtualKey;
+    #   quint32 nModifiers; <- nativeModifiers
+    #   ushort c;
+    #   ushort autor:1;
+    #   ushort reserved:15;
+    (vtable, privateD, t, flags, modState, ts, txt, k, scanCode,
+     virtualKey, modifiers,
+     c, autor) = value.split("ppHHiQ{QString}{int}IIIHH")
+
+    #d.putStringValue(txt)
+    #data = d.encodeString(txt)
+    key_txt_utf8 = d.encodeStringUtf8(txt)
+
+    k_type_name = d.qtNamespace() + "Qt::Key"
+    k_cast_to_enum_value = k.cast(k_type_name)
+    k_name = k_cast_to_enum_value.displayEnum(bitsize=32)
+    matches = re.search(r'Key_(\w+)', k_name)
+    if matches:
+        k_name = matches.group(1)
+
+    if t == 6:
+        key_event_type = "Pressed"
+    elif t == 7:
+        key_event_type = "Released"
+    else:
+        key_event_type = ""
+
+    data = ""
+
+    if key_event_type:
+        data += "{} ".format(key_event_type)
+
+    # Try to use the name of the enum value, otherwise the value
+    # of txt in QKeyEvent.
+    if k_name:
+        data += "'{}'".format(k_name)
+    elif key_txt_utf8:
+        data += "'{}'".format(key_txt_utf8)
+    else:
+        data += "<non-ascii>"
+
+    k_int = k.integer()
+    data += " (key:{} vKey:{}".format(k_int, virtualKey)
+
+    modifier_list = []
+    modifier_list.append(("Shift", 0x02000000))
+    modifier_list.append(("Control", 0x04000000))
+    modifier_list.append(("Alt", 0x08000000))
+    modifier_list.append(("Meta", 0x10000000))
+    # modifier_map.append(("KeyPad", 0x20000000)) Is this useful?
+    modifier_list.append(("Grp", 0x40000000))
+
+    modifiers = []
+    for modifier_name, mask in modifier_list:
+        if modState & mask:
+            modifiers.append(modifier_name)
+
+    if modifiers:
+        data += " mods:" + "+".join(modifiers)
+
+    data += ")"
+
+    d.putValue(d.hexencode(data), 'utf8')
+
+    d.putNumChild(1)
+    if d.isExpanded():
+        with Children(d):
+            # Add a sub-item with the enum name and value.
+            with SubItem(d, '[{}]'.format(k_type_name)):
+                k_cast_to_enum_value = k.cast(k_type_name)
+                d.putValue(k_cast_to_enum_value.displayEnum('0x%04x', bitsize=32))
+                d.putType(k_type_name)
+                d.putNumChild(0)
+
+            # Show the rest of the class fields as usual.
+            d.putFields(value, dumpBase=True)
 
 
 def qdump__QFile(d, value):
@@ -645,7 +756,7 @@ def qdump__QFlags(d, value):
     i = value.split('{int}')[0]
     enumType = value.type[0]
     v = i.cast(enumType.name)
-    d.putValue(v.displayEnum('0x%04x'))
+    d.putValue(v.displayEnum('0x%04x', bitsize=32))
     d.putNumChild(0)
 
 
@@ -1301,6 +1412,31 @@ def qdump__QSizeF(d, value):
     d.putPlainChildren(value)
 
 
+def qdump__QSizePolicy__Policy(d, value):
+    d.putEnumValue(value.integer(), {
+        0  : 'QSizePolicy::Fixed',
+        1  : 'QSizePolicy::GrowFlag',
+        2  : 'QSizePolicy::ExpandFlag',
+        3  : 'QSizePolicy::MinimumExpanding (GrowFlag|ExpandFlag)',
+        4  : 'QSizePolicy::ShrinkFlag',
+        5  : 'QSizePolicy::Preferred (GrowFlag|ShrinkFlag)',
+        7  : 'QSizePolicy::Expanding (GrowFlag|ShrinkFlag|ExpandFlag)',
+        8  : 'QSizePolicy::IgnoreFlag',
+       13  : 'QSizePolicy::Ignored (ShrinkFlag|GrowFlag|IgnoreFlag)',
+    })
+
+def qdump__QSizePolicy(d, value):
+    bits = value.integer()
+    d.putEmptyValue(-99)
+    d.putNumChild(1)
+    if d.isExpanded():
+        with Children(d):
+            d.putIntItem('horStretch', (bits >> 0) & 0xff)
+            d.putIntItem('verStretch', (bits >> 8) & 0xff)
+            d.putEnumItem('horPolicy', (bits >> 16) & 0xf, "@QSizePolicy::Policy")
+            d.putEnumItem('verPolicy', (bits >> 20) & 0xf, "@QSizePolicy::Policy")
+
+
 def qform__QStack():
     return arrayForms()
 
@@ -1793,6 +1929,14 @@ def qdump__QVector(d, value):
     d.putItemCount(size)
     d.putPlotData(data, size, value.type[0])
 
+def qdump__QObjectConnectionList(d, value):
+    dd = d.extractPointer(value)
+    data, size, alloc = d.vectorDataHelper(dd)
+    d.check(0 <= size and size <= alloc and alloc <= 1000 * 1000 * 1000)
+    d.putItemCount(size)
+    d.putPlotData(data, size, d.createType('@QObjectPrivate::ConnectionList'))
+
+
 def qdump__QVarLengthArray(d, value):
     (cap, size, data) = value.split('iip')
     d.check(0 <= size)
@@ -1806,7 +1950,10 @@ def qdump__QSharedPointer(d, value):
 def qdump__QWeakPointer(d, value):
     qdump_QWeakPointerHelper(d, value, True)
 
-def qdump_QWeakPointerHelper(d, value, isWeak):
+def qdump__QPointer(d, value):
+    qdump_QWeakPointerHelper(d, value['wp'], True, value.type[0])
+
+def qdump_QWeakPointerHelper(d, value, isWeak, innerType = None):
     if isWeak:
         (d_ptr, val) = value.split('pp')
     else:
@@ -1828,7 +1975,8 @@ def qdump_QWeakPointerHelper(d, value, isWeak):
     d.check(strongref <= weakref)
     d.check(weakref <= 10*1000*1000)
 
-    innerType = value.type[0]
+    if innerType is None:
+        innerType = value.type[0]
     with Children(d):
         short = d.putSubItem('data', d.createValue(val, innerType))
         d.putIntItem('weakref', weakref)
@@ -2783,7 +2931,7 @@ def qdump__qfloat16(d, value):
     elif exp == 0b11111:
         res = ('-inf' if sign else 'inf') if fraction == 0 else 'nan'
     else:
-        res = (-1)**sign * (1 + fraction / 2**10) * 2**(exp - 15)
+        res = (-1)**sign * (1 + 1. * fraction / 2**10) * 2**(exp - 15)
     d.putValue(res)
     d.putNumChild(1)
     d.putPlainChildren(value)

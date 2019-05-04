@@ -26,6 +26,7 @@ HEADERS += \
     cppcodestylepreferencesfactory.h \
     cppcodestylesettings.h \
     cppcodestylesettingspage.h \
+    cppcodestylesnippets.h \
     cppcompletionassist.h \
     cppcompletionassistprocessor.h \
     cppcompletionassistprovider.h \
@@ -48,7 +49,6 @@ HEADERS += \
     cpplocatorfilter.h \
     cppmodelmanager.h \
     cppmodelmanagersupport.h \
-    cppmodelmanagersupportinternal.h \
     cppoverviewmodel.h \
     cpppointerdeclarationformatter.h \
     cppprojectfile.h \
@@ -90,7 +90,6 @@ HEADERS += \
     cpptoolsbridgeinterface.h \
     cpptoolsbridgeqtcreatorimplementation.h \
     projectpart.h \
-    projectpartheaderpath.h \
     projectinfo.h \
     cppprojectinfogenerator.h \
     compileroptionsbuilder.h \
@@ -101,7 +100,12 @@ HEADERS += \
     cursorineditor.h \
     wrappablelineedit.h \
     usages.h \
-    cpptools_clangtidychecks.h
+    cpptools_clangtidychecks.h \
+    cppmodelmanagerinterface.h \
+    cppbuiltinmodelmanagersupport.h \
+    headerpathfilter.h \
+    cppkitinfo.h \
+    cpptools_clazychecks.h
 
 SOURCES += \
     abstracteditorsupport.cpp \
@@ -146,7 +150,6 @@ SOURCES += \
     cpplocatorfilter.cpp \
     cppmodelmanager.cpp \
     cppmodelmanagersupport.cpp \
-    cppmodelmanagersupportinternal.cpp \
     cppoverviewmodel.cpp \
     cpppointerdeclarationformatter.cpp \
     cppprojectfile.cpp \
@@ -187,7 +190,10 @@ SOURCES += \
     compileroptionsbuilder.cpp \
     cppprojectfilecategorizer.cpp \
     cppprojectpartchooser.cpp \
-    wrappablelineedit.cpp
+    wrappablelineedit.cpp \
+    cppbuiltinmodelmanagersupport.cpp \
+    headerpathfilter.cpp \
+    cppkitinfo.cpp
 
 FORMS += \
     clangdiagnosticconfigswidget.ui \

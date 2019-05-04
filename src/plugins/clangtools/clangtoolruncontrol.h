@@ -50,7 +50,7 @@ struct AnalyzeUnit {
     QString file;
     QStringList arguments; // without file itself and "-o somePath"
 };
-typedef QList<AnalyzeUnit> AnalyzeUnits;
+using AnalyzeUnits = QList<AnalyzeUnit>;
 
 class ClangToolRunControl : public ProjectExplorer::RunWorker
 {
@@ -77,7 +77,7 @@ private:
     void start() final;
     void stop() final;
 
-    AnalyzeUnits unitsToAnalyze(const QString &clangVersion);
+    AnalyzeUnits unitsToAnalyze();
     void analyzeNextFile();
 
     void handleFinished();

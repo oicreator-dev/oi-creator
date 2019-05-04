@@ -94,7 +94,7 @@ class FolderNavigationWidget : public QWidget
     Q_PROPERTY(bool autoSynchronization READ autoSynchronization WRITE setAutoSynchronization)
 public:
     explicit FolderNavigationWidget(QWidget *parent = nullptr);
-    ~FolderNavigationWidget();
+    ~FolderNavigationWidget() override;
 
     static QStringList projectFilesInDirectory(const QString &path);
 
@@ -118,6 +118,9 @@ public:
 protected:
     void contextMenuEvent(QContextMenuEvent *ev) override;
 
+private slots:
+    void setCrumblePath(const Utils::FileName &filePath);
+
 private:
     bool rootAutoSynchronization() const;
     void setRootAutoSynchronization(bool sync);
@@ -131,7 +134,6 @@ private:
     QStringList projectsInDirectory(const QModelIndex &index) const;
     void openProjectsInDirectory(const QModelIndex &index);
     void createNewFolder(const QModelIndex &parent);
-    void setCrumblePath(const QModelIndex &index, const QModelIndex &);
 
     Core::IContext *m_context = nullptr;
     Utils::NavigationTreeView *m_listView = nullptr;
@@ -145,6 +147,7 @@ private:
     QToolButton *m_toggleSync = nullptr;
     QToolButton *m_toggleRootSync = nullptr;
     QComboBox *m_rootSelector = nullptr;
+    QWidget *m_crumbContainer = nullptr;
     DelayedFileCrumbLabel *m_crumbLabel = nullptr;
 
     // FolderNavigationWidgetFactory needs private members to build a menu

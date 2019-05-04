@@ -47,8 +47,9 @@ using namespace CPlusPlus;
 using namespace CppTools;
 using namespace CppTools::Tests;
 using namespace CppTools::Internal;
+using ProjectExplorer::HeaderPathType;
 
-typedef Document::Include Include;
+using Include = Document::Include;
 
 class SourcePreprocessor
 {
@@ -59,13 +60,13 @@ public:
         cleanUp();
     }
 
-    Document::Ptr run(const QString &filePath)
+    Document::Ptr run(const QString &filePath) const
     {
         QScopedPointer<CppSourceProcessor> sourceProcessor(
                     CppModelManager::createSourceProcessor());
-        const ProjectPartHeaderPath hp(TestIncludePaths::directoryOfTestFile(),
-                                       ProjectPartHeaderPath::IncludePath);
-        sourceProcessor->setHeaderPaths(ProjectPartHeaderPaths() << hp);
+        const ProjectExplorer::HeaderPath hp(TestIncludePaths::directoryOfTestFile(),
+                                             HeaderPathType::User);
+        sourceProcessor->setHeaderPaths({hp});
         sourceProcessor->run(filePath);
 
         Document::Ptr document = m_cmm->document(filePath);
@@ -207,9 +208,8 @@ void CppToolsPlugin::test_cppsourceprocessor_includeNext()
 
     CppSourceProcessor::DocumentCallback documentCallback = [](const Document::Ptr &){};
     CppSourceProcessor sourceProcessor(Snapshot(), documentCallback);
-    ProjectPartHeaderPaths headerPaths = ProjectPartHeaderPaths()
-        << ProjectPartHeaderPath(customHeaderPath, ProjectPartHeaderPath::IncludePath)
-        << ProjectPartHeaderPath(systemHeaderPath, ProjectPartHeaderPath::IncludePath);
+    ProjectExplorer::HeaderPaths headerPaths = {{customHeaderPath, HeaderPathType::User},
+                                          {systemHeaderPath, HeaderPathType::User}};
     sourceProcessor.setHeaderPaths(headerPaths);
 
     sourceProcessor.run(mainFilePath);

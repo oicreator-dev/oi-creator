@@ -3,6 +3,10 @@ QT += qml
 include(../../qtcreatorplugin.pri)
 include(customwizard/customwizard.pri)
 include(jsonwizard/jsonwizard.pri)
+
+include(../../shared/clang/clang_installation.pri)
+include(../../shared/clang/clang_defines.pri)
+
 HEADERS += projectexplorer.h \
     abi.h \
     abiwidget.h \
@@ -12,6 +16,7 @@ HEADERS += projectexplorer.h \
     configtaskhandler.h \
     environmentaspect.h \
     environmentaspectwidget.h \
+    extraabi.h \
     gcctoolchain.h \
     importwidget.h \
     userfileaccessor.h \
@@ -84,6 +89,7 @@ HEADERS += projectexplorer.h \
     projectmodels.h \
     currentprojectfind.h \
     toolchain.h \
+    toolchaincache.h \
     toolchainconfigwidget.h \
     toolchainmanager.h \
     toolchainoptionspage.h \
@@ -124,6 +130,7 @@ HEADERS += projectexplorer.h \
     devicesupport/localprocesslist.h \
     devicesupport/sshdeviceprocess.h \
     devicesupport/sshdeviceprocesslist.h \
+    devicesupport/sshsettingspage.h \
     devicesupport/desktopdeviceconfigurationwidget.h \
     devicesupport/desktopprocesssignaloperation.h \
     deploymentdata.h \
@@ -149,7 +156,9 @@ HEADERS += projectexplorer.h \
     projectexplorer_global.h \
     extracompiler.h \
     customexecutablerunconfiguration.h \
-    projectmacro.h
+    projectmacro.h \
+    makestep.h \
+    projectconfigurationaspects.h
 
 SOURCES += projectexplorer.cpp \
     abi.cpp \
@@ -160,6 +169,7 @@ SOURCES += projectexplorer.cpp \
     configtaskhandler.cpp \
     environmentaspect.cpp \
     environmentaspectwidget.cpp \
+    extraabi.cpp \
     gcctoolchain.cpp \
     importwidget.cpp \
     projectconfigurationmodel.cpp \
@@ -262,9 +272,11 @@ SOURCES += projectexplorer.cpp \
     devicesupport/localprocesslist.cpp \
     devicesupport/sshdeviceprocess.cpp \
     devicesupport/sshdeviceprocesslist.cpp \
+    devicesupport/sshsettingspage.cpp \
     devicesupport/desktopdeviceconfigurationwidget.cpp \
     devicesupport/desktopprocesssignaloperation.cpp \
     deployablefile.cpp \
+    deploymentdata.cpp \
     deploymentdatamodel.cpp \
     deploymentdataview.cpp \
     customtoolchain.cpp \
@@ -284,7 +296,9 @@ SOURCES += projectexplorer.cpp \
     projectexplorericons.cpp \
     extracompiler.cpp \
     customexecutablerunconfiguration.cpp \
-    projectmacro.cpp
+    projectmacro.cpp \
+    makestep.cpp \
+    projectconfigurationaspects.cpp
 
 FORMS += processstep.ui \
     editorsettingspropertiespage.ui \
@@ -297,17 +311,16 @@ FORMS += processstep.ui \
     devicesupport/devicesettingswidget.ui \
     devicesupport/devicetestdialog.ui \
     devicesupport/desktopdeviceconfigurationwidget.ui \
-    customparserconfigdialog.ui
+    customparserconfigdialog.ui \
+    makestep.ui
 
 WINSOURCES += \
     windebuginterface.cpp \
     msvctoolchain.cpp \
-    abstractmsvctoolchain.cpp
 
 WINHEADERS += \
     windebuginterface.h \
     msvctoolchain.h \
-    abstractmsvctoolchain.h
 
 win32|equals(TEST, 1) {
     SOURCES += $$WINSOURCES

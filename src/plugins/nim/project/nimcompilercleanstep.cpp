@@ -52,7 +52,7 @@ BuildStepConfigWidget *NimCompilerCleanStep::createConfigWidget()
     return new NimCompilerCleanStepConfigWidget(this);
 }
 
-bool NimCompilerCleanStep::init(QList<const BuildStep *> &)
+bool NimCompilerCleanStep::init()
 {
     FileName buildDir = buildConfiguration()->buildDirectory();
     bool result = buildDir.exists();
@@ -61,28 +61,33 @@ bool NimCompilerCleanStep::init(QList<const BuildStep *> &)
     return result;
 }
 
-void NimCompilerCleanStep::run(QFutureInterface<bool> &fi)
+void NimCompilerCleanStep::doRun()
 {
     if (!m_buildDir.exists()) {
         emit addOutput(tr("Build directory \"%1\" does not exist.").arg(m_buildDir.toUserOutput()), BuildStep::OutputFormat::ErrorMessage);
-        reportRunResult(fi, false);
+        emit finished(false);
         return;
     }
 
     if (!removeCacheDirectory()) {
         emit addOutput(tr("Failed to delete the cache directory."), BuildStep::OutputFormat::ErrorMessage);
-        reportRunResult(fi, false);
+        emit finished(false);
         return;
     }
 
     if (!removeOutFilePath()) {
         emit addOutput(tr("Failed to delete the out file."), BuildStep::OutputFormat::ErrorMessage);
-        reportRunResult(fi, false);
+        emit finished(false);
         return;
     }
 
     emit addOutput(tr("Clean step completed successfully."), BuildStep::OutputFormat::NormalMessage);
-    reportRunResult(fi, true);
+    emit finished(true);
+}
+
+void NimCompilerCleanStep::doCancel()
+{
+    // Can be left empty. The run() function hardly does anything.
 }
 
 bool NimCompilerCleanStep::removeCacheDirectory()
@@ -117,7 +122,7 @@ NimCompilerCleanStepFactory::NimCompilerCleanStepFactory()
     setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_CLEAN);
     setSupportedConfiguration(Constants::C_NIMBUILDCONFIGURATION_ID);
     setRepeatable(false);
-    setDisplayName(tr(Nim::Constants::C_NIMCOMPILERCLEANSTEP_DISPLAY));
+    setDisplayName(NimCompilerCleanStep::tr(Nim::Constants::C_NIMCOMPILERCLEANSTEP_DISPLAY));
 }
 
 } // Nim

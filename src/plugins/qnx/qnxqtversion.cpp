@@ -44,8 +44,7 @@ namespace Internal {
 
 static char SDP_PATH_KEY[] = "SDKPath";
 
-QnxQtVersion::QnxQtVersion()
-{ }
+QnxQtVersion::QnxQtVersion() = default;
 
 QnxQtVersion::QnxQtVersion(const Utils::FileName &path, bool isAutoDetected,
                            const QString &autoDetectionSource) :
@@ -98,17 +97,17 @@ QString QnxQtVersion::qnxHost() const
     return QString();
 }
 
-QString QnxQtVersion::qnxTarget() const
+Utils::FileName QnxQtVersion::qnxTarget() const
 {
     if (!m_environmentUpToDate)
         updateEnvironment();
 
     foreach (const Utils::EnvironmentItem &item, m_qnxEnv) {
         if (item.name == QLatin1String(Constants::QNX_TARGET_KEY))
-            return item.value;
+            return Utils::FileName::fromUserInput(item.value);
     }
 
-    return QString();
+    return Utils::FileName();
 }
 
 QString QnxQtVersion::cpuDir() const

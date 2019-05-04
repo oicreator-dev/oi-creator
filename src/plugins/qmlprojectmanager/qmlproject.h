@@ -64,6 +64,7 @@ public:
 
     Utils::FileName canonicalProjectDir() const;
     QString mainFile() const;
+    void setMainFile(const QString &mainFilePath);
     Utils::FileName targetDirectory(const ProjectExplorer::Target *target) const;
     Utils::FileName targetFile(const Utils::FileName &sourceFile,
                                const ProjectExplorer::Target *target) const;
@@ -89,7 +90,6 @@ private:
     void addedTarget(ProjectExplorer::Target *target);
     void onActiveTargetChanged(ProjectExplorer::Target *target);
     void onKitChanged();
-    void addedRunConfiguration(ProjectExplorer::RunConfiguration *);
 
     // plain format
     void parseProject(RefreshOptions options);

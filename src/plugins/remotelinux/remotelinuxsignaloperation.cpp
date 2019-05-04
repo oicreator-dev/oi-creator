@@ -34,9 +34,7 @@ using namespace ProjectExplorer;
 
 RemoteLinuxSignalOperation::RemoteLinuxSignalOperation(
         const QSsh::SshConnectionParameters &sshParameters)
-    : DeviceProcessSignalOperation()
-    , m_sshParameters(sshParameters)
-    , m_runner(0)
+    : m_sshParameters(sshParameters)
 {}
 
 RemoteLinuxSignalOperation::~RemoteLinuxSignalOperation()
@@ -51,7 +49,7 @@ RemoteLinuxSignalOperation::~RemoteLinuxSignalOperation()
 
 static QString signalProcessGroupByPidCommandLine(qint64 pid, int signal)
 {
-    return QString::fromLatin1("kill -%1 -- -%2 %2").arg(signal).arg(pid);
+    return QString::fromLatin1("kill -%1 -%2 %2").arg(signal).arg(pid);
 }
 
 void RemoteLinuxSignalOperation::run(const QString &command)
@@ -68,7 +66,7 @@ void RemoteLinuxSignalOperation::run(const QString &command)
 void RemoteLinuxSignalOperation::finish()
 {
     delete m_runner;
-    m_runner = 0;
+    m_runner = nullptr;
     emit finished(m_errorMessage);
 }
 
@@ -78,7 +76,7 @@ static QString signalProcessGroupByNameCommandLine(const QString &filePath, int 
                 "cd /proc; for pid in `ls -d [0123456789]*`; "
                 "do "
                 "if [ \"`readlink /proc/$pid/exe`\" = \"%1\" ]; then "
-                "    kill -%2 -- -$pid $pid;"
+                "    kill -%2 -$pid $pid;"
                 "fi; "
                 "done").arg(filePath).arg(signal);
 }
@@ -96,8 +94,10 @@ QString RemoteLinuxSignalOperation::interruptProcessByNameCommandLine(const QStr
 
 void RemoteLinuxSignalOperation::killProcess(qint64 pid)
 {
-    run(QString::fromLatin1("%1; sleep 1; %2").arg(signalProcessGroupByPidCommandLine(pid, 15),
-                                                   signalProcessGroupByPidCommandLine(pid, 9)));
+    run(QString::fromLatin1("%1; sleep 1; %2 && %3")
+        .arg(signalProcessGroupByPidCommandLine(pid, 15),
+             signalProcessGroupByPidCommandLine(pid, 0),
+             signalProcessGroupByPidCommandLine(pid, 9)));
 }
 
 void RemoteLinuxSignalOperation::killProcess(const QString &filePath)

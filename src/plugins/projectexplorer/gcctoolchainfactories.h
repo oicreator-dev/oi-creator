@@ -31,6 +31,7 @@
 #include "abiwidget.h"
 
 #include <QList>
+#include <QSet>
 
 QT_BEGIN_NAMESPACE
 class QComboBox;
@@ -39,6 +40,7 @@ QT_END_NAMESPACE
 namespace Utils { class PathChooser; }
 
 namespace ProjectExplorer {
+class ClangToolChain;
 class GccToolChain;
 
 namespace Internal {
@@ -62,9 +64,18 @@ public:
 
 protected:
     virtual GccToolChain *createToolChain(bool autoDetect);
-    QList<ToolChain *> autoDetectToolchains(const QString &compiler, const Abi &requiredAbi,
-                                            Core::Id language, const Core::Id requiredTypeId,
-                                            const QList<ToolChain *> &alreadyKnown);
+    void versionProbe(const QString &name,
+                      Core::Id language,
+                      Core::Id type,
+                      QList<ToolChain *> &tcs,
+                      QList<ToolChain *> &known,
+                      const QSet<QString> &filteredNames = {});
+
+    Utils::FileName compilerPathFromEnvironment(const QString &compilerName);
+
+    QList<ToolChain *> autoDetectToolchains(
+            const Utils::FileName &compilerPath, const Abi &requiredAbi, Core::Id language,
+            const Core::Id requiredTypeId, const QList<ToolChain *> &alreadyKnown);
     QList<ToolChain *> autoDetectToolChain(const Utils::FileName &compilerPath, const Core::Id language,
                                            const Abi &requiredAbi = Abi());
 };
@@ -81,7 +92,7 @@ public:
     explicit GccToolChainConfigWidget(GccToolChain *tc);
     static QStringList splitString(const QString &s);
 
-private:
+protected:
     void handleCompilerCommandChange();
     void handlePlatformCodeGenFlagsChange();
     void handlePlatformLinkerFlagsChange();
@@ -93,13 +104,37 @@ private:
 
     void setFromToolchain();
 
+    AbiWidget *m_abiWidget;
+
+private:
     Utils::PathChooser *m_compilerCommand;
     QLineEdit *m_platformCodeGenFlagsLineEdit;
     QLineEdit *m_platformLinkerFlagsLineEdit;
-    AbiWidget *m_abiWidget;
 
     bool m_isReadOnly = false;
     ProjectExplorer::Macros m_macros;
+};
+
+// --------------------------------------------------------------------------
+// ClangToolChainConfigWidget
+// --------------------------------------------------------------------------
+
+class ClangToolChainConfigWidget : public GccToolChainConfigWidget
+{
+    Q_OBJECT
+public:
+    explicit ClangToolChainConfigWidget(ClangToolChain *tc);
+
+private:
+    void applyImpl() override;
+    void discardImpl() override { setFromClangToolchain(); }
+    bool isDirtyImpl() const override;
+    void makeReadOnlyImpl() override;
+
+    void setFromClangToolchain();
+    void updateParentToolChainComboBox();
+    QList<QMetaObject::Connection> m_parentToolChainConnections;
+    QComboBox *m_parentToolchainCombo = nullptr;
 };
 
 // --------------------------------------------------------------------------

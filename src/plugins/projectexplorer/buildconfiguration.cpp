@@ -25,19 +25,18 @@
 
 #include "buildconfiguration.h"
 
+#include "buildenvironmentwidget.h"
 #include "buildinfo.h"
 #include "buildsteplist.h"
-#include "projectexplorer.h"
-#include "kitmanager.h"
-#include "target.h"
-#include "project.h"
 #include "kit.h"
-
-#include <projectexplorer/buildenvironmentwidget.h>
-#include <projectexplorer/kitinformation.h>
-#include <projectexplorer/projectexplorerconstants.h>
-#include <projectexplorer/projectmacroexpander.h>
-#include <projectexplorer/target.h>
+#include "kitinformation.h"
+#include "kitmanager.h"
+#include "project.h"
+#include "projectexplorer.h"
+#include "projectexplorerconstants.h"
+#include "projectmacroexpander.h"
+#include "projecttree.h"
+#include "target.h"
 
 #include <coreplugin/idocument.h>
 
@@ -77,14 +76,17 @@ BuildConfiguration::BuildConfiguration(Target *target, Core::Id id)
 
     updateCacheAndEmitEnvironmentChanged();
     connect(target, &Target::kitChanged,
-            this, &BuildConfiguration::handleKitUpdate);
+            this, &BuildConfiguration::updateCacheAndEmitEnvironmentChanged);
     connect(this, &BuildConfiguration::environmentChanged,
             this, &BuildConfiguration::emitBuildDirectoryChanged);
+    // Many macroexpanders are based on the current project, so they may change the environment:
+    connect(ProjectTree::instance(), &ProjectTree::currentProjectChanged,
+            this, &BuildConfiguration::updateCacheAndEmitEnvironmentChanged);
 }
 
 Utils::FileName BuildConfiguration::buildDirectory() const
 {
-    const QString path = macroExpander()->expand(QDir::cleanPath(environment().expandVariables(m_buildDirectory.toString())));
+    const QString path = QDir::cleanPath(macroExpander()->expand(environment().expandVariables(m_buildDirectory.toString())));
     return Utils::FileName::fromString(QDir::cleanPath(QDir(target()->project()->projectDirectory().toString()).absoluteFilePath(path)));
 }
 
@@ -101,11 +103,11 @@ void BuildConfiguration::setBuildDirectory(const Utils::FileName &dir)
     emitBuildDirectoryChanged();
 }
 
-void BuildConfiguration::initialize(const BuildInfo *info)
+void BuildConfiguration::initialize(const BuildInfo &info)
 {
-    setDisplayName(info->displayName);
-    setDefaultDisplayName(info->displayName);
-    setBuildDirectory(info->buildDirectory);
+    setDisplayName(info.displayName);
+    setDefaultDisplayName(info.displayName);
+    setBuildDirectory(info.buildDirectory);
 
     m_stepLists.append(new BuildStepList(this, Constants::BUILDSTEPS_BUILD));
     m_stepLists.append(new BuildStepList(this, Constants::BUILDSTEPS_CLEAN));
@@ -113,7 +115,7 @@ void BuildConfiguration::initialize(const BuildInfo *info)
 
 QList<NamedWidget *> BuildConfiguration::createSubConfigWidgets()
 {
-    return QList<NamedWidget *>() << new BuildEnvironmentWidget(this);
+    return {new BuildEnvironmentWidget(this)};
 }
 
 QList<Core::Id> BuildConfiguration::knownStepLists() const
@@ -182,11 +184,6 @@ void BuildConfiguration::updateCacheAndEmitEnvironmentChanged()
         return;
     m_cachedEnvironment = env;
     emit environmentChanged(); // might trigger buildDirectoryChanged signal!
-}
-
-void BuildConfiguration::handleKitUpdate()
-{
-    updateCacheAndEmitEnvironmentChanged();
 }
 
 void BuildConfiguration::emitBuildDirectoryChanged()
@@ -271,6 +268,12 @@ QString BuildConfiguration::disabledReason() const
     return QString();
 }
 
+bool BuildConfiguration::regenerateBuildFiles(Node *node)
+{
+    Q_UNUSED(node);
+    return false;
+}
+
 QString BuildConfiguration::buildTypeName(BuildConfiguration::BuildType type)
 {
     switch (type) {
@@ -318,91 +321,83 @@ void BuildConfiguration::prependCompilerPathToEnvironment(Kit *k, Utils::Environ
 // IBuildConfigurationFactory
 ///
 
-static QList<IBuildConfigurationFactory *> g_buildConfigurationFactories;
+static QList<BuildConfigurationFactory *> g_buildConfigurationFactories;
 
-IBuildConfigurationFactory::IBuildConfigurationFactory()
+BuildConfigurationFactory::BuildConfigurationFactory()
 {
-    g_buildConfigurationFactories.append(this);
+    // Note: Order matters as first-in-queue wins.
+    g_buildConfigurationFactories.prepend(this);
 }
 
-IBuildConfigurationFactory::~IBuildConfigurationFactory()
+BuildConfigurationFactory::~BuildConfigurationFactory()
 {
     g_buildConfigurationFactories.removeOne(this);
 }
 
-int IBuildConfigurationFactory::priority(const Target *parent) const
+const QList<Task> BuildConfigurationFactory::reportIssues(ProjectExplorer::Kit *kit, const QString &projectPath,
+                                                          const QString &buildDir) const
 {
-    return canHandle(parent) ? m_basePriority : -1;
+    if (m_issueReporter)
+        return m_issueReporter(kit, projectPath, buildDir);
+    return {};
 }
 
-bool IBuildConfigurationFactory::supportsTargetDeviceType(Core::Id id) const
+const QList<BuildInfo> BuildConfigurationFactory::allAvailableBuilds(const Target *parent) const
+{
+    return availableBuilds(parent);
+}
+
+const QList<BuildInfo> BuildConfigurationFactory::allAvailableSetups(const Kit *k, const QString &projectPath) const
+{
+    return availableSetups(k, projectPath);
+}
+
+bool BuildConfigurationFactory::supportsTargetDeviceType(Core::Id id) const
 {
     if (m_supportedTargetDeviceTypes.isEmpty())
         return true;
     return m_supportedTargetDeviceTypes.contains(id);
 }
 
-int IBuildConfigurationFactory::priority(const Kit *k, const QString &projectPath) const
-{
-    QTC_ASSERT(!m_supportedProjectMimeTypeName.isEmpty(), return -1);
-    if (k && Utils::mimeTypeForFile(projectPath).matchesName(m_supportedProjectMimeTypeName)
-          && supportsTargetDeviceType(DeviceTypeKitInformation::deviceTypeId(k))) {
-        return m_basePriority;
-    }
-    return -1;
-}
-
 // setup
-IBuildConfigurationFactory *IBuildConfigurationFactory::find(const Kit *k, const QString &projectPath)
+BuildConfigurationFactory *BuildConfigurationFactory::find(const Kit *k, const QString &projectPath)
 {
-    IBuildConfigurationFactory *factory = 0;
-    int priority = -1;
-    for (IBuildConfigurationFactory *i : g_buildConfigurationFactories) {
-        int iPriority = i->priority(k, projectPath);
-        if (iPriority > priority) {
-            factory = i;
-            priority = iPriority;
-        }
+    QTC_ASSERT(k, return nullptr);
+    const Core::Id deviceType = DeviceTypeKitInformation::deviceTypeId(k);
+    for (BuildConfigurationFactory *factory : g_buildConfigurationFactories) {
+        if (Utils::mimeTypeForFile(projectPath).matchesName(factory->m_supportedProjectMimeTypeName)
+                && factory->supportsTargetDeviceType(deviceType))
+            return factory;
     }
-    return factory;
+    return nullptr;
 }
 
 // create
-IBuildConfigurationFactory * IBuildConfigurationFactory::find(Target *parent)
+BuildConfigurationFactory * BuildConfigurationFactory::find(Target *parent)
 {
-    IBuildConfigurationFactory *factory = 0;
-    int priority = -1;
-    for (IBuildConfigurationFactory *i : g_buildConfigurationFactories) {
-        int iPriority = i->priority(parent);
-        if (iPriority > priority) {
-            factory = i;
-            priority = iPriority;
-        }
+    for (BuildConfigurationFactory *factory : g_buildConfigurationFactories) {
+        if (factory->canHandle(parent))
+            return factory;
     }
-    return factory;
+    return nullptr;
 }
 
-void IBuildConfigurationFactory::setSupportedProjectType(Core::Id id)
+void BuildConfigurationFactory::setSupportedProjectType(Core::Id id)
 {
     m_supportedProjectType = id;
 }
 
-void IBuildConfigurationFactory::setSupportedProjectMimeTypeName(const QString &mimeTypeName)
+void BuildConfigurationFactory::setSupportedProjectMimeTypeName(const QString &mimeTypeName)
 {
     m_supportedProjectMimeTypeName = mimeTypeName;
 }
 
-void IBuildConfigurationFactory::setSupportedTargetDeviceTypes(const QList<Core::Id> &ids)
+void BuildConfigurationFactory::addSupportedTargetDeviceType(Core::Id id)
 {
-    m_supportedTargetDeviceTypes = ids;
+    m_supportedTargetDeviceTypes.append(id);
 }
 
-void IBuildConfigurationFactory::setBasePriority(int basePriority)
-{
-    m_basePriority = basePriority;
-}
-
-bool IBuildConfigurationFactory::canHandle(const Target *target) const
+bool BuildConfigurationFactory::canHandle(const Target *target) const
 {
     if (m_supportedProjectType.isValid() && m_supportedProjectType != target->project()->id())
         return false;
@@ -416,7 +411,12 @@ bool IBuildConfigurationFactory::canHandle(const Target *target) const
     return true;
 }
 
-BuildConfiguration *IBuildConfigurationFactory::create(Target *parent, const BuildInfo *info) const
+void BuildConfigurationFactory::setIssueReporter(const IssueReporter &issueReporter)
+{
+    m_issueReporter = issueReporter;
+}
+
+BuildConfiguration *BuildConfigurationFactory::create(Target *parent, const BuildInfo &info) const
 {
     if (!canHandle(parent))
         return nullptr;
@@ -428,37 +428,27 @@ BuildConfiguration *IBuildConfigurationFactory::create(Target *parent, const Bui
     return bc;
 }
 
-BuildConfiguration *IBuildConfigurationFactory::restore(Target *parent, const QVariantMap &map)
+BuildConfiguration *BuildConfigurationFactory::restore(Target *parent, const QVariantMap &map)
 {
-    IBuildConfigurationFactory *factory = nullptr;
-    int priority = -1;
-    for (IBuildConfigurationFactory *i : g_buildConfigurationFactories) {
-        if (!i->canHandle(parent))
+    const Core::Id id = idFromMap(map);
+    for (BuildConfigurationFactory *factory : g_buildConfigurationFactories) {
+        QTC_ASSERT(factory->m_creator, return nullptr);
+        if (!factory->canHandle(parent))
             continue;
-        const Core::Id id = idFromMap(map);
-        if (!id.name().startsWith(i->m_buildConfigId.name()))
+        if (!id.name().startsWith(factory->m_buildConfigId.name()))
             continue;
-        int iPriority = i->priority(parent);
-        if (iPriority > priority) {
-            factory = i;
-            priority = iPriority;
+        BuildConfiguration *bc = factory->m_creator(parent);
+        QTC_ASSERT(bc, return nullptr);
+        if (!bc->fromMap(map)) {
+            delete bc;
+            bc = nullptr;
         }
+        return bc;
     }
-
-    if (!factory)
-        return nullptr;
-
-    QTC_ASSERT(factory->m_creator, return nullptr);
-    BuildConfiguration *bc = factory->m_creator(parent);
-    QTC_ASSERT(bc, return nullptr);
-    if (!bc->fromMap(map)) {
-        delete bc;
-        bc = nullptr;
-    }
-    return bc;
+    return nullptr;
 }
 
-BuildConfiguration *IBuildConfigurationFactory::clone(Target *parent,
+BuildConfiguration *BuildConfigurationFactory::clone(Target *parent,
                                                       const BuildConfiguration *source)
 {
     return restore(parent, source->toMap());

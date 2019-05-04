@@ -12,12 +12,17 @@ Project {
         Depends { name: "Core" }
         Depends { name: "ProParser" }
         Depends { name: "ProjectExplorer" }
+        Depends { name: "ResourceEditor" }
         Depends { name: "CppTools" }
 
         cpp.defines: base.concat([
             "QMAKE_LIBRARY",
             "QMAKE_BUILTIN_PRFS",
         ])
+        Properties {
+            condition: qbs.targetOS.contains("windows")
+            cpp.dynamicLibraries: "advapi32"
+        }
 
         Export {
             Depends { name: "ProParser" }
@@ -47,6 +52,8 @@ Project {
                 "qmakeparser.h",
                 "qmakevfs.cpp",
                 "qmakevfs.h",
+                "registry.cpp",
+                "registry_p.h",
             ]
         }
 
@@ -62,6 +69,8 @@ Project {
             "codegensettingspagewidget.ui",
             "qtconfigwidget.cpp",
             "qtconfigwidget.h",
+            "qtcppkitinfo.cpp",
+            "qtcppkitinfo.h",
             "qtprojectimporter.cpp",
             "qtprojectimporter.h",
             "qtsupport.qrc",

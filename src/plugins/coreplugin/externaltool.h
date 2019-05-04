@@ -25,6 +25,8 @@
 
 #pragma once
 
+#include "id.h"
+
 #include <utils/fileutils.h>
 #include <utils/environment.h>
 
@@ -67,7 +69,9 @@ public:
     QString arguments() const;
     QString input() const;
     QString workingDirectory() const;
-    QList<Utils::EnvironmentItem> environment() const;
+    Id baseEnvironmentProviderId() const;
+    Utils::Environment baseEnvironment() const;
+    QList<Utils::EnvironmentItem> environmentUserChanges() const;
 
     void setFileName(const QString &fileName);
     void setPreset(QSharedPointer<ExternalTool> preset);
@@ -96,22 +100,24 @@ public:
     void setArguments(const QString &arguments);
     void setInput(const QString &input);
     void setWorkingDirectory(const QString &workingDirectory);
-    void setEnvironment(const QList<Utils::EnvironmentItem> &items);
+    void setBaseEnvironmentProviderId(Id id);
+    void setEnvironmentUserChanges(const QList<Utils::EnvironmentItem> &items);
 
 private:
     QString m_id;
     QString m_description;
     QString m_displayName;
     QString m_displayCategory;
-    int m_order;
+    int m_order = -1;
     QStringList m_executables;
     QString m_arguments;
     QString m_input;
     QString m_workingDirectory;
+    Id m_baseEnvironmentProviderId;
     QList<Utils::EnvironmentItem> m_environment;
-    OutputHandling m_outputHandling;
-    OutputHandling m_errorHandling;
-    bool m_modifiesCurrentDocument;
+    OutputHandling m_outputHandling = ShowInPane;
+    OutputHandling m_errorHandling = ShowInPane;
+    bool m_modifiesCurrentDocument = false;
 
     QString m_fileName;
     QString m_presetFileName;

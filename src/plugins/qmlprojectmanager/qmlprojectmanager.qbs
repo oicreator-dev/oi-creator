@@ -10,6 +10,7 @@ QtcPlugin {
     Depends { name: "Core" }
     Depends { name: "ProjectExplorer" }
     Depends { name: "QtSupport" }
+    Depends { name: "TextEditor" }
 
     Group {
         name: "General"
@@ -22,8 +23,7 @@ QtcPlugin {
             "qmlprojectmanagerconstants.h",
             "qmlprojectnodes.cpp", "qmlprojectnodes.h",
             "qmlprojectplugin.cpp", "qmlprojectplugin.h",
-            "qmlprojectrunconfiguration.cpp", "qmlprojectrunconfiguration.h",
-            "qmlprojectrunconfigurationwidget.cpp", "qmlprojectrunconfigurationwidget.h"
+            "qmlprojectrunconfiguration.cpp", "qmlprojectrunconfiguration.h"
         ]
     }
 

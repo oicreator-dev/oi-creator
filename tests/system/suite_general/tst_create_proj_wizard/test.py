@@ -33,7 +33,7 @@ def main():
     else:
         test.warning("Could not find cmake in PATH - several tests won't run without.")
 
-    startApplication("qtcreator" + SettingsPath)
+    startQC()
     if not startedWithoutPluginError():
         return
     kits = getConfiguredKits()
@@ -45,7 +45,6 @@ def main():
     projects = catModel.index(0, 0)
     test.compare("Projects", str(projects.data()))
     comboBox = findObject(":New.comboBox_QComboBox")
-    targets = zip(*kits.values())[0]
     test.verify(comboBox.enabled, "Verifying whether combobox is enabled.")
     test.compare(comboBox.currentText, "All Templates")
     try:
@@ -62,49 +61,47 @@ def main():
         for template in dumpItems(templatesView.model(), templatesView.rootIndex()):
             template = template.replace(".", "\\.")
             # skip non-configurable
-            if not template in ["Qt Quick UI Prototype", "Qt Canvas 3D Application",
-                                "Auto Test Project"]: # FIXME
+            if not template in ["Qt Quick UI Prototype", "Auto Test Project",  # FIXME
+                                "Qt for Python - Empty", "Qt for Python - Window"]:
                 availableProjectTypes.append({category:template})
     safeClickButton("Cancel")
     for current in availableProjectTypes:
         category = current.keys()[0]
         template = current.values()[0]
-        displayedPlatforms = __createProject__(category, template)
-        if template.startswith("Qt Quick Application - "):
-            qtVersionsForQuick = ["5.6", "5.10"] if template == "Qt Quick Application - Empty" else ["5.10"]
-            for counter, qtVersion in enumerate(qtVersionsForQuick):
-                def additionalFunc(displayedPlatforms, qtVersion):
-                    requiredQtVersion = __createProjectHandleQtQuickSelection__(qtVersion)
-                    __modifyAvailableTargets__(displayedPlatforms, requiredQtVersion, True)
-                handleBuildSystemVerifyKits(category, template, kits, displayedPlatforms,
-                                            additionalFunc, qtVersion)
-                # are there more Quick combinations - then recreate this project
-                if counter < len(qtVersionsForQuick) - 1:
-                    displayedPlatforms = __createProject__(category, template)
-            continue
-        handleBuildSystemVerifyKits(category, template, kits, displayedPlatforms)
+        with TestSection("Testing project template %s -> %s" % (category, template)):
+            displayedPlatforms = __createProject__(category, template)
+            if template.startswith("Qt Quick Application - "):
+                qtVersionsForQuick = ["5.6", "5.10"] if template == "Qt Quick Application - Empty" else ["5.10"]
+                for counter, qtVersion in enumerate(qtVersionsForQuick):
+                    def additionalFunc(displayedPlatforms, qtVersion):
+                        requiredQtVersion = __createProjectHandleQtQuickSelection__(qtVersion)
+                        __modifyAvailableTargets__(displayedPlatforms, requiredQtVersion, True)
+                    handleBuildSystemVerifyKits(category, template, kits, displayedPlatforms,
+                                                additionalFunc, qtVersion)
+                    # are there more Quick combinations - then recreate this project
+                    if counter < len(qtVersionsForQuick) - 1:
+                        displayedPlatforms = __createProject__(category, template)
+                continue
+            handleBuildSystemVerifyKits(category, template, kits, displayedPlatforms)
 
     invokeMenuItem("File", "Exit")
 
 def verifyKitCheckboxes(kits, displayedPlatforms):
     waitForObject("{type='QLabel' unnamed='1' visible='1' text='Kit Selection'}")
-    availableCheckboxes = filter(visibleCheckBoxExists, kits.keys())
+    availableCheckboxes = frozenset(filter(visibleCheckBoxExists, kits.keys()))
     # verification whether expected, found and configured match
-    for t in kits:
-        if t in displayedPlatforms:
-            if t in availableCheckboxes:
-                test.passes("Found expected kit '%s' on 'Kit Selection' page." % t)
-                availableCheckboxes.remove(t)
-            else:
-                test.fail("Expected kit '%s' missing on 'Kit Selection' page." % t)
-        else:
-            if t in availableCheckboxes:
-                test.fail("Kit '%s' found on 'Kit Selection' page - but was not expected!" % t)
-            else:
-                test.passes("Irrelevant kit '%s' not found on 'Kit Selection' page." % t)
-    if len(availableCheckboxes) != 0:
-        test.fail("Found unexpected additional kit(s) %s on 'Kit Selection' page."
-                  % str(availableCheckboxes))
+
+    expectedShownKits = availableCheckboxes.intersection(displayedPlatforms)
+    unexpectedShownKits = availableCheckboxes.difference(displayedPlatforms)
+    missingKits = displayedPlatforms.difference(availableCheckboxes)
+
+    test.log("Expected kits shown on 'Kit Selection' page:\n%s" % "\n".join(expectedShownKits))
+    if len(unexpectedShownKits):
+        test.fail("Kits found on 'Kit Selection' page but not expected:\n%s"
+                  % "\n".join(unexpectedShownKits))
+    if len(missingKits):
+        test.fail("Expected kits missing on 'Kit Selection' page:\n%s"
+                  % "\n".join(missingKits))
 
 def handleBuildSystemVerifyKits(category, template, kits, displayedPlatforms,
                                 specialHandlingFunc = None, *args):
@@ -128,9 +125,7 @@ def handleBuildSystemVerifyKits(category, template, kits, displayedPlatforms,
         test.log("Using build system '%s'" % buildSystem)
         selectFromCombo(combo, buildSystem)
         clickButton(waitForObject(":Next_QPushButton"))
-        if template == "Qt Quick Application - Scroll":
-            clickButton(waitForObject(":Next_QPushButton"))
-        elif specialHandlingFunc:
+        if specialHandlingFunc:
             specialHandlingFunc(displayedPlatforms, *args)
         verifyKitCheckboxes(kits, displayedPlatforms)
         safeClickButton("Cancel")

@@ -835,8 +835,8 @@ bool CustomWizardContext::replaceFields(const FieldReplacementMap &fm, QString *
 // used for the arguments of a generator script.
 class TemporaryFileTransform {
 public:
-    typedef CustomWizardContext::TemporaryFilePtr TemporaryFilePtr;
-    typedef CustomWizardContext::TemporaryFilePtrList TemporaryFilePtrList;
+    using TemporaryFilePtr = CustomWizardContext::TemporaryFilePtr;
+    using TemporaryFilePtrList = CustomWizardContext::TemporaryFilePtrList;
 
     explicit TemporaryFileTransform(TemporaryFilePtrList *f);
 
@@ -939,7 +939,17 @@ QString CustomWizardContext::processFile(const FieldReplacementMap &fm, QString 
         replaceFields(fm, &in);
 
     QString out;
+
+    // Expander needed to handle extra variable "Cpp:PragmaOnce"
     QString errorMessage;
+    Utils::MacroExpander *expander = Utils::globalMacroExpander();
+    in = Utils::TemplateEngine::processText(expander, in, &errorMessage);
+    if (!errorMessage.isEmpty()) {
+        qWarning("Error processing custom widget file: %s\nFile:\n%s",
+                 qPrintable(errorMessage), qPrintable(in));
+        return QString();
+    }
+
     if (!Utils::TemplateEngine::preprocessText(in, &out, &errorMessage)) {
         qWarning("Error preprocessing custom widget file: %s\nFile:\n%s",
                  qPrintable(errorMessage), qPrintable(in));

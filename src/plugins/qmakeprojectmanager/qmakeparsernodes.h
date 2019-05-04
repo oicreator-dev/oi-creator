@@ -39,7 +39,11 @@
 
 #include <memory>
 
-namespace Utils { class FileName; }
+namespace Utils {
+class FileName;
+class FileSystemWatcher;
+} // namespace Utils;
+
 namespace QtSupport { class ProFileReader; }
 namespace ProjectExplorer { class RunConfiguration; }
 
@@ -65,7 +69,8 @@ enum class Variable {
     IncludePath,
     CppFlags,
     CFlags,
-    Source,
+    ExactSource,
+    CumulativeSource,
     ExactResource,
     CumulativeResource,
     UiDir,
@@ -211,6 +216,8 @@ private:
     static void processValues(Internal::QmakePriFileEvalResult &result);
     void watchFolders(const QSet<Utils::FileName> &folders);
 
+    QString continuationIndent() const;
+
     QmakeProject *m_project = nullptr;
     QmakeProFile *m_qmakeProFile = nullptr;
     QmakePriFile *m_parent = nullptr;
@@ -303,9 +310,6 @@ public:
     TargetInformation targetInformation() const;
     InstallsList installsList() const;
 
-    QString makefile() const;
-    QString objectExtension() const;
-    QString objectsDirectory() const;
     QByteArray cxxDefines() const;
 
     enum AsyncUpdateDelay { ParseNow, ParseLater };
@@ -314,9 +318,6 @@ public:
 
     bool validParse() const;
     bool parseInProgress() const;
-
-    bool isDebugAndRelease() const;
-    bool isQtcRunnable() const;
 
     void setParseInProgressRecursive(bool b);
 
@@ -367,6 +368,9 @@ private:
     TargetInformation m_qmakeTargetInformation;
     Utils::FileNameList m_subProjectsNotToDeploy;
     InstallsList m_installsList;
+
+    std::unique_ptr<Utils::FileSystemWatcher> m_wildcardWatcher;
+    QMap<QString, QStringList> m_wildcardDirectoryContents;
 
     // Async stuff
     QFutureWatcher<Internal::QmakeEvalResult *> m_parseFutureWatcher;

@@ -43,7 +43,7 @@ namespace Utils { class SavedAction; }
 namespace Debugger {
 namespace Internal {
 
-typedef std::function<void(QString)> ScriptEvaluator;
+using ScriptEvaluator = std::function<void (QString)>;
 
 class ConsoleItemModel;
 class ConsoleView;
@@ -58,7 +58,7 @@ public:
 
     QWidget *outputWidget(QWidget *) override;
     QList<QWidget *> toolBarWidgets() const override;
-    QString displayName() const override { return tr("Debugger Console"); }
+    QString displayName() const override { return tr("QML Debugger Console"); }
     int priorityInStatusBar() const override;
     void clearContents() override;
     void visibilityChanged(bool visible) override;

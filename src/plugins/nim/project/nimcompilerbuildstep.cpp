@@ -30,10 +30,11 @@
 #include "nimproject.h"
 #include "nimtoolchain.h"
 
-#include <projectexplorer/projectexplorerconstants.h>
 #include <projectexplorer/buildconfiguration.h>
-#include <projectexplorer/kitinformation.h>
 #include <projectexplorer/ioutputparser.h>
+#include <projectexplorer/kitinformation.h>
+#include <projectexplorer/processparameters.h>
+#include <projectexplorer/projectexplorerconstants.h>
 #include <utils/qtcassert.h>
 
 #include <QDir>
@@ -115,13 +116,13 @@ NimCompilerBuildStep::NimCompilerBuildStep(BuildStepList *parentList)
     updateProcessParameters();
 }
 
-bool NimCompilerBuildStep::init(QList<const BuildStep *> &earlierSteps)
+bool NimCompilerBuildStep::init()
 {
     setOutputParser(new NimParser());
     if (IOutputParser *parser = target()->kit()->createOutputParser())
         appendOutputParser(parser);
     outputParser()->setWorkingDirectory(processParameters()->effectiveWorkingDirectory());
-    return AbstractProcessStep::init(earlierSteps);
+    return AbstractProcessStep::init();
 }
 
 BuildStepConfigWidget *NimCompilerBuildStep::createConfigWidget()
@@ -292,7 +293,7 @@ void NimCompilerBuildStep::updateTargetNimFile()
 NimCompilerBuildStepFactory::NimCompilerBuildStepFactory()
 {
     registerStep<NimCompilerBuildStep>(Constants::C_NIMCOMPILERBUILDSTEP_ID);
-    setDisplayName(tr("Nim Compiler Build Step"));
+    setDisplayName(NimCompilerBuildStep::tr("Nim Compiler Build Step"));
     setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_BUILD);
     setSupportedConfiguration(Constants::C_NIMBUILDCONFIGURATION_ID);
     setRepeatable(false);

@@ -28,14 +28,18 @@
 #include "cpptools_global.h"
 
 #include "cppprojectfile.h"
-#include "projectpartheaderpath.h"
 
+#include <projectexplorer/headerpath.h>
 #include <projectexplorer/projectexplorer_global.h>
 #include <projectexplorer/projectmacro.h>
 
 #include <coreplugin/id.h>
 
+#include <utils/cpplanguage_details.h>
+
 #include <cplusplus/Token.h>
+
+#include <utils/cpplanguage_details.h>
 
 #include <QString>
 #include <QSharedPointer>
@@ -49,40 +53,10 @@ namespace CppTools {
 class CPPTOOLS_EXPORT ProjectPart
 {
 public:
-    enum LanguageVersion {
-        C89,
-        C99,
-        C11,
-        LatestCVersion = C11,
-        CXX98,
-        CXX03,
-        CXX11,
-        CXX14,
-        CXX17,
-        LatestCxxVersion = CXX17,
-    };
-
-    enum LanguageExtension {
-        NoExtensions         = 0,
-        GnuExtensions        = 1 << 0,
-        MicrosoftExtensions  = 1 << 1,
-        BorlandExtensions    = 1 << 2,
-        OpenMPExtensions     = 1 << 3,
-        ObjectiveCExtensions = 1 << 4,
-
-        AllExtensions = GnuExtensions
-                      | MicrosoftExtensions
-                      | BorlandExtensions
-                      | OpenMPExtensions
-                      | ObjectiveCExtensions
-    };
-    Q_DECLARE_FLAGS(LanguageExtensions, LanguageExtension)
-
     enum QtVersion {
         UnknownQt = -1,
         NoQt,
-        Qt4_8_6AndOlder,
-        Qt4Latest,
+        Qt4,
         Qt5
     };
 
@@ -116,32 +90,40 @@ public:
     QString projectFile;
     int projectFileLine = -1;
     int projectFileColumn = -1;
-    QString projectConfigFile; // currently only used by the Generic Project Manager
     QString callGroupId;
-    QString buildSystemTarget;
 
-    ProjectFiles files;
-
-    QStringList precompiledHeaders;
-    ProjectPartHeaderPaths headerPaths;
-
-    ProjectExplorer::Macros projectMacros;
-
-    LanguageVersion languageVersion = LatestCxxVersion;
-    LanguageExtensions languageExtensions = NoExtensions;
-    ProjectExplorer::WarningFlags warningFlags = ProjectExplorer::WarningFlags::Default;
-    QtVersion qtVersion = UnknownQt;
+    // Versions, features and extensions
+    ::Utils::Language language = ::Utils::Language::Cxx;
+    ::Utils::LanguageVersion languageVersion = ::Utils::LanguageVersion::LatestCxx;
+    ::Utils::LanguageExtensions languageExtensions = ::Utils::LanguageExtension::None;
     CPlusPlus::LanguageFeatures languageFeatures;
+    QtVersion qtVersion = UnknownQt;
 
+    // Files
+    ProjectFiles files;
+    QStringList precompiledHeaders;
+    ProjectExplorer::HeaderPaths headerPaths;
+    QString projectConfigFile; // Generic Project Manager only
+
+    // Macros
+    ProjectExplorer::Macros projectMacros;
+    ProjectExplorer::Macros toolChainMacros;
+
+    // Build system
+    QString buildSystemTarget;
+    BuildTargetType buildTargetType = Unknown;
     bool selectedForBuilding = true;
 
+    // ToolChain
     Core::Id toolchainType;
     bool isMsvc2015Toolchain = false;
-    ProjectExplorer::Macros toolChainMacros;
-    ToolChainWordWidth toolChainWordWidth = WordWidth32Bit;
     QString toolChainTargetTriple;
+    ToolChainWordWidth toolChainWordWidth = WordWidth32Bit;
+    ProjectExplorer::WarningFlags warningFlags = ProjectExplorer::WarningFlags::Default;
+
+    // Misc
     QStringList extraCodeModelFlags;
-    BuildTargetType buildTargetType = Unknown;
+    QStringList compilerFlags;
 };
 
 } // namespace CppTools

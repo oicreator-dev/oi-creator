@@ -33,6 +33,7 @@
 #include "testtreemodel.h"
 #include "testcodeparser.h"
 #include "testeditormark.h"
+#include "testoutputreader.h"
 
 #include <aggregation/aggregate.h>
 #include <coreplugin/actionmanager/actionmanager.h>
@@ -236,7 +237,7 @@ void TestResultsPane::addTestResult(const TestResultPtr &result)
 
 void TestResultsPane::addOutput(const QByteArray &output)
 {
-    m_textOutput->appendPlainText(QString::fromLatin1(output));
+    m_textOutput->appendPlainText(QString::fromUtf8(TestOutputReader::chopLineBreak(output)));
 }
 
 QWidget *TestResultsPane::outputWidget(QWidget *parent)
@@ -324,7 +325,7 @@ void TestResultsPane::goToNext()
     if (currentIndex.isValid()) {
         // try to set next to first child or next sibling
         if (m_filterModel->rowCount(currentIndex)) {
-            nextCurrentIndex = currentIndex.child(0, 0);
+            nextCurrentIndex = m_filterModel->index(0, 0, currentIndex);
         } else {
             nextCurrentIndex = currentIndex.sibling(currentIndex.row() + 1, 0);
             // if it had no sibling check siblings of parent (and grandparents if necessary)
@@ -369,7 +370,7 @@ void TestResultsPane::goToPrev()
             nextCurrentIndex = currentIndex.sibling(currentIndex.row() - 1, 0);
             // if the sibling has children, use the last one
             while (int rowCount = m_filterModel->rowCount(nextCurrentIndex))
-                nextCurrentIndex = nextCurrentIndex.child(rowCount - 1, 0);
+                nextCurrentIndex = m_filterModel->index(rowCount - 1, 0, nextCurrentIndex);
         } else {
             nextCurrentIndex = currentIndex.parent();
         }
@@ -386,7 +387,7 @@ void TestResultsPane::goToPrev()
         nextCurrentIndex = m_filterModel->index(m_filterModel->rowCount(QModelIndex()) - 1, 0);
         // step through until end
         while (int rowCount = m_filterModel->rowCount(nextCurrentIndex))
-            nextCurrentIndex = nextCurrentIndex.child(rowCount - 1, 0);
+            nextCurrentIndex = m_filterModel->index(rowCount - 1, 0, nextCurrentIndex);
     }
 
     m_treeView->setCurrentIndex(nextCurrentIndex);
@@ -443,47 +444,55 @@ void TestResultsPane::initializeFilterMenu()
         m_filterMenu->addAction(action);
     }
     m_filterMenu->addSeparator();
-    QAction *action = new QAction(m_filterMenu);
-    action->setText(tr("Check All Filters"));
-    action->setCheckable(false);
+    QAction *action = new QAction(tr("Check All Filters"), m_filterMenu);
     m_filterMenu->addAction(action);
-    connect(action, &QAction::triggered, this, &TestResultsPane::enableAllFilter);
+    connect(action, &QAction::triggered, this, [this]() { TestResultsPane::checkAllFilter(true); });
+    action = new QAction(tr("Uncheck All Filters"), m_filterMenu);
+    m_filterMenu->addAction(action);
+    connect(action, &QAction::triggered, this, [this]() { TestResultsPane::checkAllFilter(false); });
 }
 
 void TestResultsPane::updateSummaryLabel()
 {
-    QString labelText = QString("<p>Test summary:&nbsp;&nbsp; %1 %2, %3 %4")
-            .arg(QString::number(m_model->resultTypeCount(Result::Pass)), tr("passes"),
-                 QString::number(m_model->resultTypeCount(Result::Fail)), tr("fails"));
-    int count = m_model->resultTypeCount(Result::UnexpectedPass);
+    QString labelText = QString("<p>");
+    labelText.append(tr("Test summary"));
+    labelText.append(":&nbsp;&nbsp; ");
+    int count = m_model->resultTypeCount(Result::Pass);
+    labelText += QString::number(count) + ' ' + tr("passes");
+    count = m_model->resultTypeCount(Result::Fail);
+    labelText += ", " + QString::number(count) + ' ' + tr("fails");
+    count = m_model->resultTypeCount(Result::UnexpectedPass);
     if (count)
-        labelText.append(QString(", %1 %2").arg(QString::number(count), tr("unexpected passes")));
+        labelText += ", " + QString::number(count) + ' ' + tr("unexpected passes");
     count = m_model->resultTypeCount(Result::ExpectedFail);
     if (count)
-        labelText.append(QString(", %1 %2").arg(QString::number(count), tr("expected fails")));
+        labelText += ", " + QString::number(count) + ' ' + tr("expected fails");
     count = m_model->resultTypeCount(Result::MessageFatal);
     if (count)
-        labelText.append(QString(", %1 %2").arg(QString::number(count), tr("fatals")));
+        labelText += ", " + QString::number(count) + ' ' + tr("fatals");
     count = m_model->resultTypeCount(Result::BlacklistedFail)
-            + m_model->resultTypeCount(Result::BlacklistedPass);
+            + m_model->resultTypeCount(Result::BlacklistedXFail)
+            + m_model->resultTypeCount(Result::BlacklistedPass)
+            + m_model->resultTypeCount(Result::BlacklistedXPass);
     if (count)
-        labelText.append(QString(", %1 %2").arg(QString::number(count), tr("blacklisted")));
-
+        labelText += ", " + QString::number(count) + ' ' + tr("blacklisted");
+    count = m_model->resultTypeCount(Result::Skip);
+    if (count)
+        labelText += ", " + QString::number(count) + ' ' + tr("skipped");
     count = m_model->disabledTests();
     if (count)
-        labelText.append(tr(", %1 disabled").arg(count));
-
+        labelText += ", " + QString::number(count) + ' ' + tr("disabled");
     labelText.append(".</p>");
     m_summaryLabel->setText(labelText);
 }
 
-void TestResultsPane::enableAllFilter()
+void TestResultsPane::checkAllFilter(bool checked)
 {
     for (QAction *action : m_filterMenu->actions()) {
         if (action->isCheckable())
-            action->setChecked(true);
+            action->setChecked(checked);
     }
-    m_filterModel->enableAllResultTypes();
+    m_filterModel->enableAllResultTypes(checked);
 }
 
 void TestResultsPane::filterMenuTriggered(QAction *action)
@@ -547,7 +556,7 @@ void TestResultsPane::onCustomContextMenuRequested(const QPoint &pos)
     connect(action, &QAction::triggered, this, &TestResultsPane::onSaveWholeTriggered);
     menu.addAction(action);
 
-    const auto correlatingItem = clicked ? clicked->findTestTreeItem() : nullptr;
+    const auto correlatingItem = (enabled && clicked) ? clicked->findTestTreeItem() : nullptr;
     action = new QAction(tr("Run This Test"), &menu);
     action->setEnabled(correlatingItem && correlatingItem->canProvideTestConfiguration());
     connect(action, &QAction::triggered, this, [this, clicked] {
@@ -637,6 +646,9 @@ QString TestResultsPane::getWholeOutput(const QModelIndex &parent)
 
 void TestResultsPane::createMarks(const QModelIndex &parent)
 {
+    const TestResult *parentResult = m_model->testResult(parent);
+    Result::Type parentType = parentResult ? parentResult->result() : Result::Invalid;
+    const QVector<Result::Type> interested{Result::Fail, Result::UnexpectedPass};
     for (int row = 0, count = m_model->rowCount(parent); row < count; ++row) {
         const QModelIndex index = m_model->index(row, 0, parent);
         const TestResult *result = m_model->testResult(index);
@@ -645,8 +657,9 @@ void TestResultsPane::createMarks(const QModelIndex &parent)
         if (m_model->hasChildren(index))
             createMarks(index);
 
-        const QVector<Result::Type> interested{Result::Fail, Result::UnexpectedPass};
-        if (interested.contains(result->result())) {
+        bool isLocationItem = result->result() == Result::MessageLocation;
+        if (interested.contains(result->result())
+                || (isLocationItem && interested.contains(parentType))) {
             const Utils::FileName fileName = Utils::FileName::fromString(result->fileName());
             TestEditorMark *mark = new TestEditorMark(index, fileName, result->line());
             mark->setIcon(index.data(Qt::DecorationRole).value<QIcon>());

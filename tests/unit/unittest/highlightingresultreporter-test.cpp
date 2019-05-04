@@ -33,8 +33,6 @@
 #include <tokeninfocontainer.h>
 #include <tokenprocessor.h>
 #include <clanghighlightingresultreporter.h>
-#include <projectpart.h>
-#include <projects.h>
 #include <unsavedfiles.h>
 
 using ClangBackEnd::Cursor;
@@ -44,20 +42,17 @@ using ClangBackEnd::HighlightingType;
 using ClangBackEnd::Document;
 using ClangBackEnd::Documents;
 using ClangBackEnd::UnsavedFiles;
-using ClangBackEnd::ProjectPart;
-using ClangBackEnd::ProjectParts;
 using ClangBackEnd::ChunksReportedMonitor;
+using ClangCodeModel::Internal::HighlightingResultReporter;
 
 namespace {
 
 struct Data {
-    ProjectParts projects;
     UnsavedFiles unsavedFiles;
-    Documents documents{projects, unsavedFiles};
-    Document document{Utf8StringLiteral(TESTDATA_DIR"/highlightingmarks.cpp"),
-                      ProjectPart(Utf8StringLiteral("projectPartId"),
-                                  TestEnvironment::addPlatformArguments({Utf8StringLiteral("-std=c++14")})),
-                      {},
+    Documents documents{unsavedFiles};
+    Document document{Utf8StringLiteral(TESTDATA_DIR "/highlightingmarks.cpp"),
+                      TestEnvironment::addPlatformArguments({Utf8StringLiteral("-std=c++14")}),
+                      Utf8StringVector(),
                       documents};
 };
 
@@ -92,7 +87,7 @@ QVector<TokenInfoContainer> generateTokenInfos(uint count)
 
 TEST_F(HighlightingResultReporter, StartAndFinish)
 {
-    auto reporter = new ClangCodeModel::HighlightingResultReporter(noTokenInfos());
+    auto reporter = new ::HighlightingResultReporter(noTokenInfos());
 
     auto future = reporter->start();
 
@@ -102,7 +97,7 @@ TEST_F(HighlightingResultReporter, StartAndFinish)
 
 TEST_F(HighlightingResultReporter, ReportNothingIfNothingToReport)
 {
-    auto reporter = new ClangCodeModel::HighlightingResultReporter(generateTokenInfos(0));
+    auto reporter = new ::HighlightingResultReporter(generateTokenInfos(0));
 
     auto future = reporter->start();
 
@@ -112,7 +107,7 @@ TEST_F(HighlightingResultReporter, ReportNothingIfNothingToReport)
 
 TEST_F(HighlightingResultReporter, ReportSingleResultAsOneChunk)
 {
-    auto reporter = new ClangCodeModel::HighlightingResultReporter(generateTokenInfos(1));
+    auto reporter = new ::HighlightingResultReporter(generateTokenInfos(1));
     reporter->setChunkSize(1);
 
     auto future = reporter->start();
@@ -123,7 +118,7 @@ TEST_F(HighlightingResultReporter, ReportSingleResultAsOneChunk)
 
 TEST_F(HighlightingResultReporter, ReportRestIfChunkSizeNotReached)
 {
-    auto reporter = new ClangCodeModel::HighlightingResultReporter(generateTokenInfos(1));
+    auto reporter = new ::HighlightingResultReporter(generateTokenInfos(1));
     const int notReachedChunkSize = 100;
     reporter->setChunkSize(notReachedChunkSize);
 
@@ -135,7 +130,7 @@ TEST_F(HighlightingResultReporter, ReportRestIfChunkSizeNotReached)
 
 TEST_F(HighlightingResultReporter, ReportChunksWithoutRest)
 {
-    auto reporter = new ClangCodeModel::HighlightingResultReporter(generateTokenInfos(4));
+    auto reporter = new ::HighlightingResultReporter(generateTokenInfos(4));
     reporter->setChunkSize(1);
 
     auto future = reporter->start();
@@ -146,7 +141,7 @@ TEST_F(HighlightingResultReporter, ReportChunksWithoutRest)
 
 TEST_F(HighlightingResultReporter, ReportSingleChunkAndRest)
 {
-    auto reporter = new ClangCodeModel::HighlightingResultReporter(generateTokenInfos(5));
+    auto reporter = new ::HighlightingResultReporter(generateTokenInfos(5));
     reporter->setChunkSize(2);
 
     auto future = reporter->start();
@@ -164,7 +159,7 @@ TEST_F(HighlightingResultReporter, ReportCompleteLines)
         TokenInfoContainer(1, 2, 1, types),
         TokenInfoContainer(2, 1, 1, types),
     };
-    auto reporter = new ClangCodeModel::HighlightingResultReporter(tokenInfos);
+    auto reporter = new ::HighlightingResultReporter(tokenInfos);
     reporter->setChunkSize(1);
 
     auto future = reporter->start();

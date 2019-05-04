@@ -98,23 +98,49 @@ SymbolKindAndTags symbolKindAndTags(const clang::Decl *declaration)
     static IndexingDeclVisitor visitor;
     return visitor.Visit(declaration);
 }
+
+bool isDeclaration(clang::index::SymbolRoleSet symbolRoles)
+{
+    using namespace clang::index;
+
+    return symbolRoles & (uint(SymbolRole::Declaration) | uint(SymbolRole::Definition));
 }
 
-bool IndexDataConsumer::handleDeclOccurence(const clang::Decl *declaration,
-                                            clang::index::SymbolRoleSet symbolRoles,
-                                            llvm::ArrayRef<clang::index::SymbolRelation> symbolRelations,
-                                            clang::FileID fileId,
-                                            unsigned offset,
-                                            IndexDataConsumer::ASTNodeInfo astNodeInfo)
+bool isReference(clang::index::SymbolRoleSet symbolRoles)
 {
+    using namespace clang::index;
 
+    return symbolRoles & (uint(SymbolRole::Reference) | uint(SymbolRole::Call));
+}
+
+}
+
+bool IndexDataConsumer::skipSymbol(clang::FileID fileId, clang::index::SymbolRoleSet symbolRoles)
+{
+    bool alreadyParsed = isAlreadyParsed(fileId);
+    bool isParsedDeclaration = alreadyParsed && isDeclaration(symbolRoles);
+    bool isParsedReference = alreadyParsed && !dependentFilesAreModified() && isReference(symbolRoles);
+
+    return isParsedDeclaration || isParsedReference;
+}
+
+bool IndexDataConsumer::handleDeclOccurence(
+    const clang::Decl *declaration,
+    clang::index::SymbolRoleSet symbolRoles,
+    llvm::ArrayRef<clang::index::SymbolRelation> /*symbolRelations*/,
+    clang::SourceLocation sourceLocation,
+    IndexDataConsumer::ASTNodeInfo /*astNodeInfo*/)
+{
     const auto *namedDeclaration = clang::dyn_cast<clang::NamedDecl>(declaration);
     if (namedDeclaration) {
         if (!namedDeclaration->getIdentifier())
             return true;
 
+        if (skipSymbol(m_sourceManager->getFileID(sourceLocation), symbolRoles))
+
+            return true;
+
         SymbolIndex globalId = toSymbolIndex(declaration->getCanonicalDecl());
-        clang::SourceLocation sourceLocation = m_sourceManager->getLocForStartOfFile(fileId).getLocWithOffset(offset);
 
         auto found = m_symbolEntries.find(globalId);
         if (found == m_symbolEntries.end()) {
@@ -123,7 +149,7 @@ bool IndexDataConsumer::handleDeclOccurence(const clang::Decl *declaration,
                 auto  kindAndTags = symbolKindAndTags(declaration);
                 m_symbolEntries.emplace(std::piecewise_construct,
                                         std::forward_as_tuple(globalId),
-                                        std::forward_as_tuple(std::move(usr.value()),
+                                        std::forward_as_tuple(std::move(*usr),
                                                               symbolName(namedDeclaration),
                                                               kindAndTags.first,
                                                               kindAndTags.second));

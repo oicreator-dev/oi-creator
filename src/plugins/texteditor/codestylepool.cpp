@@ -50,14 +50,12 @@ namespace Internal {
 class CodeStylePoolPrivate
 {
 public:
-    CodeStylePoolPrivate()
-        : m_factory(0)
-    {}
+    CodeStylePoolPrivate() = default;
     ~CodeStylePoolPrivate();
 
     QByteArray generateUniqueId(const QByteArray &id) const;
 
-    ICodeStylePreferencesFactory *m_factory;
+    ICodeStylePreferencesFactory *m_factory = nullptr;
     QList<ICodeStylePreferences *> m_pool;
     QList<ICodeStylePreferences *> m_builtInPool;
     QList<ICodeStylePreferences *> m_customPool;
@@ -151,7 +149,7 @@ ICodeStylePreferences *CodeStylePool::createCodeStyle(const QByteArray &id, cons
                   const QVariant &codeStyleData, const QString &displayName)
 {
     if (!d->m_factory)
-        return 0;
+        return nullptr;
 
     ICodeStylePreferences *codeStyle = d->m_factory->createCodeStyle();
     codeStyle->setId(id);
@@ -236,7 +234,7 @@ ICodeStylePreferences *CodeStylePool::importCodeStyle(const Utils::FileName &fil
 
 ICodeStylePreferences *CodeStylePool::loadCodeStyle(const Utils::FileName &fileName)
 {
-    ICodeStylePreferences *codeStyle = 0;
+    ICodeStylePreferences *codeStyle = nullptr;
     Utils::PersistentSettingsReader reader;
     reader.load(fileName);
     QVariantMap m = reader.restoreValues();
@@ -258,7 +256,7 @@ ICodeStylePreferences *CodeStylePool::loadCodeStyle(const Utils::FileName &fileN
 
 void CodeStylePool::slotSaveCodeStyle()
 {
-    ICodeStylePreferences *codeStyle = qobject_cast<ICodeStylePreferences *>(sender());
+    auto codeStyle = qobject_cast<ICodeStylePreferences *>(sender());
     if (!codeStyle)
         return;
 

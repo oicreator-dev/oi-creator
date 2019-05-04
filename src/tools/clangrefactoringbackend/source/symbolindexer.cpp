@@ -25,133 +25,188 @@
 
 #include "symbolindexer.h"
 
+#include "symbolscollectorinterface.h"
+#include "symbolindexertaskqueue.h"
+
+#include <commandlinebuilder.h>
+
+#include <chrono>
+#include <iostream>
+
 namespace ClangBackEnd {
 
-SymbolIndexer::SymbolIndexer(SymbolsCollectorInterface &symbolsCollector,
+using namespace std::chrono;
+
+class Timer
+{
+public:
+    Timer(Utils::SmallStringView name)
+        : name(name)
+    {}
+
+    void commit()
+    {
+        auto end = steady_clock::now();
+        auto time_difference = duration_cast<milliseconds>(end - begin);
+        begin = end;
+        std::cerr << name << " " << timePoint++ << ": " << time_difference.count() << "\n";
+    }
+
+private:
+    Utils::SmallString name;
+    time_point<steady_clock> begin{steady_clock::now()};
+    int timePoint = 1;
+};
+
+SymbolIndexer::SymbolIndexer(SymbolIndexerTaskQueueInterface &symbolIndexerTaskQueue,
                              SymbolStorageInterface &symbolStorage,
+                             BuildDependenciesStorageInterface &buildDependenciesStorage,
+                             PrecompiledHeaderStorageInterface &precompiledHeaderStorage,
                              ClangPathWatcherInterface &pathWatcher,
                              FilePathCachingInterface &filePathCache,
                              FileStatusCache &fileStatusCache,
-                             Sqlite::TransactionInterface &transactionInterface)
-    : m_symbolsCollector(symbolsCollector),
-      m_symbolStorage(symbolStorage),
-      m_pathWatcher(pathWatcher),
-      m_filePathCache(filePathCache),
-      m_fileStatusCache(fileStatusCache),
-      m_transactionInterface(transactionInterface)
+                             Sqlite::TransactionInterface &transactionInterface,
+                             ProjectPartsStorageInterface &projectPartsStorage)
+    : m_symbolIndexerTaskQueue(symbolIndexerTaskQueue)
+    , m_symbolStorage(symbolStorage)
+    , m_buildDependencyStorage(buildDependenciesStorage)
+    , m_precompiledHeaderStorage(precompiledHeaderStorage)
+    , m_pathWatcher(pathWatcher)
+    , m_filePathCache(filePathCache)
+    , m_fileStatusCache(fileStatusCache)
+    , m_transactionInterface(transactionInterface)
+    , m_projectPartsStorage(projectPartsStorage)
 {
     pathWatcher.setNotifier(this);
 }
 
-void SymbolIndexer::updateProjectParts(V2::ProjectPartContainers &&projectParts, V2::FileContainers &&generatedFiles)
+void SymbolIndexer::updateProjectParts(ProjectPartContainers &&projectParts)
 {
-        for (V2::ProjectPartContainer &projectPart : projectParts)
-            updateProjectPart(std::move(projectPart), generatedFiles);
+        for (ProjectPartContainer &projectPart : projectParts)
+            updateProjectPart(std::move(projectPart));
 }
 
-void SymbolIndexer::updateProjectPart(V2::ProjectPartContainer &&projectPart,
-                                      const V2::FileContainers &generatedFiles)
+void SymbolIndexer::updateProjectPart(ProjectPartContainer &&projectPart)
 {
-    m_symbolsCollector.clear();
+    Sqlite::DeferredTransaction transaction{m_transactionInterface};
 
-    const Utils::optional<ProjectPartArtefact> optionalArtefact = m_symbolStorage.fetchProjectPartArtefact(
-                projectPart.projectPartId);
+    ProjectPartId projectPartId = projectPart.projectPartId;
+    const Utils::optional<ProjectPartPch> optionalProjectPartPch
+        = m_precompiledHeaderStorage.fetchPrecompiledHeader(projectPartId);
 
-    FilePathIds sourcePathIds = updatableFilePathIds(projectPart, optionalArtefact);
+    transaction.commit();
 
-    if (!sourcePathIds.empty()) {
-        m_symbolsCollector.addFiles(projectPart.sourcePathIds,
-                                    compilerArguments(projectPart, optionalArtefact));
+    using Builder = CommandLineBuilder<ProjectPartContainer, Utils::SmallStringVector>;
+    Builder commandLineBuilder{projectPart,
+                               projectPart.toolChainArguments,
+                               InputFileType::Source,
+                               {},
+                               {},
+                               optionalProjectPartPch ? FilePathView{optionalProjectPartPch->pchPath}
+                                                      : FilePathView{}};
 
-        m_symbolsCollector.addUnsavedFiles(generatedFiles);
+    std::vector<SymbolIndexerTask> symbolIndexerTask;
+    symbolIndexerTask.reserve(projectPart.sourcePathIds.size());
+    for (FilePathId sourcePathId : projectPart.sourcePathIds) {
+        auto indexing = [arguments = commandLineBuilder.commandLine,
+                         sourcePathId,
+                         this](SymbolsCollectorInterface &symbolsCollector) {
+            symbolsCollector.setFile(sourcePathId, arguments);
 
-        m_symbolsCollector.collectSymbols();
+            bool success = symbolsCollector.collectSymbols();
 
-        Sqlite::ImmediateTransaction transaction{m_transactionInterface};
+            if (success) {
+                Sqlite::ImmediateTransaction transaction{m_transactionInterface};
 
-        m_symbolStorage.addSymbolsAndSourceLocations(m_symbolsCollector.symbols(),
-                                                     m_symbolsCollector.sourceLocations());
+                m_symbolStorage.addSymbolsAndSourceLocations(symbolsCollector.symbols(),
+                                                             symbolsCollector.sourceLocations());
+                transaction.commit();
+            }
+        };
 
-        m_symbolStorage.insertOrUpdateProjectPart(projectPart.projectPartId,
-                                                  projectPart.arguments,
-                                                  projectPart.compilerMacros,
-                                                  projectPart.includeSearchPaths);
-        m_symbolStorage.updateProjectPartSources(projectPart.projectPartId,
-                                                 m_symbolsCollector.sourceFiles());
-
-        m_symbolStorage.insertOrUpdateUsedMacros(m_symbolsCollector.usedMacros());
-
-        m_symbolStorage.insertFileStatuses(m_symbolsCollector.fileStatuses());
-
-        m_symbolStorage.insertOrUpdateSourceDependencies(m_symbolsCollector.sourceDependencies());
-
-        transaction.commit();
+        symbolIndexerTask.emplace_back(sourcePathId, projectPartId, std::move(indexing));
     }
+
+    m_symbolIndexerTaskQueue.addOrUpdateTasks(std::move(symbolIndexerTask));
+    m_symbolIndexerTaskQueue.processEntries();
 }
 
-void SymbolIndexer::pathsWithIdsChanged(const Utils::SmallStringVector &)
-{
-}
+void SymbolIndexer::pathsWithIdsChanged(const ProjectPartIds &) {}
 
 void SymbolIndexer::pathsChanged(const FilePathIds &filePathIds)
 {
+    std::vector<SymbolIndexerTask> symbolIndexerTask;
+    symbolIndexerTask.reserve(filePathIds.size());
+
     for (FilePathId filePathId : filePathIds)
-        updateChangedPath(filePathId);
+        updateChangedPath(filePathId, symbolIndexerTask);
+
+    m_symbolIndexerTaskQueue.addOrUpdateTasks(std::move(symbolIndexerTask));
+    m_symbolIndexerTaskQueue.processEntries();
 }
 
-void SymbolIndexer::updateChangedPath(FilePathId filePathId)
+void SymbolIndexer::updateChangedPath(FilePathId filePathId,
+                                      std::vector<SymbolIndexerTask> &symbolIndexerTask)
 {
-    m_symbolsCollector.clear();
     m_fileStatusCache.update(filePathId);
 
-    const Utils::optional<ProjectPartArtefact> optionalArtefact = m_symbolStorage.fetchProjectPartArtefact(filePathId);
+    Sqlite::DeferredTransaction transaction{m_transactionInterface};
+    const Utils::optional<ProjectPartArtefact>
+        optionalArtefact = m_projectPartsStorage.fetchProjectPartArtefact(filePathId);
+    if (!optionalArtefact)
+        return;
 
-    if (optionalArtefact && !optionalArtefact.value().compilerArguments.empty()) {
-        const ProjectPartArtefact &artefact = optionalArtefact.value();
+    const Utils::optional<ProjectPartPch> optionalProjectPartPch
+        = m_precompiledHeaderStorage.fetchPrecompiledHeader(optionalArtefact->projectPartId);
+    transaction.commit();
 
-        m_symbolsCollector.addFiles({filePathId},
-                                    compilerArguments(artefact.compilerArguments, artefact.projectPartId));
+    const ProjectPartArtefact &artefact = *optionalArtefact;
 
-        m_symbolsCollector.collectSymbols();
+    auto pchPath = optionalProjectPartPch ? optionalProjectPartPch->pchPath : FilePath{};
 
-        Sqlite::ImmediateTransaction transaction{m_transactionInterface};
+    CommandLineBuilder<ProjectPartArtefact, Utils::SmallStringVector>
+        builder{artefact, artefact.toolChainArguments, InputFileType::Source, {}, {}, pchPath};
 
-        m_symbolStorage.addSymbolsAndSourceLocations(m_symbolsCollector.symbols(),
-                                                     m_symbolsCollector.sourceLocations());
+    auto indexing = [arguments = builder.commandLine, filePathId, this](
+                        SymbolsCollectorInterface &symbolsCollector) {
+        symbolsCollector.setFile(filePathId, arguments);
 
-        m_symbolStorage.updateProjectPartSources(artefact.projectPartId,
-                                                 m_symbolsCollector.sourceFiles());
+        bool success = symbolsCollector.collectSymbols();
 
-        m_symbolStorage.insertOrUpdateUsedMacros(m_symbolsCollector.usedMacros());
+        if (success) {
+            Sqlite::ImmediateTransaction transaction{m_transactionInterface};
 
-        m_symbolStorage.insertFileStatuses(m_symbolsCollector.fileStatuses());
+            m_symbolStorage.addSymbolsAndSourceLocations(symbolsCollector.symbols(),
+                                                         symbolsCollector.sourceLocations());
 
-        m_symbolStorage.insertOrUpdateSourceDependencies(m_symbolsCollector.sourceDependencies());
+            transaction.commit();
+        }
+    };
 
-        transaction.commit();
-    }
+    symbolIndexerTask.emplace_back(filePathId, optionalArtefact->projectPartId, std::move(indexing));
 }
 
 bool SymbolIndexer::compilerMacrosOrIncludeSearchPathsAreDifferent(
-        const V2::ProjectPartContainer &projectPart,
+        const ProjectPartContainer &projectPart,
         const Utils::optional<ProjectPartArtefact> &optionalArtefact) const
 {
     if (optionalArtefact) {
         const ProjectPartArtefact &artefact = optionalArtefact.value();
         return projectPart.compilerMacros != artefact.compilerMacros
-             || projectPart.includeSearchPaths != artefact.includeSearchPaths;
+               || projectPart.systemIncludeSearchPaths != artefact.systemIncludeSearchPaths
+               || projectPart.projectIncludeSearchPaths != artefact.projectIncludeSearchPaths;
     }
 
     return true;
 }
 
-FilePathIds SymbolIndexer::filterChangedFiles(const V2::ProjectPartContainer &projectPart) const
+FilePathIds SymbolIndexer::filterChangedFiles(const ProjectPartContainer &projectPart) const
 {
     FilePathIds ids;
     ids.reserve(projectPart.sourcePathIds.size());
 
     for (const FilePathId &sourceId : projectPart.sourcePathIds) {
-        long long oldLastModified = m_symbolStorage.fetchLowestLastModifiedTime(sourceId);
+        long long oldLastModified = m_buildDependencyStorage.fetchLowestLastModifiedTime(sourceId);
         long long currentLastModified =  m_fileStatusCache.lastModifiedTime(sourceId);
         if (oldLastModified < currentLastModified)
             ids.push_back(sourceId);
@@ -160,40 +215,13 @@ FilePathIds SymbolIndexer::filterChangedFiles(const V2::ProjectPartContainer &pr
     return ids;
 }
 
-FilePathIds SymbolIndexer::updatableFilePathIds(const V2::ProjectPartContainer &projectPart,
+FilePathIds SymbolIndexer::updatableFilePathIds(const ProjectPartContainer &projectPart,
                                                 const Utils::optional<ProjectPartArtefact> &optionalArtefact) const
 {
     if (compilerMacrosOrIncludeSearchPathsAreDifferent(projectPart, optionalArtefact))
         return projectPart.sourcePathIds;
 
     return filterChangedFiles(projectPart);
-}
-
-Utils::SmallStringVector SymbolIndexer::compilerArguments(
-        Utils::SmallStringVector arguments,
-        int projectPartId) const
-{
-    Utils::optional<ProjectPartPch> optionalProjectPartPch =  m_symbolStorage.fetchPrecompiledHeader(projectPartId);
-
-    if (optionalProjectPartPch) {
-        arguments.emplace_back("-Xclang");
-        arguments.emplace_back("-include-pch");
-        arguments.emplace_back("-Xclang");
-        arguments.emplace_back(std::move(optionalProjectPartPch.value().pchPath));
-    }
-
-    return arguments;
-}
-
-Utils::SmallStringVector SymbolIndexer::compilerArguments(
-        const V2::ProjectPartContainer &projectPart,
-        const Utils::optional<ProjectPartArtefact> &optionalProjectPartArtefact) const
-{
-    if (optionalProjectPartArtefact)
-        return compilerArguments(projectPart.arguments,
-                                 optionalProjectPartArtefact.value().projectPartId);
-
-    return projectPart.arguments;
 }
 
 } // namespace ClangBackEnd

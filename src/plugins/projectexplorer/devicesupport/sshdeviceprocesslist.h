@@ -27,6 +27,8 @@
 
 #include "deviceprocesslist.h"
 
+#include <memory>
+
 namespace ProjectExplorer {
 
 class PROJECTEXPLORER_EXPORT SshDeviceProcessList : public DeviceProcessList
@@ -38,7 +40,7 @@ public:
 
 private:
     void handleConnectionError();
-    void handleListProcessFinished(int exitStatus);
+    void handleListProcessFinished(const QString &error);
     void handleKillProcessFinished(const QString &errorString);
 
     virtual QString listProcessesCommandLine() const = 0;
@@ -51,7 +53,7 @@ private:
     void setFinished();
 
     class SshDeviceProcessListPrivate;
-    SshDeviceProcessListPrivate * const d;
+    const std::unique_ptr<SshDeviceProcessListPrivate> d;
 };
 
 } // namespace ProjectExplorer

@@ -204,7 +204,7 @@ void HighlightScrollBarOverlay::drawHighlights(QPainter *painter,
             const QColor &color = creatorTheme()->color(itColor.key());
             const QMap<int, int> &positions = itColor.value();
             const auto itPosEnd = positions.constEnd();
-            const int firstPos = int(docStart / lineHeight);
+            const auto firstPos = int(docStart / lineHeight);
             auto itPos = positions.upperBound(firstPos);
             if (itPos != positions.constBegin())
                 --itPos;
@@ -295,7 +295,7 @@ void HighlightScrollBarOverlay::updateCache()
     m_highlightCache.clear();
 
     const QHash<Id, QVector<Highlight>> highlightsForId = m_highlightController->highlights();
-    for (QVector<Highlight> highlights : highlightsForId) {
+    for (const QVector<Highlight> &highlights : highlightsForId) {
         for (const auto &highlight : highlights) {
             auto &highlightMap = m_highlightCache[highlight.priority][highlight.color];
             insertPosition(&highlightMap, highlight.position);

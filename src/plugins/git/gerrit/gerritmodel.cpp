@@ -140,9 +140,9 @@ static inline void applyApproval(int approval, int *total)
 // by a type character followed by the approval level: "C: -2, S: 1"
 QString GerritPatchSet::approvalsColumn() const
 {
-    typedef QMap<QChar, int> TypeReviewMap;
-    typedef TypeReviewMap::iterator TypeReviewMapIterator;
-    typedef TypeReviewMap::const_iterator TypeReviewMapConstIterator;
+    using TypeReviewMap = QMap<QChar, int>;
+    using TypeReviewMapIterator = TypeReviewMap::iterator;
+    using TypeReviewMapConstIterator = TypeReviewMap::const_iterator;
 
     QString result;
     if (approvals.isEmpty())
@@ -227,7 +227,7 @@ public:
                  const GerritServer &server,
                  QObject *parent = nullptr);
 
-    ~QueryContext();
+    ~QueryContext() override;
     void start();
     void terminate();
 
@@ -398,8 +398,7 @@ GerritModel::GerritModel(const QSharedPointer<GerritParameters> &p, QObject *par
     setHorizontalHeaderLabels(headers);
 }
 
-GerritModel::~GerritModel()
-{ }
+GerritModel::~GerritModel() = default;
 
 QVariant GerritModel::data(const QModelIndex &index, int role) const
 {
@@ -598,7 +597,7 @@ static GerritChangePtr parseSshOutput(const QJsonObject &object)
     change->branch = object.value("branch").toString();
     change->status =  object.value("status").toString();
     if (const int timeT = object.value("lastUpdated").toInt())
-        change->lastUpdated = QDateTime::fromTime_t(uint(timeT));
+        change->lastUpdated = QDateTime::fromSecsSinceEpoch(timeT);
     // Read out dependencies
     const QJsonValue dependsOnValue = object.value("dependsOn");
     if (dependsOnValue.isArray()) {
@@ -845,7 +844,7 @@ QList<QStandardItem *> GerritModel::changeToRow(const GerritChangePtr &c) const
     const QVariant filterV = QVariant(c->filterString());
     const QVariant changeV = qVariantFromValue(c);
     for (int i = 0; i < GerritModel::ColumnCount; ++i) {
-        QStandardItem *item = new QStandardItem;
+        auto item = new QStandardItem;
         item->setData(changeV, GerritModel::GerritChangeRole);
         item->setData(filterV, GerritModel::FilterRole);
         item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);

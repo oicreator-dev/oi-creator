@@ -65,13 +65,10 @@ namespace Internal {
 class UpdateInfoPluginPrivate
 {
 public:
-    UpdateInfoPluginPrivate()
-    { }
-
     QString m_maintenanceTool;
     QPointer<ShellCommand> m_checkUpdatesCommand;
     QString m_collectedOutput;
-    QTimer *m_checkUpdatesTimer = 0;
+    QTimer *m_checkUpdatesTimer = nullptr;
 
     bool m_automaticCheck = true;
     UpdateInfoPlugin::CheckUpdateInterval m_checkInterval = UpdateInfoPlugin::WeeklyCheck;
@@ -145,7 +142,7 @@ void UpdateInfoPlugin::stopCheckForUpdates()
     d->m_collectedOutput.clear();
     d->m_checkUpdatesCommand->disconnect();
     d->m_checkUpdatesCommand->cancel();
-    d->m_checkUpdatesCommand = 0;
+    d->m_checkUpdatesCommand = nullptr;
     emit checkForUpdatesRunningChanged(false);
 }
 
@@ -179,16 +176,10 @@ bool UpdateInfoPlugin::isCheckForUpdatesRunning() const
     return d->m_checkUpdatesCommand;
 }
 
-bool UpdateInfoPlugin::delayedInitialize()
+void UpdateInfoPlugin::extensionsInitialized()
 {
     if (isAutomaticCheck())
         QTimer::singleShot(OneMinute, this, &UpdateInfoPlugin::startAutoCheckForUpdates);
-
-    return true;
-}
-
-void UpdateInfoPlugin::extensionsInitialized()
-{
 }
 
 bool UpdateInfoPlugin::initialize(const QStringList & /* arguments */, QString *errorMessage)

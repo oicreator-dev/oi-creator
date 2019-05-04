@@ -51,8 +51,8 @@ public:
     explicit OptionsPopup(QWidget *parent);
 
 protected:
-    bool event(QEvent *ev);
-    bool eventFilter(QObject *obj, QEvent *ev);
+    bool event(QEvent *ev) override;
+    bool eventFilter(QObject *obj, QEvent *ev) override;
 
 private:
     void actionChanged();
@@ -77,7 +77,7 @@ public:
     Q_DECLARE_FLAGS(OpenFlags, OpenFlag)
 
     explicit FindToolBar(CurrentDocumentFind *currentDocumentFind);
-    ~FindToolBar();
+    ~FindToolBar() override;
 
     void readSettings();
     void writeSettings();
@@ -91,10 +91,16 @@ public slots:
     void setBackward(bool backward);
 
 protected:
-    bool focusNextPrevChild(bool next);
-    void resizeEvent(QResizeEvent *event);
+    bool focusNextPrevChild(bool next) override;
+    void resizeEvent(QResizeEvent *event) override;
 
 private:
+    enum class ControlStyle {
+        Text,
+        Icon,
+        Hidden
+    };
+
     void invokeFindNext();
     void invokeGlobalFindNext();
     void invokeFindPrevious();
@@ -121,7 +127,7 @@ private:
     void openFind(bool focus = true);
     void findNextSelected();
     void findPreviousSelected();
-    void updateGlobalActions();
+    void updateActions();
     void updateToolBar();
     void findFlagsChanged();
     void findEditButtonClicked();
@@ -143,17 +149,20 @@ private:
     FindFlags effectiveFindFlags();
     FindToolBarPlaceHolder *findToolBarPlaceHolder() const;
     bool toolBarHasFocus() const;
-    bool canShowAllControls(bool replaceIsVisible) const;
+    ControlStyle controlStyle(bool replaceIsVisible);
+    void setFindButtonStyle(Qt::ToolButtonStyle style);
     void acceptCandidateAndMoveToolBar();
     void indicateSearchState(IFindSupport::Result searchState);
 
-    bool eventFilter(QObject *obj, QEvent *event);
+    bool eventFilter(QObject *obj, QEvent *event) override;
     void setFindText(const QString &text);
     QString getFindText();
     QString getReplaceText();
     void selectFindText();
     void updateIcons();
     void updateFlagMenus();
+    void updateFindReplaceEnabled();
+    void updateReplaceEnabled();
 
     CurrentDocumentFind *m_currentDocumentFind = nullptr;
     Ui::FindWidget m_ui;
@@ -189,6 +198,7 @@ private:
     IFindSupport::Result m_lastResult = IFindSupport::NotYetFound;
     bool m_useFakeVim = false;
     bool m_eventFiltersInstalled = false;
+    bool m_findEnabled = true;
 };
 
 } // namespace Internal

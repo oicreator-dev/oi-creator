@@ -24,8 +24,8 @@ QtcTool {
         files: [
             "cpasterconstants.h",
             "kdepasteprotocol.h", "kdepasteprotocol.cpp",
-            "pastebindotcaprotocol.h", "pastebindotcaprotocol.cpp",
             "pastebindotcomprotocol.h", "pastebindotcomprotocol.cpp",
+            "pastecodedotxyzprotocol.h", "pastecodedotxyzprotocol.cpp",
             "protocol.h", "protocol.cpp",
             "urlopenprotocol.h", "urlopenprotocol.cpp",
         ]

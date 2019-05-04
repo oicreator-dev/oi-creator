@@ -29,6 +29,7 @@
 #include "testsettingspage.h"
 #include "testsettings.h"
 #include "testtreemodel.h"
+#include "autotestplugin.h"
 
 #include <coreplugin/icore.h>
 #include <utils/fancylineedit.h>
@@ -45,7 +46,7 @@ namespace Internal {
 class TestFilterDialog : public QDialog
 {
 public:
-    explicit TestFilterDialog(QWidget *parent = nullptr, Qt::WindowFlags f = 0);
+    explicit TestFilterDialog(QWidget *parent = nullptr, Qt::WindowFlags f = nullptr);
     QString filterPath() const;
     void setDetailsText(const QString &details) { m_details->setText(details); }
     void setDefaultFilterPath(const QString &defaultPath);
@@ -139,6 +140,8 @@ TestSettingsWidget::TestSettingsWidget(QWidget *parent)
         m_ui.editFilter->setEnabled(enable);
         m_ui.removeFilter->setEnabled(enable);
     });
+    connect(m_ui.resetChoicesButton, &QPushButton::clicked,
+            this, [] { AutotestPlugin::clearChoiceCache(); });
 }
 
 void TestSettingsWidget::setSettings(const TestSettings &settings)
@@ -149,6 +152,7 @@ void TestSettingsWidget::setSettings(const TestSettings &settings)
     m_ui.limitResultOutputCB->setChecked(settings.limitResultOutput);
     m_ui.autoScrollCB->setChecked(settings.autoScroll);
     m_ui.processArgsCB->setChecked(settings.processArgs);
+    m_ui.displayAppCB->setChecked(settings.displayApplication);
     m_ui.filterGroupBox->setChecked(settings.filterScan);
     populateFrameworksListWidget(settings.frameworks);
     populateFiltersWidget(settings.whiteListFilters);
@@ -163,6 +167,7 @@ TestSettings TestSettingsWidget::settings() const
     result.limitResultOutput = m_ui.limitResultOutputCB->isChecked();
     result.autoScroll = m_ui.autoScrollCB->isChecked();
     result.processArgs = m_ui.processArgsCB->isChecked();
+    result.displayApplication = m_ui.displayAppCB->isChecked();
     result.filterScan = m_ui.filterGroupBox->isChecked();
     frameworkSettings(result);
     result.whiteListFilters = filters();
@@ -284,10 +289,6 @@ TestSettingsPage::TestSettingsPage(const QSharedPointer<TestSettings> &settings)
     setDisplayCategory(QCoreApplication::translate("AutoTest", Constants::AUTOTEST_SETTINGS_TR));
     setCategoryIcon(Utils::Icon({{":/autotest/images/settingscategory_autotest.png",
                     Utils::Theme::PanelTextColorDark}}, Utils::Icon::Tint));
-}
-
-TestSettingsPage::~TestSettingsPage()
-{
 }
 
 QWidget *TestSettingsPage::widget()

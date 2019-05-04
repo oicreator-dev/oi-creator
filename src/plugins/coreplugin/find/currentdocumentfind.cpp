@@ -40,7 +40,7 @@ using namespace Core;
 using namespace Core::Internal;
 
 CurrentDocumentFind::CurrentDocumentFind()
-  : m_currentFind(0)
+  : m_currentFind(nullptr)
 {
     connect(qApp, &QApplication::focusChanged,
             this, &CurrentDocumentFind::updateCandidateFindFilter);
@@ -48,7 +48,7 @@ CurrentDocumentFind::CurrentDocumentFind()
 
 void CurrentDocumentFind::removeConnections()
 {
-    disconnect(qApp, 0, this, 0);
+    disconnect(qApp, nullptr, this, nullptr);
     removeFindSupportConnections();
 }
 
@@ -76,19 +76,21 @@ IFindSupport *CurrentDocumentFind::candidate() const
 
 bool CurrentDocumentFind::supportsReplace() const
 {
-    QTC_ASSERT(m_currentFind, return false);
+    if (!m_currentFind)
+        return false;
     return m_currentFind->supportsReplace();
 }
 
 FindFlags CurrentDocumentFind::supportedFindFlags() const
 {
-    QTC_ASSERT(m_currentFind, return 0);
+    QTC_ASSERT(m_currentFind, return nullptr);
     return m_currentFind->supportedFindFlags();
 }
 
 QString CurrentDocumentFind::currentFindString() const
 {
-    QTC_ASSERT(m_currentFind, return QString());
+    if (!m_currentFind)
+        return QString();
     return m_currentFind->currentFindString();
 }
 
@@ -100,7 +102,8 @@ QString CurrentDocumentFind::completedFindString() const
 
 void CurrentDocumentFind::highlightAll(const QString &txt, FindFlags findFlags)
 {
-    QTC_ASSERT(m_currentFind, return);
+    if (!m_currentFind)
+        return;
     m_currentFind->highlightAll(txt, findFlags);
 }
 
@@ -134,14 +137,15 @@ int CurrentDocumentFind::replaceAll(const QString &before, const QString &after,
     QTC_CHECK(m_currentWidget);
     int count = m_currentFind->replaceAll(before, after, findFlags);
     Utils::FadingIndicator::showText(m_currentWidget,
-                                     tr("%n occurrences replaced.", 0, count),
+                                     tr("%n occurrences replaced.", nullptr, count),
                                      Utils::FadingIndicator::SmallText);
     return count;
 }
 
 void CurrentDocumentFind::defineFindScope()
 {
-    QTC_ASSERT(m_currentFind, return);
+    if (!m_currentFind)
+        return;
     m_currentFind->defineFindScope();
 }
 
@@ -155,7 +159,7 @@ void CurrentDocumentFind::updateCandidateFindFilter(QWidget *old, QWidget *now)
 {
     Q_UNUSED(old)
     QWidget *candidate = now;
-    QPointer<IFindSupport> impl = 0;
+    QPointer<IFindSupport> impl = nullptr;
     while (!impl && candidate) {
         impl = Aggregation::query<IFindSupport>(candidate);
         if (!impl)
@@ -215,8 +219,8 @@ void CurrentDocumentFind::removeFindSupportConnections()
 void CurrentDocumentFind::clearFindSupport()
 {
     removeFindSupportConnections();
-    m_currentWidget = 0;
-    m_currentFind = 0;
+    m_currentWidget = nullptr;
+    m_currentFind = nullptr;
     emit changed();
 }
 

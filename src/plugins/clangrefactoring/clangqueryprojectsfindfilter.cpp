@@ -153,10 +153,9 @@ Utils::SmallStringVector ClangQueryProjectsFindFilter::compilerArguments(CppTool
 {
     using CppTools::CompilerOptionsBuilder;
 
-    CompilerOptionsBuilder builder(*projectPart, CLANG_VERSION, CLANG_RESOURCE_DIR);
+    CompilerOptionsBuilder builder(*projectPart, CppTools::UseSystemHeader::Yes);
 
-    return Utils::SmallStringVector(builder.build(fileKind,
-                                                  CompilerOptionsBuilder::PchUsage::None));
+    return Utils::SmallStringVector(builder.build(fileKind, CppTools::UsePrecompiledHeaders::No));
 }
 
 QWidget *ClangQueryProjectsFindFilter::widget() const

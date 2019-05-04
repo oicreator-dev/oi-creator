@@ -25,6 +25,7 @@
 
 #include "docsettingspage.h"
 #include "helpconstants.h"
+#include "helpmanager.h"
 
 #include <coreplugin/helpmanager.h>
 #include <utils/algorithm.h>
@@ -41,8 +42,6 @@
 #include <QVector>
 
 #include <algorithm>
-
-using namespace Core;
 
 namespace Help {
 namespace Internal {
@@ -69,7 +68,7 @@ static DocEntry createEntry(const QString &nameSpace, const QString &fileName, b
 
 class DocModel : public QAbstractListModel {
 public:
-    typedef QVector<DocEntry> DocEntries;
+    using DocEntries = QVector<DocEntry>;
 
     explicit DocModel(const DocEntries &e = DocEntries(), QObject *parent = nullptr)
         : QAbstractListModel(parent), m_docEntries(e) {}
@@ -245,7 +244,7 @@ void DocSettingsPage::addDocumentation()
 
 void DocSettingsPage::apply()
 {
-    HelpManager::unregisterDocumentation(m_filesToUnregister.keys());
+    Core::HelpManager::unregisterDocumentation(m_filesToUnregister.keys());
     QStringList files;
     auto it = m_filesToRegisterUserManaged.constBegin();
     while (it != m_filesToRegisterUserManaged.constEnd()) {
@@ -269,7 +268,7 @@ bool DocSettingsPage::eventFilter(QObject *object, QEvent *event)
         return IOptionsPage::eventFilter(object, event);
 
     if (event->type() == QEvent::KeyPress) {
-        QKeyEvent *ke = static_cast<QKeyEvent*>(event);
+        auto ke = static_cast<const QKeyEvent*>(event);
         switch (ke->key()) {
             case Qt::Key_Delete:
                 removeDocumentation(currentSelection());

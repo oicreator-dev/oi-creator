@@ -54,7 +54,7 @@ public:
         KeepLinks
     };
 
-    typedef QPair<QString, Id> RecentFile;
+    using RecentFile = QPair<QString, Id>;
 
     static DocumentManager *instance();
 
@@ -68,8 +68,6 @@ public:
 
     static void expectFileChange(const QString &fileName);
     static void unexpectFileChange(const QString &fileName);
-
-    static void setAutoReloadPostponed(bool enabled);
 
     // recent files
     static void addToRecentFiles(const QString &fileName, Id editorId = Id());
@@ -141,9 +139,6 @@ public:
     static Utils::FileName projectsDirectory();
     static void setProjectsDirectory(const Utils::FileName &directory);
 
-    static QString buildDirectory();
-    static void setBuildDirectory(const QString &directory);
-
     /* Used to notify e.g. the code model to update the given files. Does *not*
        lead to any editors to reload or any other editor manager actions. */
     static void notifyFilesChangedInternally(const QStringList &files);
@@ -157,9 +152,6 @@ signals:
     /// emitted if one document changed its name e.g. due to save as
     void documentRenamed(Core::IDocument *document, const QString &from, const QString &to);
     void projectsDirectoryChanged(const Utils::FileName &directory);
-
-protected:
-    bool eventFilter(QObject *obj, QEvent *e) override;
 
 private:
     explicit DocumentManager(QObject *parent);

@@ -45,7 +45,7 @@ namespace Internal {
 class QmlProfilerStateWidget::QmlProfilerStateWidgetPrivate
 {
     public:
-    QmlProfilerStateWidgetPrivate(QmlProfilerStateWidget *qq) { Q_UNUSED(qq); }
+    QmlProfilerStateWidgetPrivate(QmlProfilerStateWidget *qq) : text(nullptr) { Q_UNUSED(qq); }
 
     QLabel *text;
 
@@ -62,7 +62,7 @@ QmlProfilerStateWidget::QmlProfilerStateWidget(QmlProfilerStateManager *stateMan
     setFrameStyle(QFrame::StyledPanel);
 
     // UI elements
-    QVBoxLayout *layout = new QVBoxLayout(this);
+    auto layout = new QVBoxLayout(this);
     resize(200,70);
 
     d->text = new QLabel(this);

@@ -24,9 +24,10 @@
 ****************************************************************************/
 #pragma once
 
+#include <utils/fileutils.h>
+
 #include <QObject>
 #include <QFuture>
-#include "utils/fileutils.h"
 #include <QDebug>
 #include <memory>
 
@@ -84,12 +85,12 @@ public:
         QString simUdid;
         bool success = false;
         qint64 pID = -1;
-        QByteArray commandOutput = "";
+        QString commandOutput;
     };
 
 public:
     explicit SimulatorControl(QObject* parent = nullptr);
-    ~SimulatorControl();
+    ~SimulatorControl() override;
 
 public:
     static QList<DeviceTypeInfo> availableDeviceTypes();

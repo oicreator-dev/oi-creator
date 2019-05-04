@@ -39,7 +39,7 @@ public:
 
     QString typeDisplayName() const override;
 
-    ProjectExplorer::ToolChainConfigWidget *configurationWidget() override;
+    std::unique_ptr<ProjectExplorer::ToolChainConfigWidget> createConfigurationWidget() override;
 
     void addToEnvironment(Utils::Environment &env) const override;
     Utils::FileNameList suggestedMkspecList() const override;
@@ -55,7 +55,7 @@ public:
     bool operator ==(const ToolChain &) const override;
 
 protected:
-    virtual DetectedAbisResult detectSupportedAbis() const override;
+    DetectedAbisResult detectSupportedAbis() const override;
 
 private:
     QString m_sdpPath;

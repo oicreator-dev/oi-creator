@@ -25,7 +25,7 @@
 
 #pragma once
 
-#include "coreplugin/id.h"
+#include "id.h"
 
 #include <QSharedDataPointer>
 #include <QList>
@@ -84,6 +84,6 @@ private:
     QSharedDataPointer<GeneratedFilePrivate> m_d;
 };
 
-typedef QList<GeneratedFile> GeneratedFiles;
+using GeneratedFiles = QList<GeneratedFile>;
 
 } // namespace Core

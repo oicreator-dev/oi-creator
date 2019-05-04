@@ -147,7 +147,7 @@ public:
     FolderSortProxyModel(QObject *parent = nullptr);
 
 protected:
-    bool lessThan(const QModelIndex &source_left, const QModelIndex &source_right) const;
+    bool lessThan(const QModelIndex &source_left, const QModelIndex &source_right) const override;
 };
 
 FolderSortProxyModel::FolderSortProxyModel(QObject *parent)
@@ -203,7 +203,7 @@ static QVector<FolderNode *> renamableFolderNodes(const Utils::FileName &before,
     ProjectTree::forEachNode([&](Node *node) {
         if (node->nodeType() == NodeType::File && node->filePath() == before
                 && node->parentFolderNode()
-                && node->parentFolderNode()->renameFile(before.toString(), after.toString())) {
+                && node->parentFolderNode()->canRenameFile(before.toString(), after.toString())) {
             folderNodes.append(node->parentFolderNode());
         }
     });
@@ -239,7 +239,7 @@ bool FolderNavigationModel::setData(const QModelIndex &index, const QVariant &va
                                    Utils::FileName::fromString(afterFilePath));
         QVector<FolderNode *> failedNodes;
         for (FolderNode *folder : folderNodes) {
-            if (!folder->canRenameFile(beforeFilePath, afterFilePath))
+            if (!folder->renameFile(beforeFilePath, afterFilePath))
                 failedNodes.append(folder);
         }
         if (!failedNodes.isEmpty()) {
@@ -295,6 +295,7 @@ FolderNavigationWidget::FolderNavigationWidget(QWidget *parent) : QWidget(parent
     m_toggleSync(new QToolButton(this)),
     m_toggleRootSync(new QToolButton(this)),
     m_rootSelector(new QComboBox),
+    m_crumbContainer(new QWidget(this)),
     m_crumbLabel(new DelayedFileCrumbLabel(this))
 {
     m_context = new Core::IContext(this);
@@ -337,16 +338,21 @@ FolderNavigationWidget::FolderNavigationWidget(QWidget *parent) : QWidget(parent
     selectorLayout->setContentsMargins(0, 0, 0, 0);
     selectorLayout->addWidget(m_rootSelector, 10);
 
+    auto crumbContainerLayout = new QVBoxLayout;
+    crumbContainerLayout->setSpacing(0);
+    crumbContainerLayout->setContentsMargins(0, 0, 0, 0);
+    m_crumbContainer->setLayout(crumbContainerLayout);
     auto crumbLayout = new QVBoxLayout;
     crumbLayout->setSpacing(0);
     crumbLayout->setContentsMargins(4, 4, 4, 4);
     crumbLayout->addWidget(m_crumbLabel);
+    crumbContainerLayout->addLayout(crumbLayout);
+    crumbContainerLayout->addWidget(createHLine());
     m_crumbLabel->setAlignment(Qt::AlignLeft | Qt::AlignTop);
 
     auto layout = new QVBoxLayout();
     layout->addWidget(selectorWidget);
-    layout->addLayout(crumbLayout);
-    layout->addWidget(createHLine());
+    layout->addWidget(m_crumbContainer);
     layout->addWidget(m_listView);
     layout->setSpacing(0);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -367,16 +373,25 @@ FolderNavigationWidget::FolderNavigationWidget(QWidget *parent) : QWidget(parent
     connect(m_listView, &QAbstractItemView::activated, this, [this](const QModelIndex &index) {
         openItem(m_sortProxyModel->mapToSource(index));
     });
-    // use QueuedConnection for updating crumble path, because that can scroll, which doesn't
-    // work well when done directly in currentChanged (the wrong item can get highlighted)
+    // Delay updating crumble path by event loop cylce, because that can scroll, which doesn't
+    // work well when done directly in currentChanged (the wrong item can get highlighted).
+    // We cannot use Qt::QueuedConnection directly, because the QModelIndex could get invalidated
+    // in the meantime, so use a queued invokeMethod instead.
     connect(m_listView->selectionModel(),
             &QItemSelectionModel::currentChanged,
             this,
-            [this](const QModelIndex &current, const QModelIndex &previous) {
-                setCrumblePath(m_sortProxyModel->mapToSource(current),
-                               m_sortProxyModel->mapToSource(previous));
-            },
-            Qt::QueuedConnection);
+            [this](const QModelIndex &index) {
+                const QModelIndex sourceIndex = m_sortProxyModel->mapToSource(index);
+                const auto filePath = Utils::FileName::fromString(
+                    m_fileSystemModel->filePath(sourceIndex));
+                // QTimer::singleShot only posts directly onto the event loop if you use the SLOT("...")
+                // notation, so using a singleShot with a lambda would flicker
+                // QTimer::singleShot(0, this, [this, filePath]() { setCrumblePath(filePath); });
+                QMetaObject::invokeMethod(this,
+                                          "setCrumblePath",
+                                          Qt::QueuedConnection,
+                                          Q_ARG(Utils::FileName, filePath));
+            });
     connect(m_crumbLabel, &Utils::FileCrumbLabel::pathClicked, [this](const Utils::FileName &path) {
         const QModelIndex rootIndex = m_sortProxyModel->mapToSource(m_listView->rootIndex());
         const QModelIndex fileIndex = m_fileSystemModel->index(path.toString());
@@ -432,7 +447,7 @@ void FolderNavigationWidget::toggleAutoSynchronization()
 void FolderNavigationWidget::setShowBreadCrumbs(bool show)
 {
     m_showBreadCrumbsAction->setChecked(show);
-    m_crumbLabel->setVisible(show);
+    m_crumbContainer->setVisible(show);
 }
 
 void FolderNavigationWidget::setShowFoldersOnTop(bool onTop)
@@ -612,13 +627,15 @@ void FolderNavigationWidget::selectFile(const Utils::FileName &filePath)
         // Use magic timer for scrolling.
         m_listView->setCurrentIndex(fileIndex);
         QTimer::singleShot(200, this, [this, filePath] {
-            const QModelIndex fileIndex = m_fileSystemModel->index(filePath.toString());
+            const QModelIndex fileIndex = m_sortProxyModel->mapFromSource(
+                m_fileSystemModel->index(filePath.toString()));
             if (fileIndex == m_listView->rootIndex()) {
                 m_listView->horizontalScrollBar()->setValue(0);
                 m_listView->verticalScrollBar()->setValue(0);
             } else {
                 m_listView->scrollTo(fileIndex);
             }
+            setCrumblePath(filePath);
         });
     }
 }
@@ -694,11 +711,12 @@ void FolderNavigationWidget::createNewFolder(const QModelIndex &parent)
     m_listView->edit(index);
 }
 
-void FolderNavigationWidget::setCrumblePath(const QModelIndex &index, const QModelIndex &)
+void FolderNavigationWidget::setCrumblePath(const Utils::FileName &filePath)
 {
+    const QModelIndex index = m_fileSystemModel->index(filePath.toString());
     const int width = m_crumbLabel->width();
     const int previousHeight = m_crumbLabel->immediateHeightForWidth(width);
-    m_crumbLabel->setPath(Utils::FileName::fromString(m_fileSystemModel->filePath(index)));
+    m_crumbLabel->setPath(filePath);
     const int currentHeight = m_crumbLabel->immediateHeightForWidth(width);
     const int diff = currentHeight - previousHeight;
     if (diff != 0 && m_crumbLabel->isVisible()) {

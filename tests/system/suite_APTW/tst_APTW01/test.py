@@ -29,11 +29,10 @@ source("../../shared/qtcreator.py")
 def main():
     # Start Creator with built-in code model, to avoid having
     # warnings from the clang code model in "issues" view
-    startCreator(False)
-    if not startedWithoutPluginError():
+    if not startCreatorVerifyingClang(False):
         return
-    checkedTargets = createProject_Qt_GUI(tempDir(), "SampleApp")
+    createProject_Qt_GUI(tempDir(), "SampleApp")
     # run project for debug and release and verify results
-    runVerify(checkedTargets)
+    runVerify()
     #close Qt Creator
     invokeMenuItem("File", "Exit")

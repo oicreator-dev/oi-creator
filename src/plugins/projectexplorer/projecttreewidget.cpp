@@ -202,7 +202,7 @@ public:
         NavigationTreeView::setModel(newModel);
     }
 
-    ~ProjectTreeView()
+    ~ProjectTreeView() override
     {
         ICore::removeContextObject(m_context);
         delete m_context;
@@ -259,9 +259,11 @@ ProjectTreeWidget::ProjectTreeWidget(QWidget *parent) : QWidget(parent)
     if (!ActionManager::command(focusActionId)) {
         auto focusDocumentInProjectTree = new QAction(tr("Focus Document in Project Tree"), this);
         Command *cmd = ActionManager::registerAction(focusDocumentInProjectTree, focusActionId);
-        cmd->setDefaultKeySequence(QKeySequence(tr("Alt+Shift+L")));
-        connect(focusDocumentInProjectTree, &QAction::triggered,
-                this, [this]() { syncFromDocumentManager(); });
+        cmd->setDefaultKeySequence(
+            QKeySequence(useMacShortcuts ? tr("Meta+Shift+L") : tr("Alt+Shift+L")));
+        connect(focusDocumentInProjectTree, &QAction::triggered, this, [this]() {
+            syncFromDocumentManager();
+        });
     }
 
     m_trimEmptyDirectoriesAction = new QAction(tr("Hide Empty Directories"), this);
@@ -411,6 +413,11 @@ void ProjectTreeWidget::collapseAll()
     m_view->collapseAll();
 }
 
+void ProjectTreeWidget::expandAll()
+{
+    m_view->expandAll();
+}
+
 void ProjectTreeWidget::editCurrentItem()
 {
     m_delayedRename.clear();
@@ -423,7 +430,7 @@ void ProjectTreeWidget::editCurrentItem()
     const Node *node = m_model->nodeForIndex(currentIndex);
     if (!node)
         return;
-    QLineEdit *editor = qobject_cast<QLineEdit*>(m_view->indexWidget(currentIndex));
+    auto *editor = qobject_cast<QLineEdit*>(m_view->indexWidget(currentIndex));
     if (!editor)
         return;
 

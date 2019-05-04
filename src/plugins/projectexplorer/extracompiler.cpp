@@ -52,7 +52,7 @@ namespace ProjectExplorer {
 
 Q_GLOBAL_STATIC(QThreadPool, s_extraCompilerThreadPool);
 Q_GLOBAL_STATIC(QList<ExtraCompilerFactory *>, factories);
-
+Q_GLOBAL_STATIC(QVector<ExtraCompilerFactoryObserver *>, observers);
 class ExtraCompilerPrivate
 {
 public:
@@ -72,7 +72,7 @@ public:
 
 ExtraCompiler::ExtraCompiler(const Project *project, const Utils::FileName &source,
                              const Utils::FileNameList &targets, QObject *parent) :
-    QObject(parent), d(new ExtraCompilerPrivate)
+    QObject(parent), d(std::make_unique<ExtraCompilerPrivate>())
 {
     d->project = project;
     d->source = source;
@@ -129,10 +129,7 @@ ExtraCompiler::ExtraCompiler(const Project *project, const Utils::FileName &sour
     }
 }
 
-ExtraCompiler::~ExtraCompiler()
-{
-    delete d;
-}
+ExtraCompiler::~ExtraCompiler() = default;
 
 const Project *ExtraCompiler::project() const
 {
@@ -313,7 +310,8 @@ void ExtraCompiler::setContent(const Utils::FileName &file, const QByteArray &co
     }
 }
 
-ExtraCompilerFactory::ExtraCompilerFactory(QObject *parent) : QObject(parent)
+ExtraCompilerFactory::ExtraCompilerFactory(QObject *parent)
+    : QObject(parent)
 {
     factories->append(this);
 }
@@ -321,6 +319,14 @@ ExtraCompilerFactory::ExtraCompilerFactory(QObject *parent) : QObject(parent)
 ExtraCompilerFactory::~ExtraCompilerFactory()
 {
     factories->removeAll(this);
+}
+
+void ExtraCompilerFactory::annouceCreation(const Project *project,
+                                           const Utils::FileName &source,
+                                           const Utils::FileNameList &targets)
+{
+    for (ExtraCompilerFactoryObserver *observer : *observers)
+        observer->newExtraCompiler(project, source, targets);
 }
 
 QList<ExtraCompilerFactory *> ExtraCompilerFactory::extraCompilerFactories()
@@ -456,6 +462,16 @@ void ProcessExtraCompiler::cleanUp()
         setContent(it.key(), it.value());
 
     setCompileTime(QDateTime::currentDateTime());
+}
+
+ExtraCompilerFactoryObserver::ExtraCompilerFactoryObserver()
+{
+    observers->push_back(this);
+}
+
+ExtraCompilerFactoryObserver::~ExtraCompilerFactoryObserver()
+{
+    observers->removeOne(this);
 }
 
 } // namespace ProjectExplorer

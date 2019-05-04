@@ -118,7 +118,8 @@ public:
     static bool loadingSession();
 
 signals:
-    void projectAdded(ProjectExplorer::Project *project); void aboutToRemoveProject(ProjectExplorer::Project *project);
+    void projectAdded(ProjectExplorer::Project *project);
+    void aboutToRemoveProject(ProjectExplorer::Project *project);
     void projectDisplayNameChanged(ProjectExplorer::Project *project);
     void projectRemoved(ProjectExplorer::Project *project);
 
@@ -136,7 +137,7 @@ signals: // for tests only
 private:
     static void saveActiveMode(Core::Id mode);
     static void configureEditor(Core::IEditor *editor, const QString &fileName);
-    static void markSessionFileDirty(bool makeDefaultVirginDirty = true);
+    static void markSessionFileDirty();
     static void configureEditors(Project *project);
 };
 

@@ -30,9 +30,7 @@
 
 namespace TextEditor {
 
-CodeFormatterData::~CodeFormatterData()
-{
-}
+CodeFormatterData::~CodeFormatterData() = default;
 
 TextBlockUserData::~TextBlockUserData()
 {
@@ -48,8 +46,8 @@ TextBlockUserData::~TextBlockUserData()
 int TextBlockUserData::braceDepthDelta() const
 {
     int delta = 0;
-    for (int i = 0; i < m_parentheses.size(); ++i) {
-        switch (m_parentheses.at(i).chr.unicode()) {
+    for (auto &parenthesis : m_parentheses) {
+        switch (parenthesis.chr.unicode()) {
         case '{': case '+': case '[': ++delta; break;
         case '}': case '-': case ']': --delta; break;
         default: break;
@@ -521,9 +519,7 @@ void TextDocumentLayout::setFolded(const QTextBlock &block, bool folded)
     else
         return;
 
-    TextDocumentLayout *layout = qobject_cast<TextDocumentLayout *>(
-                block.document()->documentLayout());
-    if (layout)
+    if (auto layout = qobject_cast<TextDocumentLayout *>(block.document()->documentLayout()))
         emit layout->foldChanged(block.blockNumber(), folded);
 }
 
@@ -577,7 +573,7 @@ TextMarks TextDocumentLayout::documentClosing()
 {
     TextMarks marks;
     for (QTextBlock block = document()->begin(); block.isValid(); block = block.next()) {
-        if (TextBlockUserData *data = static_cast<TextBlockUserData *>(block.userData()))
+        if (auto data = static_cast<TextBlockUserData *>(block.userData()))
             marks.append(data->documentClosing());
     }
     return marks;

@@ -92,7 +92,7 @@ public:
     virtual bool isAvailable(Id platformId) const;
     QSet<Id> supportedPlatforms() const;
 
-    typedef std::function<QList<IWizardFactory *>()> FactoryCreator;
+    using FactoryCreator = std::function<QList<IWizardFactory *>()>;
     static void registerFactoryCreator(const FactoryCreator &creator);
 
     // Utility to find all registered wizards
@@ -133,7 +133,7 @@ private:
     QString m_descriptionImage;
     QSet<Id> m_requiredFeatures;
     QSet<Id> m_supportedProjectTypes;
-    WizardFlags m_flags = nullptr;
+    WizardFlags m_flags;
     Id m_id;
 
     friend class Internal::CorePlugin;

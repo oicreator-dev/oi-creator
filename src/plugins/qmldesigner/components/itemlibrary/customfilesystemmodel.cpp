@@ -41,11 +41,9 @@ namespace QmlDesigner {
 class ItemLibraryFileIconProvider : public QFileIconProvider
 {
 public:
-    ItemLibraryFileIconProvider()
-    {
-    }
+    ItemLibraryFileIconProvider() = default;
 
-    QIcon icon( const QFileInfo & info ) const
+    QIcon icon( const QFileInfo & info ) const override
     {
         QIcon icon;
 
@@ -90,7 +88,7 @@ void CustomFileSystemModel::setFilter(QDir::Filters)
 
 }
 
-QString filterMetaIcons(const QString fileName)
+QString filterMetaIcons(const QString &fileName)
 {
 
     QFileInfo info(fileName);
@@ -119,6 +117,9 @@ QString filterMetaIcons(const QString fileName)
 
 QModelIndex CustomFileSystemModel::setRootPath(const QString &newPath)
 {
+    if (m_fileSystemModel->rootPath() == newPath)
+        return QAbstractListModel::index(0, 0);
+
     beginResetModel();
     m_fileSystemModel->setRootPath(newPath);
 

@@ -6,7 +6,7 @@ HEADERS += cpasterplugin.h \
     pasteview.h \
     cpasterconstants.h \
     pastebindotcomprotocol.h \
-    pastebindotcaprotocol.h \
+    pastecodedotxyzprotocol.h \
     settings.h \
     pasteselectdialog.h \
     columnindicatortextedit.h \
@@ -22,7 +22,7 @@ SOURCES += cpasterplugin.cpp \
     protocol.cpp \
     pasteview.cpp \
     pastebindotcomprotocol.cpp \
-    pastebindotcaprotocol.cpp \
+    pastecodedotxyzprotocol.cpp \
     settings.cpp \
     pasteselectdialog.cpp \
     columnindicatortextedit.cpp \

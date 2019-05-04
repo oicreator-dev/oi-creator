@@ -36,8 +36,6 @@
 #include <QLayout>
 #include <QWidget>
 
-#include <math.h>
-
 using namespace QmakeProjectManager::Internal;
 
 ModulesPage::ModulesPage(QWidget *parent)
@@ -48,11 +46,11 @@ ModulesPage::ModulesPage(QWidget *parent)
         "project. The recommended modules for this project are selected by default."));
     label->setWordWrap(true);
 
-    QVBoxLayout *vlayout = new QVBoxLayout();
+    auto *vlayout = new QVBoxLayout();
     vlayout->addWidget(label);
     vlayout->addItem(new QSpacerItem(0, 20));
 
-    QGridLayout *layout = new QGridLayout;
+    auto *layout = new QGridLayout;
 
     const QStringList &modulesList = QtModulesInfo::modules();
     int moduleId = 0;

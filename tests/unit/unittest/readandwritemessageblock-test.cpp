@@ -62,7 +62,6 @@ protected:
 protected:
     Utf8String filePath{Utf8StringLiteral("foo.cpp")};
     ClangBackEnd::FileContainer fileContainer{filePath,
-                                              Utf8StringLiteral("projectPartId"),
                                               Utf8StringLiteral("unsaved content"),
                                               true,
                                               1};
@@ -139,7 +138,7 @@ TEST_F(ReadAndWriteMessageBlock, WriteMessagesToWriteBlockWithoutIoDeviceAndSetI
     writeMessageBlock.write(ClangBackEnd::EndMessage());
     writeMessageBlock.write(ClangBackEnd::EndMessage());
 
-    writeMessageBlock.setIoDevice(nullptr);
+    writeMessageBlock.setLocalSocket(nullptr);
     buffer.seek(0);
 
     ASSERT_THAT(readMessageBlock.readAll(), IsEmpty());
@@ -207,16 +206,14 @@ TEST_F(ReadAndWriteMessageBlock, CompareDocumentsClosedMessage)
 
 TEST_F(ReadAndWriteMessageBlock, CompareRequestCompletionsMessage)
 {
-    CompareMessage(ClangBackEnd::RequestCompletionsMessage(Utf8StringLiteral("foo.cpp"), 24, 33, Utf8StringLiteral("do what I want")));
+    CompareMessage(ClangBackEnd::RequestCompletionsMessage(Utf8StringLiteral("foo.cpp"), 24, 33));
 }
 
 TEST_F(ReadAndWriteMessageBlock, CompareCompletionsMessage)
 {
     ClangBackEnd::CodeCompletions codeCompletions({Utf8StringLiteral("newFunction()")});
 
-    CompareMessage(ClangBackEnd::CompletionsMessage(codeCompletions,
-                                                    ClangBackEnd::CompletionCorrection::NoCorrection,
-                                                    1));
+    CompareMessage(ClangBackEnd::CompletionsMessage(codeCompletions, 1));
 }
 
 TEST_F(ReadAndWriteMessageBlock, CompareAnnotationsMessage)
@@ -299,9 +296,7 @@ TEST_F(ReadAndWriteMessageBlock, ReadMessageAfterInterruption)
 ClangBackEnd::MessageEnvelop ReadAndWriteMessageBlock::writeCompletionsMessage()
 {
     ClangBackEnd::CompletionsMessage message(
-        ClangBackEnd::CodeCompletions({Utf8StringLiteral("newFunction()")}),
-        ClangBackEnd::CompletionCorrection::NoCorrection,
-        1);
+        ClangBackEnd::CodeCompletions({Utf8StringLiteral("newFunction()")}), 1);
 
     writeMessageBlock.write(message);
 

@@ -403,8 +403,6 @@ bool GTestTreeItem::modify(const TestParseResult *result)
 
 TestTreeItem *GTestTreeItem::createParentGroupNode() const
 {
-    if (type() != TestCase)
-        return nullptr;
     if (GTestFramework::groupMode() == GTest::Constants::Directory) {
         const QFileInfo fileInfo(filePath());
         const QFileInfo base(fileInfo.absolutePath());
@@ -468,7 +466,7 @@ QSet<QString> GTestTreeItem::internalTargets() const
     const QVector<CppTools::ProjectPart::Ptr> projectParts = projectInfo.projectParts();
     if (projectParts.isEmpty())
         return TestTreeItem::dependingInternalTargets(cppMM, file);
-    for (const CppTools::ProjectPart::Ptr projectPart : projectParts) {
+    for (const CppTools::ProjectPart::Ptr &projectPart : projectParts) {
         if (projectPart->projectFile == proFile()
                 && Utils::anyOf(projectPart->files, [&file] (const CppTools::ProjectFile &pf) {
                                 return pf.path == file;
@@ -509,6 +507,11 @@ bool GTestTreeItem::isGroupNodeFor(const TestTreeItem *other) const
         return (matches && name() == matchingString())
                 || (!matches && name() == notMatchingString());
     }
+}
+
+bool GTestTreeItem::isGroupable() const
+{
+    return type() == TestCase;
 }
 
 TestTreeItem *GTestTreeItem::applyFilters()

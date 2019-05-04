@@ -42,24 +42,7 @@ using namespace ProjectExplorer;
 namespace WinRt {
 namespace Internal {
 
-WinRtDevice::WinRtDevice() : m_deviceId(-1)
-{
-    initFreePorts();
-}
-
-WinRtDevice::WinRtDevice(Core::Id type, MachineType machineType, Core::Id internalId, int deviceId)
-    : IDevice(type, AutoDetected, machineType, internalId), m_deviceId(deviceId)
-{
-    initFreePorts();
-}
-
-WinRtDevice::WinRtDevice(const WinRtDevice &other)
-    : IDevice(other), m_deviceId(other.m_deviceId)
-{
-    initFreePorts();
-}
-
-void WinRtDevice::initFreePorts()
+WinRtDevice::WinRtDevice()
 {
     Utils::PortList portList;
     portList.addRange(Utils::Port(ProjectExplorer::Constants::DESKTOP_PORT_START),
@@ -74,24 +57,7 @@ QString WinRtDevice::displayType() const
 
 IDeviceWidget *WinRtDevice::createWidget()
 {
-    return 0;
-}
-
-QList<Core::Id> WinRtDevice::actionIds() const
-{
-    return QList<Core::Id>();
-}
-
-QString WinRtDevice::displayNameForActionId(Core::Id actionId) const
-{
-    Q_UNUSED(actionId);
-    return QString();
-}
-
-void WinRtDevice::executeAction(Core::Id actionId, QWidget *parent)
-{
-    Q_UNUSED(actionId);
-    Q_UNUSED(parent);
+    return nullptr;
 }
 
 DeviceProcessSignalOperation::Ptr WinRtDevice::signalOperation() const

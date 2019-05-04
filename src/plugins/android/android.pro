@@ -6,7 +6,6 @@ else:ANDROID_EXPERIMENTAL_STR="false"
 QT += xml network
 
 HEADERS += \
-    androidqtsupport.h \
     androidconstants.h \
     androidconfigurations.h \
     androidmanager.h \
@@ -22,7 +21,6 @@ HEADERS += \
     androiddebugsupport.h \
     androidqtversionfactory.h \
     androidqtversion.h \
-    androiddeployconfiguration.h \
     androidcreatekeystorecertificate.h \
     javaparser.h \
     androidplugin.h \
@@ -37,7 +35,6 @@ HEADERS += \
     androiddevicedialog.h \
     androiddeployqtstep.h \
     certificatesmodel.h \
-    androiddeployqtwidget.h \
     androidpotentialkit.h \
     androidsignaloperation.h \
     javaeditor.h \
@@ -53,7 +50,10 @@ HEADERS += \
     androidsdkpackage.h \
     androidsdkmodel.h \
     androidsdkmanagerwidget.h \
-    androidpackageinstallationstep.h
+    androidpackageinstallationstep.h \
+    androidextralibrarylistmodel.h \
+    createandroidmanifestwizard.h \
+    androidrunenvironmentaspect.h
 
 SOURCES += \
     androidconfigurations.cpp \
@@ -69,7 +69,6 @@ SOURCES += \
     androiddebugsupport.cpp \
     androidqtversionfactory.cpp \
     androidqtversion.cpp \
-    androiddeployconfiguration.cpp \
     androidcreatekeystorecertificate.cpp \
     javaparser.cpp \
     androidplugin.cpp \
@@ -84,7 +83,6 @@ SOURCES += \
     androiddevicedialog.cpp \
     androiddeployqtstep.cpp \
     certificatesmodel.cpp \
-    androiddeployqtwidget.cpp \
     androidpotentialkit.cpp \
     androidsignaloperation.cpp \
     javaeditor.cpp \
@@ -92,7 +90,6 @@ SOURCES += \
     avddialog.cpp \
     androidbuildapkstep.cpp \
     androidbuildapkwidget.cpp \
-    androidqtsupport.cpp \
     androidtoolmanager.cpp \
     androidsdkmanager.cpp \
     androidavdmanager.cpp \
@@ -100,14 +97,16 @@ SOURCES += \
     androidsdkpackage.cpp \
     androidsdkmodel.cpp \
     androidsdkmanagerwidget.cpp \
-    androidpackageinstallationstep.cpp
+    androidpackageinstallationstep.cpp \
+    androidextralibrarylistmodel.cpp \
+    createandroidmanifestwizard.cpp \
+    androidrunenvironmentaspect.cpp
 
 FORMS += \
     androidsettingswidget.ui \
     addnewavddialog.ui \
     androidcreatekeystorecertificate.ui \
     androiddevicedialog.ui \
-    androiddeployqtwidget.ui \
     androidbuildapkwidget.ui \
     adbcommandswidget.ui \
     androidsdkmanagerwidget.ui

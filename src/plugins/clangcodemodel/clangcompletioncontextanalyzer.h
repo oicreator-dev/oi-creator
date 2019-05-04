@@ -39,6 +39,7 @@ class ClangCompletionAssistInterface;
 class ClangCompletionContextAnalyzer
 {
 public:
+    ClangCompletionContextAnalyzer() = delete;
     ClangCompletionContextAnalyzer(const ClangCompletionAssistInterface *assistInterface,
                                    CPlusPlus::LanguageFeatures languageFeatures);
     void analyze();
@@ -58,10 +59,9 @@ public:
     int positionForClang() const { return m_positionForClang; }
     int functionNameStart() const { return m_functionNameStart; }
     int positionEndOfExpression() const { return m_positionEndOfExpression; }
+    bool addSnippets() const { return m_addSnippets; }
 
 private:
-    ClangCompletionContextAnalyzer();
-
     int startOfFunctionCall(int endOfExpression) const;
 
     void setActionAndClangPosition(CompletionAction action,
@@ -84,6 +84,7 @@ private:
     int m_positionForClang = -1;
     int m_functionNameStart = -1;
     int m_positionEndOfExpression = -1;
+    bool m_addSnippets = false;
 };
 
 } // namespace Internal

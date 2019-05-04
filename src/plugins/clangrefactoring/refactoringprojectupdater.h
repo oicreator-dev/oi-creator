@@ -26,17 +26,34 @@
 #pragma once
 
 #include <clangpchmanager/projectupdater.h>
+#include <clangpchmanager/pchmanagernotifierinterface.h>
+
+#include <cpptools/cppmodelmanagerinterface.h>
 
 namespace ClangRefactoring {
 
-class RefactoringClient;
-
-class RefactoringProjectUpdater : public ClangPchManager::ProjectUpdater
+class RefactoringProjectUpdater : public ClangPchManager::ProjectUpdater,
+                                  public ClangPchManager::PchManagerNotifierInterface
 {
 public:
     RefactoringProjectUpdater(ClangBackEnd::ProjectManagementServerInterface &server,
-                              RefactoringClient &client,
-                              ClangBackEnd::FilePathCachingInterface &filePathCache);
+                              ClangPchManager::PchManagerClient &pchManagerClient,
+                              CppTools::CppModelManagerInterface &cppModelManager,
+                              ClangBackEnd::FilePathCachingInterface &filePathCache,
+                              ClangBackEnd::ProjectPartsStorageInterface &projectPartsStorage)
+        : ClangPchManager::ProjectUpdater(server, filePathCache, projectPartsStorage)
+        , ClangPchManager::PchManagerNotifierInterface(pchManagerClient)
+        , m_cppModelManager(cppModelManager)
+    {
+    }
+
+    void precompiledHeaderUpdated(ClangBackEnd::ProjectPartId projectPartId,
+                                  const QString &pchFilePath,
+                                  long long lastModified) override;
+    void precompiledHeaderRemoved(ClangBackEnd::ProjectPartId projectPartId) override;
+
+private:
+    CppTools::CppModelManagerInterface &m_cppModelManager;
 };
 
 } // namespace ClangRefactoring

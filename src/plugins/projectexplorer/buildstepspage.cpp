@@ -50,8 +50,7 @@ using namespace ProjectExplorer;
 using namespace ProjectExplorer::Internal;
 using namespace Utils;
 
-ToolWidget::ToolWidget(QWidget *parent) : FadingPanel(parent),
-    m_targetOpacity(.999)
+ToolWidget::ToolWidget(QWidget *parent) : FadingPanel(parent)
 {
     auto layout = new QHBoxLayout;
     layout->setMargin(4);
@@ -67,7 +66,6 @@ ToolWidget::ToolWidget(QWidget *parent) : FadingPanel(parent),
 
     m_disableButton = new QToolButton(m_firstWidget);
     m_disableButton->setAutoRaise(true);
-    m_disableButton->setToolTip(BuildStepListWidget::tr("Disable"));
     m_disableButton->setFixedSize(buttonSize);
     m_disableButton->setIcon(Icons::BUILDSTEP_DISABLE.icon());
     m_disableButton->setCheckable(true);
@@ -141,6 +139,8 @@ void ToolWidget::setBuildStepEnabled(bool b)
             m_firstWidget->fadeTo(.999);
     }
     m_disableButton->setChecked(!b);
+    m_disableButton->setToolTip(b ? BuildStepListWidget::tr("Disable")
+                                  : BuildStepListWidget::tr("Enable"));
 }
 
 void ToolWidget::setUpEnabled(bool b)
@@ -169,7 +169,7 @@ void ToolWidget::setDownVisible(bool b)
 }
 
 BuildStepsWidgetData::BuildStepsWidgetData(BuildStep *s) :
-    step(s), widget(0), detailsWidget(0)
+    step(s), widget(nullptr), detailsWidget(nullptr)
 {
     widget = s->createConfigWidget();
     Q_ASSERT(widget);
@@ -183,7 +183,6 @@ BuildStepsWidgetData::BuildStepsWidgetData(BuildStep *s) :
     detailsWidget->setToolWidget(toolWidget);
     detailsWidget->setContentsMargins(0, 0, 0, 1);
     detailsWidget->setSummaryText(widget->summaryText());
-    detailsWidget->setAdditionalSummaryText(widget->additionalSummaryText());
 }
 
 BuildStepsWidgetData::~BuildStepsWidgetData()
@@ -209,19 +208,6 @@ void BuildStepListWidget::updateSummary()
         foreach (const BuildStepsWidgetData *s, m_buildStepsData) {
             if (s->widget == widget) {
                 s->detailsWidget->setSummaryText(widget->summaryText());
-                break;
-            }
-        }
-    }
-}
-
-void BuildStepListWidget::updateAdditionalSummary()
-{
-    auto widget = qobject_cast<BuildStepConfigWidget *>(sender());
-    if (widget) {
-        foreach (const BuildStepsWidgetData *s, m_buildStepsData) {
-            if (s->widget == widget) {
-                s->detailsWidget->setAdditionalSummaryText(widget->additionalSummaryText());
                 break;
             }
         }
@@ -272,7 +258,7 @@ void BuildStepListWidget::init(BuildStepList *bsl)
     for (int i = 0; i < bsl->count(); ++i) {
         addBuildStep(i);
         // addBuilStep expands the config widget by default, which we don't want here
-        if (m_buildStepsData.at(i)->widget->showWidget())
+        if (m_buildStepsData.at(i)->step->widgetExpandedByDefault())
             m_buildStepsData.at(i)->detailsWidget->setState(DetailsWidget::Collapsed);
     }
 
@@ -320,30 +306,24 @@ void BuildStepListWidget::updateAddBuildStepMenu()
     }
 }
 
-void BuildStepListWidget::addBuildStepWidget(int pos, BuildStep *step)
+void BuildStepListWidget::addBuildStep(int pos)
 {
+    BuildStep *newStep = m_buildStepList->at(pos);
+
     // create everything
-    auto s = new BuildStepsWidgetData(step);
+    auto s = new BuildStepsWidgetData(newStep);
     m_buildStepsData.insert(pos, s);
 
     m_vbox->insertWidget(pos, s->detailsWidget);
 
     connect(s->widget, &BuildStepConfigWidget::updateSummary,
             this, &BuildStepListWidget::updateSummary);
-    connect(s->widget, &BuildStepConfigWidget::updateAdditionalSummary,
-            this, &BuildStepListWidget::updateAdditionalSummary);
 
     connect(s->step, &BuildStep::enabledChanged,
             this, &BuildStepListWidget::updateEnabledState);
-}
 
-void BuildStepListWidget::addBuildStep(int pos)
-{
-    BuildStep *newStep = m_buildStepList->at(pos);
-    addBuildStepWidget(pos, newStep);
-    BuildStepsWidgetData *s = m_buildStepsData.at(pos);
     // Expand new build steps by default
-    if (s->widget->showWidget())
+    if (newStep->widgetExpandedByDefault())
         s->detailsWidget->setState(DetailsWidget::Expanded);
     else
         s->detailsWidget->setState(DetailsWidget::OnlySummary);
@@ -416,7 +396,7 @@ void BuildStepListWidget::updateBuildStepButtonsState()
             bs->setEnabled(!bs->enabled());
             s->toolWidget->setBuildStepEnabled(bs->enabled());
         });
-        s->toolWidget->setRemoveEnabled(!m_buildStepList->at(i)->immutable());
+        s->toolWidget->setRemoveEnabled(!m_buildStepList->at(i)->isImmutable());
         connect(s->toolWidget, &ToolWidget::removeClicked,
                 this, [this, i] {
             if (!m_buildStepList->removeStep(i)) {
@@ -428,13 +408,13 @@ void BuildStepListWidget::updateBuildStepButtonsState()
         });
 
         s->toolWidget->setUpEnabled((i > 0)
-                                    && !(m_buildStepList->at(i)->immutable()
-                                         && m_buildStepList->at(i - 1)->immutable()));
+                                    && !(m_buildStepList->at(i)->isImmutable()
+                                         && m_buildStepList->at(i - 1)->isImmutable()));
         connect(s->toolWidget, &ToolWidget::upClicked,
                 this, [this, i] { m_buildStepList->moveStepUp(i); });
         s->toolWidget->setDownEnabled((i + 1 < m_buildStepList->count())
-                                      && !(m_buildStepList->at(i)->immutable()
-                                           && m_buildStepList->at(i + 1)->immutable()));
+                                      && !(m_buildStepList->at(i)->isImmutable()
+                                           && m_buildStepList->at(i + 1)->isImmutable()));
         connect(s->toolWidget, &ToolWidget::downClicked,
                 this, [this, i] { m_buildStepList->moveStepUp(i + 1); });
 

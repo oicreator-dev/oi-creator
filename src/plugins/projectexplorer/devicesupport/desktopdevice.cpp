@@ -48,21 +48,19 @@ using namespace Utils;
 
 namespace ProjectExplorer {
 
-DesktopDevice::DesktopDevice() : IDevice(Core::Id(DESKTOP_DEVICE_TYPE),
-                                         IDevice::AutoDetected,
-                                         IDevice::Hardware,
-                                         Core::Id(DESKTOP_DEVICE_ID))
+DesktopDevice::DesktopDevice()
 {
+    setupId(IDevice::AutoDetected, DESKTOP_DEVICE_ID);
+    setType(DESKTOP_DEVICE_TYPE);
     setDisplayName(QCoreApplication::translate("ProjectExplorer::DesktopDevice", "Local PC"));
     setDeviceState(IDevice::DeviceStateUnknown);
+    setMachineType(IDevice::Hardware);
     const QString portRange =
             QString::fromLatin1("%1-%2").arg(DESKTOP_PORT_START).arg(DESKTOP_PORT_END);
     setFreePorts(Utils::PortList::fromString(portRange));
 }
 
-DesktopDevice::DesktopDevice(const DesktopDevice &other) :
-    IDevice(other)
-{ }
+DesktopDevice::DesktopDevice(const DesktopDevice &other) = default;
 
 IDevice::DeviceInfo DesktopDevice::deviceInformation() const
 {
@@ -76,27 +74,10 @@ QString DesktopDevice::displayType() const
 
 IDeviceWidget *DesktopDevice::createWidget()
 {
-    return 0;
+    return nullptr;
     // DesktopDeviceConfigurationWidget currently has just one editable field viz. free ports.
     // Querying for an available port is quite straightforward. Having a field for the port
     // range can be confusing to the user. Hence, disabling the widget for now.
-}
-
-QList<Core::Id> DesktopDevice::actionIds() const
-{
-    return QList<Core::Id>();
-}
-
-QString DesktopDevice::displayNameForActionId(Core::Id actionId) const
-{
-    Q_UNUSED(actionId);
-    return QString();
-}
-
-void DesktopDevice::executeAction(Core::Id actionId, QWidget *parent)
-{
-    Q_UNUSED(actionId);
-    Q_UNUSED(parent);
 }
 
 bool DesktopDevice::canAutoDetectPorts() const
@@ -127,7 +108,7 @@ DeviceProcessSignalOperation::Ptr DesktopDevice::signalOperation() const
 class DesktopDeviceEnvironmentFetcher : public DeviceEnvironmentFetcher
 {
 public:
-    DesktopDeviceEnvironmentFetcher() {}
+    DesktopDeviceEnvironmentFetcher() = default;
 
     void start() override
     {

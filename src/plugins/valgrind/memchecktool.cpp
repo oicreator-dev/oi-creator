@@ -111,25 +111,18 @@ using namespace ProjectExplorer;
 using namespace Utils;
 using namespace Valgrind::XmlProtocol;
 
-using namespace std::placeholders;
-
 namespace Valgrind {
 namespace Internal {
 
 const char MEMCHECK_RUN_MODE[] = "MemcheckTool.MemcheckRunMode";
 const char MEMCHECK_WITH_GDB_RUN_MODE[] = "MemcheckTool.MemcheckWithGdbRunMode";
 
-const char MemcheckPerspectiveId[] = "Memcheck.Perspective";
-const char MemcheckErrorDockId[] = "Memcheck.Dock.Error";
-
-
 class MemcheckToolRunner : public ValgrindToolRunner
 {
     Q_OBJECT
 
 public:
-    explicit MemcheckToolRunner(ProjectExplorer::RunControl *runControl,
-                                bool withGdb = false);
+    explicit MemcheckToolRunner(ProjectExplorer::RunControl *runControl);
 
     void start() override;
     void stop() override;
@@ -162,7 +155,7 @@ public:
             *localServerAddress = connection.connectionInfo().localAddress;
             reportStarted();
         });
-        connect(&connection, &QSsh::SshConnection::error, this, [this] {
+        connect(&connection, &QSsh::SshConnection::errorOccurred, this, [this] {
             reportFailure();
         });
     }
@@ -174,33 +167,6 @@ public:
 
     QSsh::SshConnection connection;
 };
-
-MemcheckToolRunner::MemcheckToolRunner(RunControl *runControl, bool withGdb)
-    : ValgrindToolRunner(runControl),
-      m_withGdb(withGdb),
-      m_localServerAddress(QHostAddress::LocalHost)
-{
-    setDisplayName("MemcheckToolRunner");
-    connect(m_runner.parser(), &XmlProtocol::ThreadedParser::error,
-            this, &MemcheckToolRunner::parserError);
-    connect(m_runner.parser(), &XmlProtocol::ThreadedParser::suppressionCount,
-            this, &MemcheckToolRunner::suppressionCount);
-
-    if (withGdb) {
-        connect(&m_runner, &ValgrindRunner::valgrindStarted,
-                this, &MemcheckToolRunner::startDebugger);
-        connect(&m_runner, &ValgrindRunner::logMessageReceived,
-                this, &MemcheckToolRunner::appendLog);
-//        m_runner.disableXml();
-    } else {
-        connect(m_runner.parser(), &XmlProtocol::ThreadedParser::internalError,
-                this, &MemcheckToolRunner::internalParserError);
-    }
-
-    // We need a real address to connect to from the outside.
-    if (device()->type() != ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE)
-        addStartDependency(new LocalAddressFinder(runControl, &m_localServerAddress));
-}
 
 QString MemcheckToolRunner::progressTitle() const
 {
@@ -310,8 +276,8 @@ static ErrorListModel::RelevantFrameFinder makeFrameFinder(const QStringList &pr
 
         //if no frame belonging to the project was found, return the first one that is not malloc/new
         foreach (const Frame &frame, frames) {
-            if (!frame.functionName().isEmpty() && frame.functionName() != QLatin1String("malloc")
-                && !frame.functionName().startsWith(QLatin1String("operator new(")))
+            if (!frame.functionName().isEmpty() && frame.functionName() != "malloc"
+                && !frame.functionName().startsWith("operator new("))
             {
                 return frame;
             }
@@ -328,7 +294,7 @@ class MemcheckErrorFilterProxyModel : public QSortFilterProxyModel
 public:
     void setAcceptedKinds(const QList<int> &acceptedKinds);
     void setFilterExternalIssues(bool filter);
-    bool filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const;
+    bool filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const override;
 
 private:
     QList<int> m_acceptedKinds;
@@ -389,7 +355,7 @@ bool MemcheckErrorFilterProxyModel::filterAcceptsRow(int sourceRow, const QModel
             }
         }
 
-        const QVector< Frame > frames = error.stacks().first().frames();
+        const QVector<Frame> frames = error.stacks().constFirst().frames();
 
         const int framesToLookAt = qMin(6, frames.size());
 
@@ -422,9 +388,9 @@ class MemcheckTool : public QObject
 
 public:
     MemcheckTool();
+    ~MemcheckTool() override;
 
-    RunWorker *createRunWorker(RunControl *runControl);
-
+    void setupRunner(MemcheckToolRunner *runTool);
     void loadShowXmlLogFile(const QString &filePath, const QString &exitMsg);
 
 private:
@@ -452,11 +418,11 @@ private:
 
 private:
     ValgrindBaseSettings *m_settings;
-    QMenu *m_filterMenu = 0;
+    QMenu *m_filterMenu = nullptr;
 
     Valgrind::XmlProtocol::ErrorListModel m_errorModel;
     MemcheckErrorFilterProxyModel m_errorProxyModel;
-    MemcheckErrorView *m_errorView = 0;
+    QPointer<MemcheckErrorView> m_errorView;
 
     QList<QAction *> m_errorFilterActions;
     QAction *m_filterProjectAction;
@@ -471,6 +437,7 @@ private:
     bool m_toolBusy = false;
 
     QString m_exitMsg;
+    Perspective m_perspective{"Memcheck.Perspective", tr("Memcheck")};
 };
 
 #ifdef Q_OS_WIN
@@ -486,7 +453,7 @@ public:
     bool attach() const;
     QString path() const;
 
-    void keyPressEvent(QKeyEvent *e);
+    void keyPressEvent(QKeyEvent *e) override;
 
 private:
     void updateEnabled();
@@ -512,7 +479,7 @@ class HeobData : public QObject
 
 public:
     HeobData(MemcheckTool *mcTool, const QString &xmlPath, Kit *kit, bool attach);
-    ~HeobData();
+    ~HeobData() override;
 
     bool createErrorPipe(DWORD heobPid);
     void readExitData();
@@ -541,7 +508,7 @@ MemcheckTool::MemcheckTool()
 {
     m_settings = ValgrindPlugin::globalSettings();
 
-    setObjectName(QLatin1String("MemcheckTool"));
+    setObjectName("MemcheckTool");
 
     m_filterProjectAction = new QAction(tr("External Errors"), this);
     m_filterProjectAction->setToolTip(
@@ -572,7 +539,7 @@ MemcheckTool::MemcheckTool()
     m_errorFilterActions.append(a);
 
     m_errorView = new MemcheckErrorView;
-    m_errorView->setObjectName(QLatin1String("MemcheckErrorView"));
+    m_errorView->setObjectName("MemcheckErrorView");
     m_errorView->setFrameStyle(QFrame::NoFrame);
     m_errorView->setAttribute(Qt::WA_MacShowFocusRect, false);
     m_errorModel.setRelevantFrameFinder(makeFrameFinder(QStringList()));
@@ -584,12 +551,10 @@ MemcheckTool::MemcheckTool()
     m_errorView->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_errorView->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     m_errorView->setAutoScroll(false);
-    m_errorView->setObjectName(QLatin1String("Valgrind.MemcheckTool.ErrorView"));
+    m_errorView->setObjectName("Valgrind.MemcheckTool.ErrorView");
     m_errorView->setWindowTitle(tr("Memory Issues"));
 
-    Debugger::registerPerspective(MemcheckPerspectiveId, new Perspective (tr("Memcheck"), {
-        {MemcheckErrorDockId, m_errorView, {}, Perspective::SplitVertical}
-    }));
+    m_perspective.addWindow(m_errorView, Perspective::SplitVertical, nullptr);
 
     connect(ProjectExplorerPlugin::instance(), &ProjectExplorerPlugin::updateRunActions,
             this, &MemcheckTool::maybeActiveRunConfigurationChanged);
@@ -649,11 +614,11 @@ MemcheckTool::MemcheckTool()
         action->setToolTip(toolTip);
         menu->addAction(ActionManager::registerAction(action, "Memcheck.Local"),
                         Debugger::Constants::G_ANALYZER_TOOLS);
-        QObject::connect(action, &QAction::triggered, this, [action] {
+        QObject::connect(action, &QAction::triggered, this, [this, action] {
             if (!Debugger::wantRunTool(DebugMode, action->text()))
                 return;
             TaskHub::clearTasks(Debugger::Constants::ANALYZERTASK_ID);
-            Debugger::selectPerspective(MemcheckPerspectiveId);
+            m_perspective.select();
             ProjectExplorerPlugin::runStartupProject(MEMCHECK_RUN_MODE);
         });
         QObject::connect(m_startAction, &QAction::triggered, action, &QAction::triggered);
@@ -668,11 +633,11 @@ MemcheckTool::MemcheckTool()
             "the application is interrupted and can be debugged."));
         menu->addAction(ActionManager::registerAction(action, "MemcheckWithGdb.Local"),
                         Debugger::Constants::G_ANALYZER_TOOLS);
-        QObject::connect(action, &QAction::triggered, this, [action] {
+        QObject::connect(action, &QAction::triggered, this, [this, action] {
             if (!Debugger::wantRunTool(DebugMode, action->text()))
                 return;
             TaskHub::clearTasks(Debugger::Constants::ANALYZERTASK_ID);
-            Debugger::selectPerspective(MemcheckPerspectiveId);
+            m_perspective.select();
             ProjectExplorerPlugin::runStartupProject(MEMCHECK_WITH_GDB_RUN_MODE);
         });
         QObject::connect(m_startWithGdbAction, &QAction::triggered, action, &QAction::triggered);
@@ -695,7 +660,7 @@ MemcheckTool::MemcheckTool()
     action->setToolTip(toolTip);
     menu->addAction(ActionManager::registerAction(action, "Memcheck.Remote"),
                     Debugger::Constants::G_ANALYZER_REMOTE_TOOLS);
-    QObject::connect(action, &QAction::triggered, this, [action] {
+    QObject::connect(action, &QAction::triggered, this, [this, action] {
         auto runConfig = RunConfiguration::startupRunConfiguration();
         if (!runConfig) {
             showCannotStartDialog(action->text());
@@ -705,27 +670,31 @@ MemcheckTool::MemcheckTool()
         if (dlg.exec() != QDialog::Accepted)
             return;
         TaskHub::clearTasks(Debugger::Constants::ANALYZERTASK_ID);
-        Debugger::selectPerspective(MemcheckPerspectiveId);
+        m_perspective.select();
         RunControl *rc = new RunControl(runConfig, MEMCHECK_RUN_MODE);
-        rc->createWorker(MEMCHECK_RUN_MODE);
+        if (auto creator = RunControl::producer(runConfig, MEMCHECK_RUN_MODE))
+            creator(rc);
         const auto runnable = dlg.runnable();
         rc->setRunnable(runnable);
         rc->setDisplayName(runnable.executable);
         ProjectExplorerPlugin::startRunControl(rc);
     });
 
-    ToolbarDescription toolbar;
-    toolbar.addAction(m_startAction);
+    m_perspective.addToolBarAction(m_startAction);
     //toolbar.addAction(m_startWithGdbAction);
-    toolbar.addAction(m_stopAction);
-    toolbar.addAction(m_loadExternalLogFile);
-    toolbar.addAction(m_goBack);
-    toolbar.addAction(m_goNext);
-    toolbar.addWidget(filterButton);
-    Debugger::registerToolbar(MemcheckPerspectiveId, toolbar);
+    m_perspective.addToolBarAction(m_stopAction);
+    m_perspective.addToolBarAction(m_loadExternalLogFile);
+    m_perspective.addToolBarAction(m_goBack);
+    m_perspective.addToolBarAction(m_goNext);
+    m_perspective.addToolBarWidget(filterButton);
 
     updateFromSettings();
     maybeActiveRunConfigurationChanged();
+}
+
+MemcheckTool::~MemcheckTool()
+{
+    delete m_errorView;
 }
 
 void MemcheckTool::heobAction()
@@ -780,6 +749,8 @@ void MemcheckTool::heobAction()
         TaskHub::requestPopup();
         return;
     }
+    if (!QFile::exists(executable))
+        executable = Utils::HostOsInfo::withExecutableSuffix(executable);
     if (!QFile::exists(executable)) {
         const QString msg = tr("Heob: Cannot find %1.").arg(executable);
         TaskHub::addTask(Task::Error, msg, Debugger::Constants::ANALYZERTASK_ID);
@@ -858,7 +829,7 @@ void MemcheckTool::heobAction()
     memset(&si, 0, sizeof(STARTUPINFO));
     si.cb = sizeof(STARTUPINFO);
     if (!CreateProcess(reinterpret_cast<LPCWSTR>(heobPath.utf16()),
-                       reinterpret_cast<LPWSTR>(argumentsCopy.data()), 0, 0, FALSE,
+                       reinterpret_cast<LPWSTR>(argumentsCopy.data()), NULL, NULL, FALSE,
                        CREATE_UNICODE_ENVIRONMENT | CREATE_SUSPENDED | CREATE_NEW_CONSOLE, envPtr,
                        reinterpret_cast<LPCWSTR>(workingDirectory.utf16()), &si, &pi)) {
         DWORD e = GetLastError();
@@ -869,7 +840,7 @@ void MemcheckTool::heobAction()
     }
 
     // heob finished signal handler
-    HeobData *hd = new HeobData(this, xmlPath, kit, dialog.attach());
+    auto hd = new HeobData(this, xmlPath, kit, dialog.attach());
     if (!hd->createErrorPipe(pi.dwProcessId)) {
         delete hd;
         hd = nullptr;
@@ -940,12 +911,11 @@ void MemcheckTool::maybeActiveRunConfigurationChanged()
 {
     updateRunActions();
 
-    ValgrindBaseSettings *settings = 0;
+    ValgrindBaseSettings *settings = nullptr;
     if (Project *project = SessionManager::startupProject())
         if (Target *target = project->activeTarget())
             if (RunConfiguration *rc = target->activeRunConfiguration())
-                if (IRunConfigurationAspect *aspect = rc->extraAspect(ANALYZER_VALGRIND_SETTINGS))
-                    settings = qobject_cast<ValgrindBaseSettings *>(aspect->currentSettings());
+                settings = rc->currentSettings<ValgrindBaseSettings>(ANALYZER_VALGRIND_SETTINGS);
 
     if (!settings) // fallback to global settings
         settings = ValgrindPlugin::globalSettings();
@@ -967,12 +937,11 @@ void MemcheckTool::maybeActiveRunConfigurationChanged()
     updateFromSettings();
 }
 
-RunWorker *MemcheckTool::createRunWorker(RunControl *runControl)
+void MemcheckTool::setupRunner(MemcheckToolRunner *runTool)
 {
+    RunControl *runControl = runTool->runControl();
     m_errorModel.setRelevantFrameFinder(makeFrameFinder(transform(runControl->project()->files(Project::AllFiles),
                                                                   &FileName::toString)));
-
-    auto runTool = new MemcheckToolRunner(runControl, runControl->runMode() == MEMCHECK_WITH_GDB_RUN_MODE);
 
     connect(runTool, &MemcheckToolRunner::parserError, this, &MemcheckTool::parserError);
     connect(runTool, &MemcheckToolRunner::internalParserError, this, &MemcheckTool::internalParserError);
@@ -1001,8 +970,6 @@ RunWorker *MemcheckTool::createRunWorker(RunControl *runControl)
         });
         m_suppressionActions.append(action);
     }
-
-    return runTool;
 }
 
 void MemcheckTool::loadShowXmlLogFile(const QString &filePath, const QString &exitMsg)
@@ -1010,7 +977,7 @@ void MemcheckTool::loadShowXmlLogFile(const QString &filePath, const QString &ex
     clearErrorView();
     m_settings->setFilterExternalIssues(false);
     m_filterProjectAction->setChecked(true);
-    Debugger::selectPerspective(MemcheckPerspectiveId);
+    m_perspective.select();
     Core::ModeManager::activateMode(Debugger::Constants::MODE_DEBUG);
 
     m_exitMsg = exitMsg;
@@ -1033,7 +1000,7 @@ void MemcheckTool::loadExternalXmlLogFile()
 
 void MemcheckTool::loadXmlLogFile(const QString &filePath)
 {
-    QFile *logFile = new QFile(filePath);
+    auto logFile = new QFile(filePath);
     if (!logFile->open(QIODevice::ReadOnly | QIODevice::Text)) {
         delete logFile;
         QString msg = tr("Memcheck: Failed to open file for reading: %1").arg(filePath);
@@ -1054,7 +1021,7 @@ void MemcheckTool::loadXmlLogFile(const QString &filePath)
         updateFromSettings();
     }
 
-    ThreadedParser *parser = new ThreadedParser;
+    auto parser = new ThreadedParser;
     connect(parser, &ThreadedParser::error, this, &MemcheckTool::parserError);
     connect(parser, &ThreadedParser::internalError, this, &MemcheckTool::internalParserError);
     connect(parser, &ThreadedParser::finished, this, &MemcheckTool::loadingExternalXmlLogFileFinished);
@@ -1123,13 +1090,13 @@ void MemcheckTool::engineFinished()
 
     const int issuesFound = updateUiAfterFinishedHelper();
     Debugger::showPermanentStatusMessage(
-        tr("Memory Analyzer Tool finished. %n issues were found.", 0, issuesFound));
+        tr("Memory Analyzer Tool finished. %n issues were found.", nullptr, issuesFound));
 }
 
 void MemcheckTool::loadingExternalXmlLogFileFinished()
 {
     const int issuesFound = updateUiAfterFinishedHelper();
-    QString statusMessage = tr("Log file processed. %n issues were found.", 0, issuesFound);
+    QString statusMessage = tr("Log file processed. %n issues were found.", nullptr, issuesFound);
     if (!m_exitMsg.isEmpty())
         statusMessage += ' ' + m_exitMsg;
     Debugger::showPermanentStatusMessage(statusMessage);
@@ -1144,13 +1111,41 @@ void MemcheckTool::setBusyCursor(bool busy)
 
 static MemcheckTool *theMemcheckTool;
 
+MemcheckToolRunner::MemcheckToolRunner(RunControl *runControl)
+    : ValgrindToolRunner(runControl),
+      m_withGdb(runControl->runMode() == MEMCHECK_WITH_GDB_RUN_MODE),
+      m_localServerAddress(QHostAddress::LocalHost)
+{
+    setId("MemcheckToolRunner");
+    connect(m_runner.parser(), &XmlProtocol::ThreadedParser::error,
+            this, &MemcheckToolRunner::parserError);
+    connect(m_runner.parser(), &XmlProtocol::ThreadedParser::suppressionCount,
+            this, &MemcheckToolRunner::suppressionCount);
+
+    if (m_withGdb) {
+        connect(&m_runner, &ValgrindRunner::valgrindStarted,
+                this, &MemcheckToolRunner::startDebugger);
+        connect(&m_runner, &ValgrindRunner::logMessageReceived,
+                this, &MemcheckToolRunner::appendLog);
+//        m_runner.disableXml();
+    } else {
+        connect(m_runner.parser(), &XmlProtocol::ThreadedParser::internalError,
+                this, &MemcheckToolRunner::internalParserError);
+    }
+
+    // We need a real address to connect to from the outside.
+    if (device()->type() != ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE)
+        addStartDependency(new LocalAddressFinder(runControl, &m_localServerAddress));
+
+    theMemcheckTool->setupRunner(this);
+}
+
 void initMemcheckTool()
 {
     theMemcheckTool = new MemcheckTool;
 
-    auto producer = std::bind(&MemcheckTool::createRunWorker, theMemcheckTool, _1);
-    RunControl::registerWorker(MEMCHECK_RUN_MODE, producer);
-    RunControl::registerWorker(MEMCHECK_WITH_GDB_RUN_MODE, producer);
+    RunControl::registerWorker<MemcheckToolRunner>(MEMCHECK_RUN_MODE, {});
+    RunControl::registerWorker<MemcheckToolRunner>(MEMCHECK_WITH_GDB_RUN_MODE, {});
 }
 
 void destroyMemcheckTool()
@@ -1200,20 +1195,20 @@ HeobDialog::HeobDialog(QWidget *parent) :
             path = QFileInfo(heobPath).path();
     }
 
-    QVBoxLayout *layout = new QVBoxLayout;
+    auto layout = new QVBoxLayout;
     // disable resizing
     layout->setSizeConstraint(QLayout::SetFixedSize);
 
-    QHBoxLayout *xmlLayout = new QHBoxLayout;
-    QLabel *xmlLabel = new QLabel(tr("XML output file:"));
+    auto xmlLayout = new QHBoxLayout;
+    auto xmlLabel = new QLabel(tr("XML output file:"));
     xmlLayout->addWidget(xmlLabel);
     m_xmlEdit = new QLineEdit;
     m_xmlEdit->setText(xml);
     xmlLayout->addWidget(m_xmlEdit);
     layout->addLayout(xmlLayout);
 
-    QHBoxLayout *handleExceptionLayout = new QHBoxLayout;
-    QLabel *handleExceptionLabel = new QLabel(tr("Handle exceptions:"));
+    auto handleExceptionLayout = new QHBoxLayout;
+    auto handleExceptionLabel = new QLabel(tr("Handle exceptions:"));
     handleExceptionLayout->addWidget(handleExceptionLabel);
     m_handleExceptionCombo = new QComboBox;
     m_handleExceptionCombo->addItem(tr("Off"));
@@ -1225,8 +1220,8 @@ HeobDialog::HeobDialog(QWidget *parent) :
     handleExceptionLayout->addWidget(m_handleExceptionCombo);
     layout->addLayout(handleExceptionLayout);
 
-    QHBoxLayout *pageProtectionLayout = new QHBoxLayout;
-    QLabel *pageProtectionLabel = new QLabel(tr("Page protection:"));
+    auto pageProtectionLayout = new QHBoxLayout;
+    auto pageProtectionLabel = new QLabel(tr("Page protection:"));
     pageProtectionLayout->addWidget(pageProtectionLabel);
     m_pageProtectionCombo = new QComboBox;
     m_pageProtectionCombo->addItem(tr("Off"));
@@ -1246,8 +1241,8 @@ HeobDialog::HeobDialog(QWidget *parent) :
     m_breakpointCheck->setChecked(breakpoint);
     layout->addWidget(m_breakpointCheck);
 
-    QHBoxLayout *leakDetailLayout = new QHBoxLayout;
-    QLabel *leakDetailLabel = new QLabel(tr("Leak details:"));
+    auto leakDetailLayout = new QHBoxLayout;
+    auto leakDetailLabel = new QLabel(tr("Leak details:"));
     leakDetailLayout->addWidget(leakDetailLabel);
     m_leakDetailCombo = new QComboBox;
     m_leakDetailCombo->addItem(tr("None"));
@@ -1262,8 +1257,8 @@ HeobDialog::HeobDialog(QWidget *parent) :
     leakDetailLayout->addWidget(m_leakDetailCombo);
     layout->addLayout(leakDetailLayout);
 
-    QHBoxLayout *leakSizeLayout = new QHBoxLayout;
-    QLabel *leakSizeLabel = new QLabel(tr("Minimum leak size:"));
+    auto leakSizeLayout = new QHBoxLayout;
+    auto leakSizeLabel = new QLabel(tr("Minimum leak size:"));
     leakSizeLayout->addWidget(leakSizeLabel);
     m_leakSizeSpin = new QSpinBox;
     m_leakSizeSpin->setMinimum(0);
@@ -1273,8 +1268,8 @@ HeobDialog::HeobDialog(QWidget *parent) :
     leakSizeLayout->addWidget(m_leakSizeSpin);
     layout->addLayout(leakSizeLayout);
 
-    QHBoxLayout *leakRecordingLayout = new QHBoxLayout;
-    QLabel *leakRecordingLabel = new QLabel(tr("Control leak recording:"));
+    auto leakRecordingLayout = new QHBoxLayout;
+    auto leakRecordingLabel = new QLabel(tr("Control leak recording:"));
     leakRecordingLayout->addWidget(leakRecordingLabel);
     m_leakRecordingCombo = new QComboBox;
     m_leakRecordingCombo->addItem(tr("Off"));
@@ -1288,16 +1283,16 @@ HeobDialog::HeobDialog(QWidget *parent) :
     m_attachCheck->setChecked(attach);
     layout->addWidget(m_attachCheck);
 
-    QHBoxLayout *extraArgsLayout = new QHBoxLayout;
-    QLabel *extraArgsLabel = new QLabel(tr("Extra arguments:"));
+    auto extraArgsLayout = new QHBoxLayout;
+    auto extraArgsLabel = new QLabel(tr("Extra arguments:"));
     extraArgsLayout->addWidget(extraArgsLabel);
     m_extraArgsEdit = new QLineEdit;
     m_extraArgsEdit->setText(extraArgs);
     extraArgsLayout->addWidget(m_extraArgsEdit);
     layout->addLayout(extraArgsLayout);
 
-    QHBoxLayout *pathLayout = new QHBoxLayout;
-    QLabel *pathLabel = new QLabel(tr("Heob path:"));
+    auto pathLayout = new QHBoxLayout;
+    auto pathLabel = new QLabel(tr("Heob path:"));
     pathLabel->setToolTip(tr("The location of heob32.exe and heob64.exe."));
     pathLayout->addWidget(pathLabel);
     m_pathChooser = new PathChooser;
@@ -1305,18 +1300,18 @@ HeobDialog::HeobDialog(QWidget *parent) :
     pathLayout->addWidget(m_pathChooser);
     layout->addLayout(pathLayout);
 
-    QHBoxLayout *saveLayout = new QHBoxLayout;
+    auto saveLayout = new QHBoxLayout;
     saveLayout->addStretch(1);
-    QToolButton *saveButton = new QToolButton;
+    auto saveButton = new QToolButton;
     saveButton->setToolTip(tr("Save current settings as default."));
     saveButton->setIcon(style()->standardIcon(QStyle::SP_DialogSaveButton));
     connect(saveButton, &QAbstractButton::clicked, this, &HeobDialog::saveOptions);
     saveLayout->addWidget(saveButton);
     layout->addLayout(saveLayout);
 
-    QHBoxLayout *okLayout = new QHBoxLayout;
+    auto okLayout = new QHBoxLayout;
     okLayout->addStretch(1);
-    QPushButton *okButton = new QPushButton(tr("OK"));
+    auto okButton = new QPushButton(tr("OK"));
     okButton->setDefault(true);
     connect(okButton, &QAbstractButton::clicked, this, &QDialog::accept);
     okLayout->addWidget(okButton);
@@ -1392,7 +1387,7 @@ void HeobDialog::keyPressEvent(QKeyEvent *e)
         return QDialog::keyPressEvent(e);
 
     reject();
-    Core::HelpManager::handleHelpRequest("qthelp://org.qt-project.qtcreator/doc/creator-heob.html");
+    Core::HelpManager::showHelpUrl("qthelp://org.qt-project.qtcreator/doc/creator-heob.html");
 }
 
 void HeobDialog::updateEnabled()

@@ -24,20 +24,21 @@
 ****************************************************************************/
 
 #include "clangstring.h"
+#include "clangtooltipinfocollector.h"
 #include "cursor.h"
 #include "fulltokeninfo.h"
 #include "sourcerange.h"
+#include "token.h"
 #include "tokenprocessor.h"
 
 #include <utils/predicates.h>
 
 namespace ClangBackEnd {
 
-FullTokenInfo::FullTokenInfo(const CXCursor &cxCursor,
-                             CXToken *cxToken,
-                             CXTranslationUnit cxTranslationUnit,
+FullTokenInfo::FullTokenInfo(const Cursor &cursor,
+                             const Token *token,
                              std::vector<CXSourceRange> &currentOutputArgumentRanges)
-    : TokenInfo(cxCursor, cxToken, cxTranslationUnit, currentOutputArgumentRanges)
+    : TokenInfo(cursor, token, currentOutputArgumentRanges)
 {
 }
 
@@ -46,29 +47,25 @@ FullTokenInfo::operator TokenInfoContainer() const
     return TokenInfoContainer(line(), column(), length(), m_types, m_extraInfo);
 }
 
-static Utf8String fullyQualifiedType(const Cursor &cursor)
-{
-    Utf8String typeSpelling = cursor.type().canonical().utf8Spelling();
-    if (typeSpelling.isEmpty()) {
-        // Only if it's the namespaces level.
-        typeSpelling = cursor.unifiedSymbolResolution();
-        typeSpelling.replace(Utf8StringLiteral("c:@N@"), Utf8StringLiteral(""));
-        typeSpelling.replace(Utf8StringLiteral("@N@"), Utf8StringLiteral("::"));
-        typeSpelling.replace(Utf8StringLiteral("c:@aN"), Utf8StringLiteral("(anonymous)"));
-    }
-    return typeSpelling;
+static Utf8String fullyQualifiedType(const Cursor &cursor) {
+    Utf8String prefix;
+    if (cursor.kind() == CXCursor_ClassTemplate || cursor.kind() == CXCursor_Namespace)
+        return qualificationPrefix(cursor) + cursor.displayName();
+
+    return cursor.type().canonical().spelling();
 }
 
 void FullTokenInfo::updateTypeSpelling(const Cursor &cursor, bool functionLike)
 {
-    m_extraInfo.typeSpelling = fullyQualifiedType(cursor);
     m_extraInfo.semanticParentTypeSpelling = fullyQualifiedType(cursor.semanticParent());
-    if (!functionLike)
+    if (!functionLike) {
+        m_extraInfo.typeSpelling = fullyQualifiedType(cursor);
         return;
-    Type type = cursor.type().canonical();
+    }
+
     m_extraInfo.token = cursor.displayName();
     // On the client side full type is typeSpelling + token.
-    m_extraInfo.typeSpelling = type.resultType().utf8Spelling();
+    m_extraInfo.typeSpelling = cursor.type().resultType().utf8Spelling();
 }
 
 static Utf8String propertyParentSpelling(CXTranslationUnit cxTranslationUnit,
@@ -102,15 +99,13 @@ static Utf8String propertyParentSpelling(CXTranslationUnit cxTranslationUnit,
     return parentSpelling;
 }
 
-static Utf8String getPropertyType(const CXSourceLocation &cxLocation,
-                                  CXTranslationUnit cxTranslationUnit,
-                                  uint propertyPosition)
+static Utf8String getPropertyType(const SourceLocation &location, uint propertyPosition)
 {
     // Extract property type from the source code
     CXFile cxFile;
     uint offset;
-    clang_getFileLocation(cxLocation, &cxFile, nullptr, nullptr, &offset);
-    const char *const contents = clang_getFileContents(cxTranslationUnit, cxFile, nullptr);
+    clang_getFileLocation(location.cx(), &cxFile, nullptr, nullptr, &offset);
+    const char *const contents = clang_getFileContents(location.tu(), cxFile, nullptr);
     const char *const lineContents = &contents[offset - propertyPosition];
 
     const char *typeStart = std::strstr(lineContents, "Q_PROPERTY") + 10;
@@ -126,18 +121,15 @@ static Utf8String getPropertyType(const CXSourceLocation &cxLocation,
 
 void FullTokenInfo::updatePropertyData()
 {
-    CXSourceRange cxRange(clang_getTokenExtent(m_cxTranslationUnit, *m_cxToken));
-    const SourceRange range(m_cxTranslationUnit, cxRange);
-    m_extraInfo.semanticParentTypeSpelling = propertyParentSpelling(m_cxTranslationUnit,
+    const SourceRange range = m_token->extent();
+    m_extraInfo.semanticParentTypeSpelling = propertyParentSpelling(m_token->tu(),
                                                                     range.start().filePath(),
                                                                     line(),
                                                                     column());
     m_extraInfo.cursorRange = range;
     m_extraInfo.declaration = true;
     m_extraInfo.definition = true;
-    m_extraInfo.typeSpelling = getPropertyType(clang_getRangeStart(cxRange),
-                                               m_cxTranslationUnit,
-                                               column() - 1);
+    m_extraInfo.typeSpelling = getPropertyType(range.start(), column() - 1);
 }
 
 void FullTokenInfo::identifierKind(const Cursor &cursor, Recursion recursion)
@@ -189,6 +181,7 @@ void FullTokenInfo::variableKind(const Cursor &cursor)
 {
     TokenInfo::variableKind(cursor);
 
+    m_extraInfo.accessSpecifier = cursor.accessSpecifier();
     m_extraInfo.storageClass = cursor.storageClass();
 }
 
@@ -213,18 +206,8 @@ void FullTokenInfo::keywordKind()
 {
     TokenInfo::keywordKind();
 
-    CXCursorKind cursorKind = m_originalCursor.kind();
-    bool anonymous = false;
-    if (clang_Cursor_isAnonymous(m_originalCursor.cx())) {
-        anonymous = true;
-    } else {
-        const Utf8String type = fullyQualifiedType(m_originalCursor);
-        if (type.endsWith(Utf8StringLiteral(")"))
-                && static_cast<const QByteArray &>(type).indexOf("(anonymous") >= 0) {
-            anonymous = true;
-        }
-    }
-    if (anonymous) {
+    if (m_originalCursor.isAnonymous()) {
+        CXCursorKind cursorKind = m_originalCursor.kind();
         if (cursorKind == CXCursor_EnumDecl)
             m_types.mixinHighlightingTypes.push_back(HighlightingType::Enum);
         else if (cursorKind == CXCursor_ClassDecl)
@@ -234,7 +217,7 @@ void FullTokenInfo::keywordKind()
         else if (cursorKind == CXCursor_Namespace)
             m_types.mixinHighlightingTypes.push_back(HighlightingType::Namespace);
         m_extraInfo.declaration = m_extraInfo.definition = true;
-        m_extraInfo.token = Utf8StringLiteral("anonymous");
+        m_extraInfo.token = m_originalCursor.displayName();
         updateTypeSpelling(m_originalCursor);
         m_extraInfo.cursorRange = m_originalCursor.sourceRange();
     }
@@ -244,7 +227,7 @@ void FullTokenInfo::overloadedOperatorKind()
 {
     TokenInfo::overloadedOperatorKind();
 
-    if (m_types.mixinHighlightingTypes.front() != HighlightingType::OverloadedOperator)
+    if (!m_types.mixinHighlightingTypes.contains(HighlightingType::OverloadedOperator))
         return;
 
     // Overloaded operator
@@ -264,9 +247,8 @@ void FullTokenInfo::overloadedOperatorKind()
 
 void FullTokenInfo::evaluate()
 {
-    m_extraInfo.token = ClangString(clang_getTokenSpelling(m_cxTranslationUnit, *m_cxToken));
-
-    auto cxTokenKind = clang_getTokenKind(*m_cxToken);
+    m_extraInfo.token = m_token->spelling();
+    CXTokenKind cxTokenKind = m_token->kind();
     if (cxTokenKind == CXToken_Identifier) {
         m_extraInfo.declaration = m_originalCursor.isDeclaration();
         m_extraInfo.definition = m_originalCursor.isDefinition();

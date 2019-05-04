@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2018 The Qt Company Ltd.
+** Copyright (C) 2019 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Creator documentation.
@@ -46,7 +46,13 @@
     toolbar is context sensitive and shows items relevant to the file currently
     open in the editor.
 
+    \if defined(qtcreator)
     \image qtcreator-editortoolbar-symbols.png
+    \else
+    \image studio-edit-mode.png
+    \endif
+
+    \section2 Navigating Between Open Files and Symbols
 
     Use the toolbar to navigate between open files and symbols in use. To browse
     backward or forward through your location history, click
@@ -55,43 +61,58 @@
     (\uicontrol {Go Forward}).
 
     To go to any open file, select it from the \uicontrol {Open files} drop-down
-    menu (1). Right-click the menu title and select \uicontrol {Copy Full Path}
-    to copy the path and name of the current file to the clipboard.
-
-    Code might be interpreted differently in different contexts. A file can be
-    used by different projects or subprojects with different defines, or it can
-    be included in the context of C, C++, Objective-C, or Objective-C++. To
-    change the active parse context, select an available parse context in the
-    \uicontrol {Active Parse Context} menu (3). The menu is visible only when
-    several parse contexts are available. To reset the parse context,
-    right-click on the menu to open a context menu, and then select
-    \uicontrol {Clear Preferred Parse Context}.
-    If the information needed for parsing the project is still incomplete or
-    incorrect, select \uicontrol {Additional Preprocessor Directives} (2) to
-    add preprocessor directives.
+    menu (1). To open a context menu that contains commands for managing open
+    files, right-click the file name or icon on the toolbar. In addition to the
+    commands also available in the \uicontrol File menu, you can copy the path
+    and name of the current file and the number of the line where the cursor is
+    currently located to the clipboard by selecting \uicontrol {Copy Full Path},
+    \uicontrol {Copy File Name}, or \uicontrol {Copy Path and Line Number}.
 
     To jump to any symbol used in the current file, select it from the
-    \uicontrol Symbols drop-down menu (4). By default, the symbols are displayed
+    \uicontrol Symbols drop-down menu (2). By default, the symbols are displayed
     in the order in which they appear in the file. Right-click the menu title
     and select \uicontrol {Sort Alphabetically} to arrange the symbols in
     alphabetic order.
 
     To jump to a line and column in the current file, select the line and column
-    indicator (5) or press \key {Ctrl+L} (or \key {Cmd+L} on \macos) to open the
-    locator. Enter the line number and column number in the locator, separated
-    by a colon (:).
+    indicator (3) or press \key {Ctrl+K} (or \key {Cmd+K} on \macos) to open the
+    \l{Searching with the Locator}{locator}. Enter the line number and column
+    number in the locator, separated by a colon (:).
 
-    To show the file encoding of the current file on the editor toolbar (6),
+    \note Other convenient ways of navigating in \QC are provided
+    by the \l{Keyboard Shortcuts} {keyboard shortcuts} and the
+    \l{Browsing Project Contents}{sidebar}.
+
+    \if defined(qtcreator)
+    \section2 Selecting Parse Context
+
+    Code might be interpreted differently in different contexts. A file can be
+    used by different projects or subprojects with different defines, or it can
+    be included in the context of C, C++, Objective-C, or Objective-C++. To
+    change the active parse context, select an available parse context in the
+    \uicontrol {Active Parse Context} menu (4). The menu is visible only when
+    several parse contexts are available. To reset the parse context,
+    right-click on the menu to open a context menu, and then select
+    \uicontrol {Clear Preferred Parse Context}.
+    If the information needed for parsing the project is still incomplete or
+    incorrect, select \uicontrol {Additional Preprocessor Directives} to
+    add preprocessor directives.
+
+    \section2 Changing Text Encoding
+
+    To show the file encoding of the current file on the editor toolbar (5),
     select \uicontrol Tools > \uicontrol Options > \uicontrol {Text Editor} >
-    \uicontrol Display > \uicontrol {Display file encoding}. To change the
-    encoding, click it on the toolbar and select new encoding in the
-    \uicontrol {Text Encoding} dialog. To reload the file with the selected
-    encoding, select \uicontrol {Reload with Encoding}. To save the file with
-    the new encoding, select \uicontrol {Save with Encoding}.
+    \uicontrol Display > \uicontrol {Display file encoding}.
 
-    \note Other convenient ways of navigating in \QC are provided by the
-    \l{Searching with the Locator}{locator}, \l{Keyboard Shortcuts}
-    {keyboard shortcuts}, and the \l{Browsing Project Contents}{sidebar}.
+    To change the text encoding, click it on the toolbar and select new
+    encoding in the \uicontrol {Text Encoding} dialog:
+
+    \image qtcreator-text-encoding.png "Text Encoding dialog"
+
+    To reload the file with the selected encoding, select
+    \uicontrol {Reload with Encoding}. To save the file with
+    the new encoding, select \uicontrol {Save with Encoding}.
+    \endif
 
     \section1 Splitting the Editor View
 
@@ -139,6 +160,7 @@
     split view, select \uicontrol Window > \uicontrol {Remove All Splits} or
     press \key {Ctrl+E, 1}.
 
+    \if defined(qtcreator)
     \section1 Using Bookmarks
 
     To insert or delete a bookmark:
@@ -167,11 +189,20 @@
     \uicontrol Bookmarks > \uicontrol {Previous Bookmark} or press
     \key {Ctrl+.}.
 
+    To use the locator to go to a bookmark, press \key {Ctrl+K} (or \key {Cmd+K}
+    on \macos) to open the locator. Enter \e b and a space to display a list of
+    bookmarks. To filter the bookmarks by line number or a text string, enter
+    the number or string after the space. Double-click a bookmark in the list to
+    go to it in the editor.
+
+    \image qtcreator-locator-bookmark-filtering.png "Filtering bookmarks in locator"
+
     Bookmarks are listed in the \uicontrol Bookmarks view in the sidebar. To
     move between bookmarks, select the \uicontrol {Previous Bookmark} or
     \uicontrol {Next Bookmark} button or use the keyboard shortcuts.
 
-    \image qtcreator-bookmarks-view.png
+    \image qtcreator-bookmarks-view.png "Listing bookmarks in Bookmarks view"
+
 
     \section1 Moving to Symbol Definition or Declaration
 
@@ -184,16 +215,25 @@
     \uicontrol Options > \uicontrol {Text Editor} > \uicontrol Behavior >
     \uicontrol {Enable mouse navigation}.
 
-    You can also select the symbol and press \key F2, or right-click the symbol
+    There are several additional ways of moving between symbol definitions and
+    declarations. All the functions described below are also available from the
+    \uicontrol Tools > \uicontrol C++ menu. The functions supported for QML and
+    JavaScript code are available from the \uicontrol Tools > \uicontrol QML/JS
+    menu.
+
+    You can select the symbol and press \key F2, or right-click the symbol
     and select \uicontrol {Follow Symbol Under Cursor} to move to its definition
-    or declaration. This feature is supported for namespaces, classes,
-    functions, variables, include statements, and macros.
+    or declaration. To follow the symbol in the next split, select
+    \uicontrol {Follow Symbol Under Cursor in Next Split}. Following symbols is
+    supported for namespaces, classes, functions, variables, include statements,
+    and macros.
 
     To switch between the definition and declaration of a function, place the
     cursor on either and press \key {Shift+F2} or right-click and select
-    \uicontrol {Switch Between Function Declaration/Definition}. For example,
-    this allows you to navigate from anywhere within a function body directly to
-    the function declaration.
+    \uicontrol {Switch Between Function Declaration/Definition} or
+    \uicontrol {Open Function Declaration/Definition in Next Split}.
+    For example, this allows you to navigate from anywhere within a function
+    body directly to the function declaration.
 
     Links are opened in the same split by default. To open links in the next
     split, prepend \key {Ctrl+E} to the shortcut. For example, press
@@ -205,6 +245,11 @@
     displayed and switching between definition and declaration is done in
     another split. If you change the default behavior, the shortcuts for opening
     link targets in the next split are used to open them in the current split.
+
+    To switch between C++ header and source files, right-click anywhere in a
+    file and select \uicontrol {Switch Header/Source} or
+    \uicontrol {Open Corresponding Header/Source in Next Split}. You can also
+    press \key F4 or \key {Ctrl+E,F4}, respectively.
 
     \section1 Reparsing Externally Changed Files
 
@@ -230,4 +275,5 @@
     \QC underlines semantic errors in olive in the C++ code editor. To check the
     correct paths for includes that are not resolved or that are resolved to the
     wrong file, select \uicontrol {Project Parts} > \uicontrol {Header Paths}.
+    \endif
 */

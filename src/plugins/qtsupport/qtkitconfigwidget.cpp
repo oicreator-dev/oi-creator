@@ -44,6 +44,7 @@ QtKitConfigWidget::QtKitConfigWidget(ProjectExplorer::Kit *k, const ProjectExplo
     KitConfigWidget(k, ki)
 {
     m_combo = new QComboBox;
+    m_combo->setSizePolicy(QSizePolicy::Ignored, m_combo->sizePolicy().verticalPolicy());
     m_combo->addItem(tr("None"), -1);
 
     QList<int> versionIds = Utils::transform(QtVersionManager::versions(), &BaseQtVersion::uniqueId);
@@ -71,7 +72,7 @@ QtKitConfigWidget::~QtKitConfigWidget()
 
 QString QtKitConfigWidget::displayName() const
 {
-    return tr("Qt version:");
+    return tr("Qt version");
 }
 
 QString QtKitConfigWidget::toolTip() const

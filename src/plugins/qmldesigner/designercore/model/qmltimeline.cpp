@@ -40,10 +40,7 @@
 
 namespace QmlDesigner {
 
-QmlTimeline::QmlTimeline()
-{
-
-}
+QmlTimeline::QmlTimeline() = default;
 
 QmlTimeline::QmlTimeline(const ModelNode &modelNode) : QmlModelNodeFacade(modelNode)
 {
@@ -107,14 +104,14 @@ bool QmlTimeline::hasTimeline(const ModelNode &node, const PropertyName &propert
 qreal QmlTimeline::startKeyframe() const
 {
     if (isValid())
-        return QmlObjectNode(modelNode()).instanceValue("startFrame").toReal();
+        return QmlObjectNode(modelNode()).modelValue("startFrame").toReal();
     return 0;
 }
 
 qreal QmlTimeline::endKeyframe() const
 {
     if (isValid())
-        return QmlObjectNode(modelNode()).instanceValue("endFrame").toReal();
+        return QmlObjectNode(modelNode()).modelValue("endFrame").toReal();
     return 0;
 }
 
@@ -216,15 +213,41 @@ bool QmlTimeline::hasActiveTimeline(AbstractView *view)
         if (!view->model()->hasImport(Import::createLibraryImport("QtQuick.Timeline", "1.0"), true, true))
             return false;
 
-        const ModelNode root = view->rootModelNode();
-        if (root.isValid())
-            for (const ModelNode &child : root.directSubModelNodes()) {
-                if (QmlTimeline::isValidQmlTimeline(child))
-                    return QmlTimeline(child).isEnabled();
-            }
+        return view->currentTimeline().isValid();
     }
 
     return false;
+}
+
+bool QmlTimeline::isRecording() const
+{
+    QTC_ASSERT(isValid(), return false);
+
+    return modelNode().hasAuxiliaryData("Record@Internal");
+}
+
+void QmlTimeline::toogleRecording(bool record) const
+{
+    QTC_ASSERT(isValid(), return);
+
+    if (!record) {
+        if (isRecording())
+            modelNode().removeAuxiliaryData("Record@Internal");
+    } else {
+        modelNode().setAuxiliaryData("Record@Internal", true);
+    }
+}
+
+void QmlTimeline::resetGroupRecording() const
+{
+    QTC_ASSERT(isValid(), return);
+
+    for (const ModelNode &childNode : modelNode().defaultNodeListProperty().toModelNodeList()) {
+        if (QmlTimelineKeyframeGroup::isValidQmlTimelineKeyframeGroup(childNode)) {
+            const QmlTimelineKeyframeGroup frames(childNode);
+            frames.toogleRecording(false);
+        }
+    }
 }
 
 void QmlTimeline::addKeyframeGroupIfNotExists(const ModelNode &node, const PropertyName &propertyName)
@@ -251,6 +274,19 @@ bool QmlTimeline::hasKeyframeGroup(const ModelNode &node, const PropertyName &pr
         if (frames.target().isValid()
                 && frames.target() == node
                 && frames.propertyName() == propertyName)
+            return true;
+    }
+
+    return false;
+}
+
+bool QmlTimeline::hasKeyframeGroupForTarget(const ModelNode &node) const
+{
+    if (!isValid())
+        return false;
+
+    for (const QmlTimelineKeyframeGroup &frames : allKeyframeGroups()) {
+        if (frames.target().isValid() && frames.target() == node)
             return true;
     }
 

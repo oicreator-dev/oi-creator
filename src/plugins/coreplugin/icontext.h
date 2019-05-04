@@ -25,8 +25,9 @@
 
 #pragma once
 
-#include <coreplugin/core_global.h>
-#include <coreplugin/id.h>
+#include "core_global.h"
+#include "helpitem.h"
+#include "id.h"
 
 #include <QList>
 #include <QObject>
@@ -40,7 +41,7 @@ namespace Core {
 class CORE_EXPORT Context
 {
 public:
-    Context() {}
+    Context() = default;
 
     explicit Context(Id c1) { add(c1); }
     Context(Id c1, Id c2) { add(c1); add(c2); }
@@ -51,7 +52,7 @@ public:
     Id at(int i) const { return d.at(i); }
 
     // FIXME: Make interface slimmer.
-    typedef QList<Id>::const_iterator const_iterator;
+    using const_iterator = QList<Id>::const_iterator;
     const_iterator begin() const { return d.begin(); }
     const_iterator end() const { return d.end(); }
     int indexOf(Id c) const { return d.indexOf(c); }
@@ -73,17 +74,17 @@ public:
 
     virtual Context context() const { return m_context; }
     virtual QWidget *widget() const { return m_widget; }
-    using HelpIdCallback = std::function<void(const QString &id)>;
-    virtual void contextHelpId(const HelpIdCallback &callback) const { callback(m_contextHelpId); }
+    using HelpCallback = std::function<void(const HelpItem &item)>;
+    virtual void contextHelp(const HelpCallback &callback) const { callback(m_contextHelp); }
 
     virtual void setContext(const Context &context) { m_context = context; }
     virtual void setWidget(QWidget *widget) { m_widget = widget; }
-    virtual void setContextHelpId(const QString &id) { m_contextHelpId = id; }
+    virtual void setContextHelp(const HelpItem &id) { m_contextHelp = id; }
 
 protected:
     Context m_context;
     QPointer<QWidget> m_widget;
-    QString m_contextHelpId;
+    HelpItem m_contextHelp;
 };
 
 } // namespace Core

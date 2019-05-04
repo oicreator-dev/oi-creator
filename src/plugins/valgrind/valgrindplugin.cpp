@@ -53,7 +53,7 @@ using namespace ProjectExplorer;
 namespace Valgrind {
 namespace Internal {
 
-static ValgrindGlobalSettings *theGlobalSettings = 0;
+static ValgrindGlobalSettings *theGlobalSettings = nullptr;
 
 class ValgrindOptionsPage : public IOptionsPage
 {
@@ -68,19 +68,19 @@ public:
         setCategoryIcon(Analyzer::Icons::SETTINGSCATEGORY_ANALYZER);
     }
 
-    QWidget *widget()
+    QWidget *widget() override
     {
         if (!m_widget)
-            m_widget = new ValgrindConfigWidget(theGlobalSettings, 0, true);
+            m_widget = new ValgrindConfigWidget(theGlobalSettings, true);
         return m_widget;
     }
 
-    void apply()
+    void apply() override
     {
         theGlobalSettings->writeSettings();
     }
 
-    void finish()
+    void finish() override
     {
         delete m_widget;
     }
@@ -89,27 +89,26 @@ private:
     QPointer<QWidget> m_widget;
 };
 
-class ValgrindRunConfigurationAspect : public IRunConfigurationAspect
+class ValgrindRunConfigurationAspect : public GlobalOrProjectAspect
 {
 public:
-    ValgrindRunConfigurationAspect(RunConfiguration *parent)
-        : IRunConfigurationAspect(parent)
+    ValgrindRunConfigurationAspect(Target *)
     {
-        setProjectSettings(new ValgrindProjectSettings(parent));
+        setProjectSettings(new ValgrindProjectSettings);
         setGlobalSettings(ValgrindPlugin::globalSettings());
         setId(ANALYZER_VALGRIND_SETTINGS);
         setDisplayName(QCoreApplication::translate("Valgrind::Internal::ValgrindRunConfigurationAspect",
                                                    "Valgrind Settings"));
         setUsingGlobalSettings(true);
         resetProjectToGlobalSettings();
-        setRunConfigWidgetCreator([this] { return new Debugger::AnalyzerRunConfigWidget(this); });
+        setConfigWidgetCreator([this] { return new Debugger::AnalyzerRunConfigWidget(this); });
     }
 };
 
 ValgrindPlugin::~ValgrindPlugin()
 {
     delete theGlobalSettings;
-    theGlobalSettings = 0;
+    theGlobalSettings = nullptr;
 }
 
 bool ValgrindPlugin::initialize(const QStringList &, QString *)

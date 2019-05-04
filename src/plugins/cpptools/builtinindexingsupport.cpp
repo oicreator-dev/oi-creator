@@ -58,7 +58,7 @@ namespace {
 class ParseParams
 {
 public:
-    ProjectPartHeaderPaths headerPaths;
+    ProjectExplorer::HeaderPaths headerPaths;
     WorkingCopy workingCopy;
     QSet<QString> sourceFiles;
     int indexerFileSizeLimitInMb = -1;
@@ -70,7 +70,6 @@ class WriteTaskFileForDiagnostics
 
 public:
     WriteTaskFileForDiagnostics()
-        : m_processedDiagnostics(0)
     {
         const QString fileName = Utils::TemporaryDirectory::masterDirectoryPath()
                 + "/qtc_findErrorsIndexing.diagnostics."
@@ -120,7 +119,7 @@ public:
 private:
     QFile m_file;
     QTextStream m_out;
-    int m_processedDiagnostics;
+    int m_processedDiagnostics = 0;
 };
 
 void classifyFiles(const QSet<QString> &files, QStringList *headers, QStringList *sources)
@@ -203,7 +202,7 @@ void index(QFutureInterface<void> &indexingFuture,
     bool processingHeaders = false;
 
     CppModelManager *cmm = CppModelManager::instance();
-    const ProjectPartHeaderPaths fallbackHeaderPaths = cmm->headerPaths();
+    const ProjectExplorer::HeaderPaths fallbackHeaderPaths = cmm->headerPaths();
     const CPlusPlus::LanguageFeatures defaultFeatures =
             CPlusPlus::LanguageFeatures::defaultFeatures();
     for (int i = 0; i < files.size(); ++i) {
@@ -226,7 +225,7 @@ void index(QFutureInterface<void> &indexingFuture,
             processingHeaders = true;
         }
 
-        ProjectPartHeaderPaths headerPaths = parts.isEmpty()
+        ProjectExplorer::HeaderPaths headerPaths = parts.isEmpty()
                 ? fallbackHeaderPaths
                 : parts.first()->headerPaths;
         sourceProcessor->setHeaderPaths(headerPaths);
@@ -262,16 +261,15 @@ class BuiltinSymbolSearcher: public SymbolSearcher
 {
 public:
     BuiltinSymbolSearcher(const CPlusPlus::Snapshot &snapshot,
-                          Parameters parameters, QSet<QString> fileNames)
+                          const Parameters &parameters, const QSet<QString> &fileNames)
         : m_snapshot(snapshot)
         , m_parameters(parameters)
         , m_fileNames(fileNames)
     {}
 
-    ~BuiltinSymbolSearcher()
-    {}
+    ~BuiltinSymbolSearcher() override = default;
 
-    void runSearch(QFutureInterface<Core::SearchResultItem> &future)
+    void runSearch(QFutureInterface<Core::SearchResultItem> &future) override
     {
         future.setProgressRange(0, m_snapshot.size());
         future.setProgressValue(0);
@@ -343,8 +341,7 @@ BuiltinIndexingSupport::BuiltinIndexingSupport()
     m_synchronizer.setCancelOnWait(true);
 }
 
-BuiltinIndexingSupport::~BuiltinIndexingSupport()
-{}
+BuiltinIndexingSupport::~BuiltinIndexingSupport() = default;
 
 QFuture<void> BuiltinIndexingSupport::refreshSourceFiles(
         const QFutureInterface<void> &superFuture,
@@ -382,7 +379,8 @@ QFuture<void> BuiltinIndexingSupport::refreshSourceFiles(
     return result;
 }
 
-SymbolSearcher *BuiltinIndexingSupport::createSymbolSearcher(SymbolSearcher::Parameters parameters, QSet<QString> fileNames)
+SymbolSearcher *BuiltinIndexingSupport::createSymbolSearcher(
+        const SymbolSearcher::Parameters &parameters, const QSet<QString> &fileNames)
 {
     return new BuiltinSymbolSearcher(CppModelManager::instance()->snapshot(), parameters, fileNames);
 }

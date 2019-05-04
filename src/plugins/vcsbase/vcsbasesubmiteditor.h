@@ -46,6 +46,7 @@ namespace Internal {
 
 class SubmitEditorWidget;
 class SubmitFileModel;
+class VcsBasePlugin;
 class VcsBaseSubmitEditorPrivate;
 
 class VCSBASE_EXPORT VcsBaseSubmitEditorParameters
@@ -74,8 +75,6 @@ public:
     // Register the actions with the submit editor widget.
     void registerActions(QAction *editorUndoAction,  QAction *editorRedoAction,
                          QAction *submitAction = nullptr, QAction *diffAction = nullptr);
-    void unregisterActions(QAction *editorUndoAction,  QAction *editorRedoAction,
-                           QAction *submitAction = nullptr, QAction *diffAction = nullptr);
 
     ~VcsBaseSubmitEditor() override;
 
@@ -86,8 +85,7 @@ public:
     // 'promptSetting' points to a bool variable containing the plugin's
     // prompt setting. The user can uncheck it from the message box.
     enum PromptSubmitResult { SubmitConfirmed, SubmitCanceled, SubmitDiscarded };
-    PromptSubmitResult promptSubmit(const QString &title, const QString &question,
-                                    const QString &checkFailureQuestion,
+    PromptSubmitResult promptSubmit(VcsBasePlugin *plugin,
                                     bool *promptSetting,
                                     bool forcePrompt = false,
                                     bool canCommitOnFailure = true);
@@ -108,7 +106,7 @@ public:
     QString checkScriptWorkingDirectory() const;
     void setCheckScriptWorkingDirectory(const QString &);
 
-    Core::IDocument *document() override;
+    Core::IDocument *document() const override;
 
     QWidget *toolBar() override;
 

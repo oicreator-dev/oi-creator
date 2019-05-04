@@ -27,13 +27,19 @@
 
 #include <utils/smallstring.h>
 
-#include <QDir>
+#include <utils/temporarydirectory.h>
+
+inline
+bool operator==(const QString &first, const char *second)
+{
+    return first == QString::fromUtf8(second, int(std::strlen(second)));
+}
 
 namespace UnitTest {
 
 inline
 Utils::PathString temporaryDirPath()
 {
-    return Utils::PathString::fromQString(QDir::tempPath());
+    return Utils::PathString::fromQString(Utils::TemporaryDirectory::masterDirectoryPath());
 }
 } // namespace UnitTest

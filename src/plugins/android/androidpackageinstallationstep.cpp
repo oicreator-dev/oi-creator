@@ -31,12 +31,14 @@
 #include <projectexplorer/buildsteplist.h>
 #include <projectexplorer/target.h>
 #include <projectexplorer/buildconfiguration.h>
+#include <projectexplorer/gnumakeparser.h>
+#include <projectexplorer/kitinformation.h>
+#include <projectexplorer/processparameters.h>
 #include <projectexplorer/projectexplorerconstants.h>
 #include <projectexplorer/toolchain.h>
-#include <projectexplorer/kitinformation.h>
-#include <projectexplorer/gnumakeparser.h>
 
 #include <utils/hostosinfo.h>
+#include <utils/qtcprocess.h>
 
 #include <QDir>
 
@@ -52,9 +54,11 @@ AndroidPackageInstallationStep::AndroidPackageInstallationStep(BuildStepList *bs
     const QString name = tr("Copy application data");
     setDefaultDisplayName(name);
     setDisplayName(name);
+    setWidgetExpandedByDefault(false);
+    setImmutable(true);
 }
 
-bool AndroidPackageInstallationStep::init(QList<const BuildStep *> &earlierSteps)
+bool AndroidPackageInstallationStep::init()
 {
     BuildConfiguration *bc = buildConfiguration();
     QString dirPath = bc->buildDirectory().appendPath(Constants::ANDROID_BUILDDIRECTORY).toString();
@@ -88,10 +92,10 @@ bool AndroidPackageInstallationStep::init(QList<const BuildStep *> &earlierSteps
     m_androidDirsToClean << dirPath + "/assets";
     m_androidDirsToClean << dirPath + "/libs";
 
-    return AbstractProcessStep::init(earlierSteps);
+    return AbstractProcessStep::init();
 }
 
-void AndroidPackageInstallationStep::run(QFutureInterface<bool> &fi)
+void AndroidPackageInstallationStep::doRun()
 {
     QString error;
     foreach (const QString &dir, m_androidDirsToClean) {
@@ -100,12 +104,12 @@ void AndroidPackageInstallationStep::run(QFutureInterface<bool> &fi)
             emit addOutput(tr("Removing directory %1").arg(dir), OutputFormat::NormalMessage);
             if (!FileUtils::removeRecursively(androidDir, &error)) {
                 emit addOutput(error, OutputFormat::Stderr);
-                reportRunResult(fi, false);
+                emit finished(false);
                 return;
             }
         }
     }
-    AbstractProcessStep::run(fi);
+    AbstractProcessStep::doRun();
 }
 
 BuildStepConfigWidget *AndroidPackageInstallationStep::createConfigWidget()
@@ -114,11 +118,6 @@ BuildStepConfigWidget *AndroidPackageInstallationStep::createConfigWidget()
 }
 
 
-bool AndroidPackageInstallationStep::immutable() const
-{
-    return true;
-}
-
 //
 // AndroidPackageInstallationStepWidget
 //
@@ -126,23 +125,10 @@ bool AndroidPackageInstallationStep::immutable() const
 namespace Internal {
 
 AndroidPackageInstallationStepWidget::AndroidPackageInstallationStepWidget(AndroidPackageInstallationStep *step)
-    : m_step(step)
+    : BuildStepConfigWidget(step)
 {
-}
-
-QString AndroidPackageInstallationStepWidget::summaryText() const
-{
-    return "<b>" + tr("Make install") + "</b>";
-}
-
-QString AndroidPackageInstallationStepWidget::displayName() const
-{
-    return tr("Make install");
-}
-
-bool AndroidPackageInstallationStepWidget::showWidget() const
-{
-    return false;
+    setDisplayName(tr("Make install"));
+    setSummaryText("<b>" + tr("Make install") + "</b>");
 }
 
 //
@@ -155,7 +141,7 @@ AndroidPackageInstallationFactory::AndroidPackageInstallationFactory()
     setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_BUILD);
     setSupportedDeviceType(Android::Constants::ANDROID_DEVICE_TYPE);
     setRepeatable(false);
-    setDisplayName(tr("Deploy to device"));
+    setDisplayName(AndroidPackageInstallationStep::tr("Deploy to device"));
 }
 
 } // namespace Internal

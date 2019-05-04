@@ -36,7 +36,6 @@
 #include <coreplugin/dialogs/promptoverwritedialog.h>
 #include <texteditor/icodestylepreferences.h>
 #include <texteditor/icodestylepreferencesfactory.h>
-#include <texteditor/indenter.h>
 #include <texteditor/normalindenter.h>
 #include <texteditor/storagesettings.h>
 #include <texteditor/tabsettings.h>
@@ -67,7 +66,7 @@ namespace ProjectExplorer {
 static ICodeStylePreferences *codeStylePreferences(Project *project, Id languageId)
 {
     if (!languageId.isValid())
-        return 0;
+        return nullptr;
 
     if (project)
         return project->editorConfiguration()->codeStyle(languageId);
@@ -94,18 +93,22 @@ bool JsonWizardGenerator::formatFile(const JsonWizard *wizard, GeneratedFile *fi
     auto baseProject = qobject_cast<Project *>(wizard->property("SelectedProject").value<QObject *>());
     ICodeStylePreferencesFactory *factory = TextEditorSettings::codeStyleFactory(languageId);
 
-    Indenter *indenter = nullptr;
-    if (factory)
-        indenter = factory->createIndenter();
-    if (!indenter)
-        indenter = new NormalIndenter();
-
-    ICodeStylePreferences *codeStylePrefs = codeStylePreferences(baseProject, languageId);
-    indenter->setCodeStylePreferences(codeStylePrefs);
     QTextDocument doc(file->contents());
     QTextCursor cursor(&doc);
+    Indenter *indenter = nullptr;
+    if (factory) {
+        indenter = factory->createIndenter(&doc);
+        indenter->setFileName(Utils::FileName::fromString(file->path()));
+    }
+    if (!indenter)
+        indenter = new NormalIndenter(&doc);
+    ICodeStylePreferences *codeStylePrefs = codeStylePreferences(baseProject, languageId);
+    indenter->setCodeStylePreferences(codeStylePrefs);
+
     cursor.select(QTextCursor::Document);
-    indenter->indent(&doc, cursor, QChar::Null, codeStylePrefs->currentTabSettings());
+    indenter->indent(cursor,
+                     QChar::Null,
+                     codeStylePrefs->currentTabSettings());
     delete indenter;
     if (TextEditorSettings::storageSettings().m_cleanWhitespace) {
         QTextBlock block = doc.firstBlock();
@@ -310,7 +313,7 @@ JsonWizardGenerator *FileGeneratorFactory::create(Id typeId, const QVariant &dat
     Q_UNUSED(platform);
     Q_UNUSED(variables);
 
-    QTC_ASSERT(canCreate(typeId), return 0);
+    QTC_ASSERT(canCreate(typeId), return nullptr);
 
     auto gen = new JsonWizardFileGenerator;
     QString errorMessage;
@@ -319,7 +322,7 @@ JsonWizardGenerator *FileGeneratorFactory::create(Id typeId, const QVariant &dat
     if (!errorMessage.isEmpty()) {
         qWarning() << "FileGeneratorFactory setup error:" << errorMessage;
         delete gen;
-        return 0;
+        return nullptr;
     }
 
     return gen;
@@ -350,7 +353,7 @@ JsonWizardGenerator *ScannerGeneratorFactory::create(Id typeId, const QVariant &
     Q_UNUSED(platform);
     Q_UNUSED(variables);
 
-    QTC_ASSERT(canCreate(typeId), return 0);
+    QTC_ASSERT(canCreate(typeId), return nullptr);
 
     auto gen = new JsonWizardScannerGenerator;
     QString errorMessage;
@@ -359,7 +362,7 @@ JsonWizardGenerator *ScannerGeneratorFactory::create(Id typeId, const QVariant &
     if (!errorMessage.isEmpty()) {
         qWarning() << "ScannerGeneratorFactory setup error:" << errorMessage;
         delete gen;
-        return 0;
+        return nullptr;
     }
 
     return gen;
