@@ -12,6 +12,7 @@ class LmakeProjectManagerPlugin : public ExtensionSystem::IPlugin
 public:
     bool initialize(const QStringList &arguments, QString *errorMessage) override;
     void extensionsInitialized() override;
+    bool delayedInitialize() override;
 
 public:
     LmakeProjectManagerPlugin();

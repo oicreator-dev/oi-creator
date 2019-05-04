@@ -28,7 +28,8 @@ SUBDIRS   = \
     beautifier \
     silversearcher \
     lmakeprojectmanager \
-    qmakeprojectmanager
+    qmakeprojectmanager\
+    resourceeditor
 
 qtHaveModule(serialport) {
     SUBDIRS += serialterminal

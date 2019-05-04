@@ -7,6 +7,7 @@
 #include <coreplugin/coreconstants.h>
 #include <coreplugin/icore.h>
 #include <projectexplorer/projectexplorerconstants.h>
+#include <utils/parameteraction.h>
 
 #include <QAction>
 
@@ -35,10 +36,29 @@ bool LmakeProjectManagerPlugin::initialize(const QStringList &arguments, QString
     mbuild->addAction(command, ProjectExplorer::Constants::G_BUILD_BUILD);
     connect(m_runLMakeAction, &QAction::triggered, m_lmakeProjectManager, &LmakeManager::build);
 
+    /*connect(ProjectExplorer::Constants::G_BUILD_BUILD,
+            &QAction::triggered,
+            m_lmakeProjectManager,
+            &LmakeManager::build);*/
+
     return true;
 }
 
 void LmakeProjectManagerPlugin::extensionsInitialized() {}
+
+bool LmakeProjectManagerPlugin::delayedInitialize()
+{
+    Utils::ParameterAction *buildAction = static_cast<Utils::ParameterAction *>(
+        ActionManager::command(ProjectExplorer::Constants::BUILD)->action());
+    disconnect(buildAction, &QAction::triggered, 0, 0);
+    connect(buildAction, &QAction::triggered, m_lmakeProjectManager, &LmakeManager::build);
+    qDebug() << buildAction->isEnabled();
+    buildAction->setEnablingMode(Utils::ParameterAction::AlwaysEnabled);
+    buildAction->setEnabled(true);
+    qDebug() << buildAction;
+    buildAction->setVisible(false);
+    return true;
+}
 
 LmakeProjectManagerPlugin::LmakeProjectManagerPlugin() {}
 } // namespace LmakeProjectManager
