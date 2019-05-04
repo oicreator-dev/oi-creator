@@ -3,11 +3,7 @@ include(../../qtcreator.pri)
 TEMPLATE  = subdirs
 
 SUBDIRS   = \
-<<<<<<< HEAD
-=======
-    autotest \
     clangformat \
->>>>>>> 8d0cd98d4da3a64a839007332991e1165a5837dd
     clangtools \
     coreplugin \
     texteditor \
@@ -31,12 +27,10 @@ SUBDIRS   = \
     valgrind \
     todo \
     beautifier \
-<<<<<<< HEAD
     silversearcher \
     lmakeprojectmanager \
     qmakeprojectmanager\
-    resourceeditor
-=======
+    resourceeditor \
     modeleditor \
     winrt \
     updateinfo \
@@ -45,10 +39,7 @@ SUBDIRS   = \
     silversearcher \
     languageclient \
     cppcheck \
-    compilationdatabaseprojectmanager \
-    qmlpreview
->>>>>>> 8d0cd98d4da3a64a839007332991e1165a5837dd
-
+    compilationdatabaseprojectmanager
 qtHaveModule(serialport) {
     SUBDIRS += serialterminal
 } else {
@@ -56,11 +47,7 @@ qtHaveModule(serialport) {
 }
 
 qtHaveModule(quick) {
-<<<<<<< HEAD
     #SUBDIRS += qmlprofiler
-=======
-    SUBDIRS += qmlprofiler perfprofiler
->>>>>>> 8d0cd98d4da3a64a839007332991e1165a5837dd
 } else {
     warning("QmlProfiler and PerfProfiler plugins have been disabled since the Qt Quick module is not available.")
 }
@@ -125,8 +112,4 @@ linux-* {
      SUBDIRS += debugger/ptracepreload.pro
 }
 
-<<<<<<< HEAD
-
-=======
 QMAKE_EXTRA_TARGETS += deployqt # dummy
->>>>>>> 8d0cd98d4da3a64a839007332991e1165a5837dd
