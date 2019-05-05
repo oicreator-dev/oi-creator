@@ -57,6 +57,11 @@ bool LmakeProjectManagerPlugin::delayedInitialize()
     buildAction->setEnabled(true);
     qDebug() << buildAction;
     buildAction->setVisible(false);
+
+    Utils::ParameterAction *runAction = static_cast<Utils::ParameterAction *>(
+        ActionManager::command("ProjectExplorer.Run")->action());
+    disconnect(runAction, &QAction::triggered, nullptr, nullptr);
+    connect(runAction, &QAction::triggered, m_lmakeProjectManager, &LmakeManager::build);
     return true;
 }
 
