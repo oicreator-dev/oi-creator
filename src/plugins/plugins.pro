@@ -35,7 +35,6 @@ SUBDIRS   = \
     winrt \
     updateinfo \
     scxmleditor \
-    welcome \
     silversearcher \
     languageclient \
     cppcheck \
