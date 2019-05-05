@@ -9,7 +9,7 @@ class LmakeManager : public QObject
 {
     Q_OBJECT
 public:
-    explicit LmakeManager(QObject *parent = 0);
+    explicit LmakeManager(QObject *parent = nullptr);
 
     bool runLMake();
     bool build();

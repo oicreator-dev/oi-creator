@@ -25,7 +25,7 @@ bool LmakeProjectManagerPlugin::initialize(const QStringList &arguments, QString
 
     m_lmakeProjectManager = new LmakeManager;
 
-    ActionContainer *mbuild = //build菜单
+    ActionContainer *mbuild = // build菜单
         ActionManager::actionContainer(ProjectExplorer::Constants::M_BUILDPROJECT);
 
     Command *command = nullptr; //似乎是用来保存命令的
@@ -50,7 +50,7 @@ bool LmakeProjectManagerPlugin::delayedInitialize()
 {
     Utils::ParameterAction *buildAction = static_cast<Utils::ParameterAction *>(
         ActionManager::command(ProjectExplorer::Constants::BUILD)->action());
-    disconnect(buildAction, &QAction::triggered, 0, 0);
+    disconnect(buildAction, &QAction::triggered, nullptr, nullptr);
     connect(buildAction, &QAction::triggered, m_lmakeProjectManager, &LmakeManager::build);
     qDebug() << buildAction->isEnabled();
     buildAction->setEnablingMode(Utils::ParameterAction::AlwaysEnabled);

@@ -25,3 +25,6 @@ SOURCES += \
     stringtools.cpp \
     error.cpp
 
+RESOURCES += \
+    lmake.qrc
+
