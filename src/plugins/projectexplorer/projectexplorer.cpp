@@ -301,6 +301,7 @@ class ProjectsMode : public IMode
 public:
     ProjectsMode()
     {
+        /*
         setContext(Context(Constants::C_PROJECTEXPLORER));
         setDisplayName(QCoreApplication::translate("ProjectExplorer::ProjectsMode", "Projects"));
         setIcon(Utils::Icon::modeIcon(Icons::MODE_PROJECT_CLASSIC,
@@ -308,6 +309,7 @@ public:
         setPriority(Constants::P_MODE_SESSION);
         setId(Constants::MODE_SESSION);
         setContextHelp("Managing Projects");
+        */
     }
 };
 

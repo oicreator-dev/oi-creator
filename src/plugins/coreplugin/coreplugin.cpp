@@ -222,7 +222,7 @@ bool CorePlugin::initialize(const QStringList &arguments, QString *errorMessage)
 
 void CorePlugin::extensionsInitialized()
 {
-    DesignMode::createModeIfRequired();
+    //DesignMode::createModeIfRequired();
     Find::extensionsInitialized();
     m_locator->extensionsInitialized();
     m_mainWindow->extensionsInitialized();
