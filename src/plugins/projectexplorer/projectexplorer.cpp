@@ -3035,9 +3035,11 @@ bool ProjectExplorerPlugin::canRunStartupProject(Core::Id runMode, QString *whyN
 
 void ProjectExplorerPluginPrivate::slotUpdateRunActions()
 {
-    m_runAction->setEnabled(true);
-    m_runAction->setToolTip("");
-    m_runWithoutDeployAction->setEnabled(true);
+    QString whyNot;
+    const bool state = ProjectExplorerPlugin::canRunStartupProject(Constants::NORMAL_RUN_MODE, &whyNot);
+    m_runAction->setEnabled(state);
+    m_runAction->setToolTip(whyNot);
+    m_runWithoutDeployAction->setEnabled(state);
 }
 
 void ProjectExplorerPluginPrivate::addToRecentProjects(const QString &fileName, const QString &displayName)
