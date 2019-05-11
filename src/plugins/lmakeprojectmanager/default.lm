@@ -1,7 +1,0 @@
-# OI make 默认配置文件
-COMPILER = gcc  #编译器
-GCC_PATH = g++ #GCC路径
-TEMPLATE = default  #使用默认生成模板
-STD = default  #使用默认标准
-DEBUG_MODE = true #开启debug模式
-STACK = 23333333 #调整栈大小（仅在win下生效）
