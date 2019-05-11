@@ -560,6 +560,7 @@ bool BaseQtVersion::isValid() const
     updateVersionInfo();
     updateMkspec();
 
+    return true;
     return  !qmakeCommand().isEmpty()
             && m_installed
             && !qmakeProperty("QT_HOST_BINS").isNull()
