@@ -1,9 +1,0 @@
-{
-    \"Name\" : \"LmakeProjectManager\",
-    \"Version\" : \"$$QTCREATOR_VERSION\",
-    \"CompatVersion\" : \"$$QTCREATOR_COMPAT_VERSION\",
-    \"Vendor\" : \"WAAutoMaton\",
-    \"Category\" : \"Build Systems\",
-    \"Description\" : \"Light-make project manager.\",
-    $$dependencyList
-}

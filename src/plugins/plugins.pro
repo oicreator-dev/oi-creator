@@ -28,7 +28,6 @@ SUBDIRS   = \
     todo \
     beautifier \
     silversearcher \
-    lmakeprojectmanager \
     qmakeprojectmanager\
     resourceeditor \
     modeleditor \
