@@ -37,6 +37,7 @@ SUBDIRS   = \
     welcome \
     silversearcher \
     languageclient \
+    oiwiki \
     cppcheck \
     compilationdatabaseprojectmanager
 qtHaveModule(serialport) {
