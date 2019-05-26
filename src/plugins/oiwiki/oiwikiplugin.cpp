@@ -1,5 +1,7 @@
 #include "oiwikiplugin.h"
 
+#include "wikimode.h"
+
 #include <coreplugin/icore.h>
 
 #include <QAction>
@@ -16,7 +18,9 @@ bool OIWikiPlugin::initialize(const QStringList &arguments, QString *errorMessag
     return true;
 }
 
-void OIWikiPlugin::extensionsInitialized() {}
+void OIWikiPlugin::extensionsInitialized() {
+    WikiMode::createModeIfRequired();
+}
 
 bool OIWikiPlugin::delayedInitialize()
 {
@@ -24,4 +28,9 @@ bool OIWikiPlugin::delayedInitialize()
 }
 
 OIWikiPlugin::OIWikiPlugin() {}
+
+OIWikiPlugin::~OIWikiPlugin()
+{
+   WikiMode::destroyModeIfRequired();
+}
 } // namespace OIWiki

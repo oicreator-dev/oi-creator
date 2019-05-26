@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/js">
+        <file>modifypage.js</file>
+    </qresource>
+</RCC>

@@ -36,6 +36,7 @@ SUBDIRS   = \
     scxmleditor \
     welcome \
     silversearcher \
+    help \
     languageclient \
     oiwiki \
     cppcheck \

@@ -16,5 +16,6 @@ public:
 
 public:
     OIWikiPlugin();
+    ~OIWikiPlugin() override;
 };
 } // namespace OIWiki
